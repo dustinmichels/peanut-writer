@@ -49,13 +49,13 @@
   }
 
   // Blocks. Paragraphs are separated with parbreak() by whoever lays them out.
-  else if t == "paragraph" { all(n.inlines) }
+  else if t == "paragraph" { all(n.at("inlines", default: ())) }
   else if t == "heading" {
     // In the preview each heading carries an invisible link to its source
     // line, which the outline pane finds in the SVG to scroll to it.
     let line = n.at("line", default: 0)
     let mark = if _preview and line > 0 { link("peanut:" + str(line), box(width: 0.01pt, height: 0.01pt)) }
-    heading(level: n.level, [#mark#all(n.inlines)])
+    heading(level: n.level, [#mark#all(n.at("inlines", default: ()))])
   }
   else if t == "list" {
     // Tight items: a nested list follows its text without a paragraph break.

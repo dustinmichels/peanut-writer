@@ -106,3 +106,17 @@ func TestEveryTemplateRendersEverything(t *testing.T) {
 		t.Error("PNG: not a PNG")
 	}
 }
+
+// An empty heading (`#` just typed) has no inlines in doc.json.
+func TestEmptyHeadingRenders(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, src := range []string{"#", "## ", "- #", "> #"} {
+		d := doc.Parse(src, t.TempDir())
+		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
+}
