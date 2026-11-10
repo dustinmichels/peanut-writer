@@ -194,6 +194,15 @@ export function Startup(): $CancellablePromise<$models.StartupInfo> {
 }
 
 /**
+ * SyncFiles writes a PDF and a Word copy of the saved document beside its
+ * file, under the same name, replacing earlier copies; returns their paths.
+ * Neither is written unless both render.
+ */
+export function SyncFiles(content: string): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1439229203, content);
+}
+
+/**
  * TemplatePreview is the welcome guide's first page in a template, as SVG.
  */
 export function TemplatePreview(id: string): $CancellablePromise<string> {

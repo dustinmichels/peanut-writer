@@ -13,6 +13,10 @@ const scroller = ref<HTMLElement>();
 const pages = ref<Page[]>([]);
 const paneWidth = ref(600);
 
+// Where each heading is in the preview, by source line: its page and its
+// baseline in points from the page's top.
+let headings = new Map<number, { page: number; y: number }>();
+
 // Pages are shown as images: each page's SVG keeps its ids to itself, and
 // swapping a whole set at once doesn't flicker.
 watch(
@@ -27,6 +31,7 @@ watch(
         height: m ? parseFloat(m[2]) : 792,
       };
     });
+    headings = findHeadings(svgs);
     // Let the new images load before dropping the old ones.
     setTimeout(() => old.forEach((p) => URL.revokeObjectURL(p.url)), 1000);
   },
@@ -66,32 +71,41 @@ function applyTransform(t: string, x: number, y: number): [number, number] {
   return [x, y];
 }
 
-// findHeading is where the heading on source line `line` is in the preview:
-// its page and its baseline in points from the page's top. The preview marks
-// each heading with an invisible `peanut:<line>` link (see peanut.typ).
-function findHeading(line: number): { page: number; y: number } | undefined {
-  const href = `peanut:${line}`;
-  const page = state.pages.findIndex((svg) => svg.includes(`href="${href}"`));
-  if (page < 0) return;
-  const svg = new DOMParser().parseFromString(state.pages[page], "image/svg+xml");
-  let x = 0;
-  let y = 0;
-  for (let el = svg.querySelector(`a[href="${href}"]`); el; el = el.parentElement) {
-    [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
-  }
-  return { page, y };
+// findHeadings locates the headings in the pages. The preview marks each
+// heading with an invisible `peanut:<line>` link (see peanut.typ).
+function findHeadings(svgs: string[]): Map<number, { page: number; y: number }> {
+  const found = new Map<number, { page: number; y: number }>();
+  svgs.forEach((src, page) => {
+    if (!src.includes('href="peanut:')) return;
+    const svg = new DOMParser().parseFromString(src, "image/svg+xml");
+    for (const a of svg.querySelectorAll('a[href^="peanut:"]')) {
+      const line = Number(a.getAttribute("href")!.slice("peanut:".length));
+      if (found.has(line)) continue;
+      let x = 0;
+      let y = 0;
+      for (let el: Element | null = a; el; el = el.parentElement) {
+        [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
+      }
+      found.set(line, { page, y });
+    }
+  });
+  return found;
 }
 
-// showHeading scrolls the preview to the heading on source line `line`.
-function showHeading(line: number) {
-  const at = findHeading(line);
-  const el = scroller.value;
-  const page = at && el?.querySelectorAll<HTMLElement>(".page")[at.page];
-  if (!at || !el || !page) return;
-  // Leave room above the baseline for the heading itself.
-  el.scrollTo({ top: page.offsetTop + (at.y - 40) * PX * zoom.value, behavior: "smooth" });
+// headingTops maps each heading's source line to the scrollTop that shows
+// the heading at the top of the preview.
+function headingTops(): Map<number, number> {
+  const tops = new Map<number, number>();
+  const els = scroller.value?.querySelectorAll<HTMLElement>(".page");
+  if (!els) return tops;
+  for (const [line, at] of headings) {
+    const page = els[at.page];
+    // Leave room above the baseline for the heading itself.
+    if (page) tops.set(line, page.offsetTop + (at.y - 40) * PX * zoom.value);
+  }
+  return tops;
 }
-defineExpose({ showHeading });
+defineExpose({ scroller, headingTops });
 </script>
 
 <template>

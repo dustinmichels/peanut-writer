@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { PanelLeftClose } from "lucide-vue-next";
 import { toggleOutline } from "../lib/actions";
 import { state } from "../lib/store";
@@ -8,6 +8,14 @@ defineEmits<{ jump: [line: number] }>();
 
 // Indent relative to the document's top heading level.
 const top = computed(() => Math.min(...state.outline.map((h) => h.level)));
+
+// Keep the current heading in view in a long outline.
+const list = ref<HTMLElement>();
+watch(
+  () => state.currentHeading,
+  () => list.value?.querySelector(".current")?.scrollIntoView({ block: "nearest" }),
+  { flush: "post" },
+);
 </script>
 
 <template>
@@ -16,10 +24,11 @@ const top = computed(() => Math.min(...state.outline.map((h) => h.level)));
       <span>Outline</span>
       <button title="Hide outline" @click="toggleOutline"><PanelLeftClose :size="14" /></button>
     </header>
-    <ul v-if="state.outline.length">
+    <ul v-if="state.outline.length" ref="list">
       <li v-for="(h, i) in state.outline" :key="i">
         <button
-          :class="{ top: h.level === top }"
+          :class="{ top: h.level === top, current: h.line === state.currentHeading }"
+          :aria-current="h.line === state.currentHeading ? 'location' : undefined"
           :style="{ paddingLeft: `${10 + (h.level - top) * 12}px` }"
           :title="h.text"
           @click="$emit('jump', h.line)"
@@ -89,6 +98,11 @@ li button.top {
 }
 li button:hover {
   background: var(--hover);
+}
+li button.current {
+  background: var(--active);
+  color: var(--roast);
+  box-shadow: inset 2px 0 var(--accent);
 }
 .empty {
   margin: 12px;

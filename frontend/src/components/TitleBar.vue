@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ChevronDown, FileDown, FileText, Redo2, Save, Undo2 } from "lucide-vue-next";
-import { exportDocx, exportPdf, menu, save } from "../lib/actions";
+import { ChevronDown, FileDown, FileText, Redo2, RefreshCw, Save, Undo2 } from "lucide-vue-next";
+import { exportDocx, exportPdf, menu, save, syncFiles } from "../lib/actions";
 import { state } from "../lib/store";
 
 const exportOpen = ref(false);
@@ -25,6 +25,13 @@ function pick(f: () => unknown) {
       <span v-else-if="state.path" class="saved">— Saved</span>
     </div>
     <div class="right">
+      <button
+        class="btn"
+        title="Save, then write PDF and Word copies beside the file (⇧⌘Y)"
+        @click="syncFiles"
+      >
+        <RefreshCw :size="15" /> Sync files
+      </button>
       <div class="export" @mouseleave="exportOpen = false">
         <button class="btn primary" @click="exportOpen = !exportOpen">
           <FileDown :size="15" /> Export <ChevronDown :size="13" />
@@ -110,6 +117,7 @@ button,
 .right {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
 }
 .export {
   position: relative;

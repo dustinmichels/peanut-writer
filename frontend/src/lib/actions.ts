@@ -5,7 +5,7 @@ import { openSearchPanel } from "@codemirror/search";
 import type { ChangeSpec } from "@codemirror/state";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocInfo } from "../../bindings/peanut-writer/models";
-import { insertBlock, itemsField, replaceDoc, setMarkdownDetails } from "./editor";
+import { insertBlock, itemsField, replaceDoc, setShowMarkdown } from "./editor";
 import {
   captionMarkdown,
   type FigureSpec,
@@ -55,7 +55,17 @@ export function contentChanged(content: string) {
     state.dirty = dirty;
     DocService.SetDirty(dirty);
   }
+  scheduleAutosave();
   scheduleRender();
+}
+
+// A document with a file saves itself this long after the last edit.
+const autosaveDelay = 2000;
+let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = state.path && state.dirty ? setTimeout(save, autosaveDelay) : undefined;
 }
 
 async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined> {
@@ -68,9 +78,11 @@ async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined>
 }
 
 // ensureSaved deals with unsaved changes before they'd be lost; false means
-// the user canceled.
+// the user canceled. A document with a file is just saved; only an untitled
+// one asks.
 async function ensureSaved(): Promise<boolean> {
   if (!state.dirty) return true;
+  if (state.path) return save();
   const choice = await DocService.ConfirmDiscard(state.name);
   if (choice === "cancel") return false;
   if (choice === "save") return save();
@@ -113,9 +125,20 @@ function saved(info: DocInfo) {
   state.saved = info.content;
   state.dirty = state.content !== info.content;
   DocService.SetDirty(state.dirty);
+  scheduleAutosave();
 }
 
-export async function save(): Promise<boolean> {
+// Saves run one at a time, so an autosave and ⌘S can't overlap.
+let saving: Promise<boolean> = Promise.resolve(true);
+
+export function save(): Promise<boolean> {
+  clearTimeout(autosaveTimer);
+  saving = saving.then(saveNow);
+  return saving;
+}
+
+async function saveNow(): Promise<boolean> {
+  if (state.path && !state.dirty) return true;
   const info = await run("Save", () => DocService.Save(state.content));
   if (!info || info.canceled) return false;
   saved(info);
@@ -141,6 +164,17 @@ async function exported(kind: string, f: () => Promise<string>) {
 
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
+
+// syncFiles saves the document, then writes its PDF and Word copies beside it.
+export async function syncFiles() {
+  if (!(await save())) return;
+  const paths = await run("Sync files", () => DocService.SyncFiles(state.content));
+  if (!paths?.length) return;
+  toast(`Synced ${paths.map((p) => p.split("/").pop()).join(" and ")}`, "success", {
+    label: "Show in Finder",
+    run: () => DocService.Reveal(paths[0]),
+  });
+}
 
 // Closing the window asks again each time; one question at a time.
 let quitting = false;
@@ -178,6 +212,8 @@ export function menu(action: string) {
       return exportPdf();
     case "exportDocx":
       return exportDocx();
+    case "syncFiles":
+      return syncFiles();
     case "quit":
       return quit();
     case "welcome":
@@ -205,6 +241,8 @@ export function menu(action: string) {
       return;
     case "outline":
       return toggleOutline();
+    case "markdown":
+      return toggleMarkdown();
   }
 }
 
@@ -407,10 +445,10 @@ export function setTemplate(id: string) {
 
 // --- View -----------------------------------------------------------------------------
 
-export function toggleMarkdownDetails() {
-  state.markdownDetails = !state.markdownDetails;
-  localStorage.setItem("markdownDetails", state.markdownDetails ? "1" : "0");
-  if (editor.value) setMarkdownDetails(editor.value, state.markdownDetails);
+export function toggleMarkdown() {
+  state.showMarkdown = !state.showMarkdown;
+  localStorage.setItem("showMarkdown", state.showMarkdown ? "1" : "0");
+  if (editor.value) setShowMarkdown(editor.value, state.showMarkdown);
 }
 
 export function toggleOutline() {

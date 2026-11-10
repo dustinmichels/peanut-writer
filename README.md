@@ -11,7 +11,7 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
 
 - **Ribbon**: File, Home (formatting, lists, styles), Insert (picture, picture grid, table, link, footnote, code,
   divider, page break), References (cross-reference, footnote, contents), Design (templates, document properties) and
-  View (Markdown details, outline).
+  View (Markdown, outline).
 - **Pictures**: drag one onto the editor, paste one, or use Insert → Picture. It's copied into an `images/` folder
   beside the document and shown in the editor. Hover a picture to place it left, centered or right, drag its corner
   to resize it, or drag its grip (⠿) to move it elsewhere in the document; **Edit figure** sets its caption, reference
@@ -19,10 +19,14 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
 - **Picture grids**: Insert → Picture Grid takes several pictures and sets them side by side as one figure with one
   caption. **Edit figure** adds, removes, reorders and replaces its pictures and sets the number of columns; adding a
   picture to a single figure makes it a grid.
-- **Markdown details**: the editor shows figures, not the Markdown behind them. View → Markdown Details shows that
-  Markdown above each figure as well.
+- **Markdown**: the editor hides the Markdown. Headings, bold, italics, links, quotes and bullets read as formatted
+  text; figures, tables, cross-references and document properties as what they are. The **Markdown** button at the
+  top right of the editor (or View → Show Markdown, ⌘/) shows the Markdown to read and edit, with each figure's
+  picture below it.
 - **Outline**: View → Outline (or the button beside the zoom controls) lists the document's headings to the left of
-  the editor. Click a heading to jump there in both the editor and the preview.
+  the editor, highlighting the section you're scrolled to. Click a heading to jump there in both the editor and the
+  preview.
+- **Scroll sync**: the editor and the preview scroll together, lined up at each heading.
 - **Tables**: Insert → Table, pick a size, fill in the grid. **Edit table** above any table reopens the grid (add and
   remove rows and columns, align columns, caption).
 - **Cross-references**: References → Cross-reference lists every figure and table with its current number, or type
@@ -34,6 +38,14 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
   in the document.
 - **Export**: the Export button (or ⌘E, ⇧⌘E). The PDF is exactly the preview. The Word file uses real Word styles
   (Title, Heading 1–6, Caption, Quote…), numbered captions and live cross-reference fields, so it stays editable.
+- **Sync files**: the Sync files button (or ⇧⌘Y, File → Sync Files) saves the document, then writes `Name.pdf` and
+  `Name.docx` beside `Name.md`, replacing earlier copies, with no dialogs. An unsaved document asks where to save first.
+- **Auto-save**: a document with a file saves itself 2 seconds after you stop typing, and before opening another or
+  quitting; nothing asks. An untitled document still needs ⌘S, and asks before its changes are lost.
+- **Backups**: a saved document is copied as `Name-2026-11-10T14-03-22.md` and `.docx` into a `backups` folder beside
+  it when opened, every 10 minutes, and when closed or replaced, each time only if it changed since its last backup.
+  The newest 10 of each document are kept. Pictures aren't copied: the Word file embeds them, but the Markdown one's
+  picture paths are relative to the document's folder, so they don't resolve from `backups/`.
 - **Peanut**: a little 3D Peanut keeps you company at the top right, by the Export button. He breathes, blinks, sits
   down and stands up, cheers every few minutes while you're writing and at each 250 words, and says something nice
   when clicked.
@@ -114,7 +126,8 @@ mise run cleanup   # delete build output, unregister stale .app bundles
 Layout:
 
 - `main.go`: the window and the menu bar (menu commands reach the editor as `menu` events).
-- `service.go`: `DocService`, bound to the editor: open, save, render, export, pictures, templates.
+- `service.go`: `DocService`, bound to the editor: open, save, backups, render, export, pictures, templates.
+- `internal/backup`: timestamped `.md` + `.docx` backups in `backups/`, keeping the newest 10 per document.
 - `internal/doc`: Markdown → document model (figures, captions, numbering, references).
 - `internal/render`: the model → Typst (`peanut.typ` renders it, the template styles it) → SVG pages and PDF. Finds
   `typst` beside the executable, on `PATH`, or where Homebrew and mise install it.

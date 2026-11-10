@@ -26,6 +26,7 @@ import {
   Palette,
   RemoveFormatting,
   Save,
+  RefreshCw,
   SaveAll,
   Search,
   Settings2,
@@ -55,7 +56,8 @@ import {
   save,
   saveAs,
   setTemplate,
-  toggleMarkdownDetails,
+  syncFiles,
+  toggleMarkdown,
   toggleOutline,
 } from "../lib/actions";
 import {
@@ -210,6 +212,13 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               label="Word"
               title="Export as Word (⇧⌘E)"
               @click="exportDocx"
+            />
+            <RibbonButton
+              big
+              :icon="RefreshCw"
+              label="Sync Files"
+              title="Save, then write PDF and Word copies beside the file (⇧⌘Y)"
+              @click="syncFiles"
             />
           </div>
           <label>Export</label>
@@ -483,10 +492,10 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
             <RibbonButton
               big
               :icon="FileCode"
-              label="Markdown Details"
-              title="Show more Markdown details: the Markdown behind each figure"
-              :active="state.markdownDetails"
-              @click="toggleMarkdownDetails"
+              label="Markdown"
+              title="Show and edit the Markdown behind the document (⌘/)"
+              :active="state.showMarkdown"
+              @click="toggleMarkdown"
             />
             <RibbonButton
               big

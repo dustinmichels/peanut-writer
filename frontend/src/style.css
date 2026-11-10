@@ -188,8 +188,71 @@ select {
   font-size: 0.85em;
   font-family: var(--ui);
 }
+.cm-editor .pw-meta-line,
+.cm-editor .pw-meta-line span {
+  font-family: var(--mono);
+  font-size: 0.85em !important;
+  font-weight: 400 !important;
+  color: var(--muted) !important;
+}
+.cm-editor .pw-code-fence {
+  font-size: 0.68em;
+  line-height: 1.6;
+  text-align: right;
+}
+.cm-editor .pw-fence {
+  font-family: var(--ui);
+  color: var(--muted);
+}
+.cm-editor .pw-bullet {
+  display: inline-block;
+  width: 1.2em;
+  color: var(--accent-ink);
+}
+.cm-editor .pw-rule {
+  display: inline-block;
+  width: 100%;
+  vertical-align: middle;
+  border-top: 1.5px solid var(--marks);
+}
+.cm-editor .pw-link {
+  color: var(--accent-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--marks);
+}
+/* Block widgets: CodeMirror measures them without margins, so their spacing
+   is padding (on a wrapper when the widget has a background). */
+.pw-props-block {
+  padding-bottom: 18px;
+}
+.pw-figure-block {
+  padding: 4px 0 14px;
+}
+.pw-tablebar-block {
+  padding: 10px 0 4px;
+}
+.pw-table {
+  padding: 10px 0 14px;
+}
+.pw-table table {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+.pw-table th,
+.pw-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.pw-table th {
+  font-weight: 650;
+  border-bottom: 1.5px solid var(--border-strong);
+}
 .pw-figure {
-  margin: 4px 0 14px;
+  margin: 0;
   padding: 10px;
   border-radius: 12px;
   background: var(--panel);
@@ -368,7 +431,7 @@ select {
   justify-content: flex-end;
 }
 .pw-tablebar {
-  margin: 10px 0 4px;
+  margin: 0;
   padding: 6px 8px;
   border-radius: 10px;
   background: var(--panel);
@@ -430,7 +493,7 @@ select {
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  margin: 0 0 18px;
+  margin: 0;
   border-radius: 14px;
   background: linear-gradient(135deg, #fff8ee, #fbebd8);
   border: 1px solid var(--border);

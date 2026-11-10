@@ -20,9 +20,11 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"peanut-writer/internal/backup"
 	"peanut-writer/internal/doc"
 	"peanut-writer/internal/docx"
 	"peanut-writer/internal/render"
@@ -49,6 +51,9 @@ type DocService struct {
 	typstErr  error
 	settings  settings
 	scratches []string // scratch folders, removed on quit
+
+	backupMu   sync.Mutex // one backup at a time
+	backupOnce sync.Once  // starts the periodic backups
 
 	menuMu     sync.Mutex
 	menu       *application.Menu // the menu bar
@@ -107,6 +112,7 @@ func newDocService() *DocService {
 // Startup opens the welcome guide on the first run, and a blank document
 // (offering the recent ones) after that.
 func (s *DocService) Startup() (StartupInfo, error) {
+	s.backupOnce.Do(func() { go s.backupPeriodically() })
 	info := StartupInfo{Templates: templates.List()}
 	if s.typstErr != nil {
 		info.TypstError = s.typstErr.Error()
@@ -194,6 +200,7 @@ func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	}
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
+	go s.backup(p)
 	return DocInfo{Path: p, Name: docName(p), Content: string(b)}, nil
 }
 
@@ -298,11 +305,69 @@ func (s *DocService) shouldClose() bool {
 	return ok
 }
 
+// setOpen makes p (or an untitled document, if "") the open document. The
+// document it replaces gets a last backup.
 func (s *DocService) setOpen(p, dir string) {
 	s.mu.Lock()
+	old := s.path
 	s.path, s.dir = p, dir
 	s.mu.Unlock()
 	s.SetDirty(false)
+	if old != "" && old != p {
+		go s.backup(old)
+	}
+}
+
+// --- Backups -----------------------------------------------------------------
+
+// backupInterval is how often the open document is backed up.
+const backupInterval = 10 * time.Minute
+
+func (s *DocService) backupPeriodically() {
+	for range time.Tick(backupInterval) {
+		s.mu.Lock()
+		p := s.path
+		s.mu.Unlock()
+		s.backup(p)
+	}
+}
+
+// backup copies the saved file at p into the backups folder beside it, as
+// Markdown and as Word, unless it hasn't changed since its last backup. The
+// Markdown copy is kept even if the Word one can't be made.
+func (s *DocService) backup(p string) {
+	if p == "" {
+		return
+	}
+	s.backupMu.Lock()
+	defer s.backupMu.Unlock()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		s.backupFailed(err)
+		return
+	}
+	content := string(b)
+	if !backup.Changed(p, content) {
+		return
+	}
+	d := doc.Parse(content, filepath.Dir(p))
+	word, wordErr := s.docxBytes(d, templates.Get(d.Meta.Template))
+	if wordErr != nil {
+		word = nil
+	}
+	if err := backup.Write(p, content, word, time.Now()); err != nil {
+		s.backupFailed(err)
+		return
+	}
+	if wordErr != nil {
+		s.backupFailed(fmt.Errorf("Word copy: %w", wordErr))
+	}
+}
+
+func (s *DocService) backupFailed(err error) {
+	if s.app != nil {
+		s.app.Event.Emit("backupFailed", err.Error())
+	}
 }
 
 // scratch makes a folder for an unsaved document's images.
@@ -317,8 +382,12 @@ func (s *DocService) scratch() (string, error) {
 	return dir, nil
 }
 
-// ServiceShutdown removes the scratch folders.
+// ServiceShutdown backs up the open document and removes the scratch folders.
 func (s *DocService) ServiceShutdown() error {
+	s.mu.Lock()
+	p := s.path
+	s.mu.Unlock()
+	s.backup(p)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, d := range s.scratches {
@@ -573,17 +642,54 @@ func (s *DocService) ExportDOCX(content string) (string, error) {
 	if err != nil || p == "" {
 		return "", err
 	}
+	b, err := s.docxBytes(d, tpl)
+	if err != nil {
+		return "", err
+	}
+	return p, os.WriteFile(p, b, 0o644)
+}
+
+// SyncFiles writes a PDF and a Word copy of the saved document beside its
+// file, under the same name, replacing earlier copies; returns their paths.
+// Neither is written unless both render.
+func (s *DocService) SyncFiles(content string) ([]string, error) {
+	if s.typstErr != nil {
+		return nil, s.typstErr
+	}
+	s.mu.Lock()
+	dir, cur := s.dir, s.path
+	s.mu.Unlock()
+	if cur == "" {
+		return nil, errors.New("save the document first")
+	}
+	d := doc.Parse(content, dir)
+	tpl := templates.Get(d.Meta.Template)
+	pdf, err := s.typst.PDF(context.Background(), d, tpl)
+	if err != nil {
+		return nil, fmt.Errorf("PDF: %w", err)
+	}
+	word, err := s.docxBytes(d, tpl)
+	if err != nil {
+		return nil, fmt.Errorf("Word: %w", err)
+	}
+	base := strings.TrimSuffix(cur, filepath.Ext(cur))
+	paths := []string{base + ".pdf", base + ".docx"}
+	for i, b := range [][]byte{pdf, word} {
+		if err := os.WriteFile(paths[i], b, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	return paths, nil
+}
+
+func (s *DocService) docxBytes(d *doc.Document, tpl templates.Template) ([]byte, error) {
 	opt := docx.Options{}
 	if s.typst != nil {
 		opt.Rasterize = func(path string, widthPt float64) ([]byte, error) {
 			return s.typst.PNG(context.Background(), path, widthPt)
 		}
 	}
-	b, err := docx.Write(d, tpl.Docx, opt)
-	if err != nil {
-		return "", err
-	}
-	return p, os.WriteFile(p, b, 0o644)
+	return docx.Write(d, tpl.Docx, opt)
 }
 
 func (s *DocService) exportTarget(content, ext, kind, pattern string) (*doc.Document, templates.Template, string, error) {

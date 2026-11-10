@@ -12,6 +12,7 @@ import Dialogs from "./components/Dialogs.vue";
 import Toasts from "./components/Toasts.vue";
 import { loadDoc, menu, openRecent } from "./lib/actions";
 import { revealLine } from "./lib/editor";
+import { syncScroll } from "./lib/scrollsync";
 import { editor, errorText, state, toast } from "./lib/store";
 
 const split = ref(Number(localStorage.getItem("split")) || 0.5);
@@ -42,18 +43,22 @@ const columns = computed(
     `${state.outlineOpen ? "clamp(150px, 16%, 240px) " : ""}${split.value}fr 6px ${1 - split.value}fr`,
 );
 
-// jump shows a heading from the outline in the editor and the preview.
-const preview = ref<InstanceType<typeof PreviewPane>>();
+// jump shows a heading from the outline in the editor; the preview follows.
 function jump(line: number) {
   if (editor.value) revealLine(editor.value, line);
-  preview.value?.showHeading(line);
 }
 
+const preview = ref<InstanceType<typeof PreviewPane>>();
 let offMenu: (() => void) | undefined;
 let offRecent: (() => void) | undefined;
+let offBackup: (() => void) | undefined;
+let offSync: (() => void) | undefined;
 onMounted(async () => {
+  // The panes mount first, so both scrollers exist.
+  offSync = syncScroll(editor.value!, preview.value!.scroller!, preview.value!.headingTops);
   offMenu = Events.On("menu", (e: { data: string }) => menu(e.data));
   offRecent = Events.On("openRecent", (e: { data: string }) => openRecent(e.data));
+  offBackup = Events.On("backupFailed", (e: { data: string }) => toast(`Backup: ${e.data}`, "error"));
   // A file dropped outside the editor mustn't replace the page.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
@@ -70,6 +75,8 @@ onMounted(async () => {
 onUnmounted(() => {
   offMenu?.();
   offRecent?.();
+  offBackup?.();
+  offSync?.();
 });
 </script>
 

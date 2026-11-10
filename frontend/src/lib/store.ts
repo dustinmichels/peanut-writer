@@ -40,6 +40,7 @@ export const state = reactive({
   typstError: "",
   outline: [] as Heading[], // the headings, from the latest render
   outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
+  currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none
 
   templates: [] as Template[],
   template: "classic", // the template the preview used
@@ -50,8 +51,8 @@ export const state = reactive({
   block: "p" as BlockStyle | "code" | "list",
 
   zoom: 0, // preview zoom as a fraction; 0 = fit the page to the pane
-  // The editor shows the Markdown behind figures.
-  markdownDetails: localStorage.getItem("markdownDetails") === "1",
+  // The editor shows the document's Markdown rather than hiding its marks.
+  showMarkdown: localStorage.getItem("showMarkdown") === "1",
   fitZoom: 1,
   dialog: null as Dialog | null,
   toasts: [] as Toast[],

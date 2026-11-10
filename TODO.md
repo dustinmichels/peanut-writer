@@ -35,7 +35,8 @@ Other gaps:
 - Menu → Find opens the search panel behind an open dialog; the cheat sheet replaces any open dialog.
 - `TemplateGallery.vue`: preview blob URLs are never revoked, and previews aren't refreshed after a custom template is
   edited (the Go side caches by source hash, but the gallery never asks again).
-- ⌘S twice quickly on an untitled document opens two Save dialogs (no in-flight guard).
+- ⌘S twice quickly on an untitled document queues a second Save dialog, shown if the first is canceled.
+- Backups started when switching documents run in the background and may be cut short by quitting right after.
 - `FigureDialog.vue` reference count counts `@fig:a` inside `@fig:ab` (only used in a hint).
 - `applyTable` always writes a `Table:` caption line with a generated label, even with an empty caption.
 
