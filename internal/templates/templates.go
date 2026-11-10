@@ -30,7 +30,7 @@ var builtin embed.FS
 const Default = "classic"
 
 // Order of the built-in templates in the gallery.
-var builtinOrder = []string{"classic", "academic", "report", "peanut"}
+var builtinOrder = []string{"classic", "academic", "report", "minimal", "manuscript", "elegant", "peanut"}
 
 // Template is one output template.
 type Template struct {

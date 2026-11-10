@@ -1,0 +1,30 @@
+{
+  "name": "Minimal",
+  "description": "Quiet Swiss-style sans: black and grays, generous white space, hairline rules.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1.1,
+    "bodyFont": "Helvetica Neue",
+    "headingFont": "Helvetica Neue",
+    "monoFont": "Menlo",
+    "fontSize": 10.5,
+    "lineSpacing": 1.25,
+    "spaceAfter": 10,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "111111",
+    "headingColor": "111111",
+    "headingSizes": [16, 12.5, 10.5],
+    "headingBold": true,
+    "numberedHeadings": false,
+    "titleSize": 32,
+    "titleColor": "111111",
+    "titleAlign": "left",
+    "captionSize": 8.5,
+    "captionColor": "737373",
+    "captionItalic": false,
+    "accentColor": "111111",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

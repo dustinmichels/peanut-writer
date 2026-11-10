@@ -1,0 +1,30 @@
+{
+  "name": "Elegant",
+  "description": "A finely set book page: old-style serif, justified text, small-caps headings and a claret accent.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1.3,
+    "bodyFont": "Hoefler Text",
+    "headingFont": "Hoefler Text",
+    "monoFont": "Menlo",
+    "fontSize": 11.5,
+    "lineSpacing": 1.15,
+    "spaceAfter": 0,
+    "firstLineIndent": 0.25,
+    "justify": true,
+    "textColor": "222222",
+    "headingColor": "7A1F2B",
+    "headingSizes": [15, 13, 11],
+    "headingBold": false,
+    "numberedHeadings": false,
+    "titleSize": 28,
+    "titleColor": "7A1F2B",
+    "titleAlign": "center",
+    "captionSize": 10,
+    "captionColor": "222222",
+    "captionItalic": true,
+    "accentColor": "7A1F2B",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

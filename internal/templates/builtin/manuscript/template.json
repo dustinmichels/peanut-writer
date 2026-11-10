@@ -1,0 +1,30 @@
+{
+  "name": "Manuscript",
+  "description": "A submission-ready paper in the APA manner: Times 12pt, double spaced, indented paragraphs.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "Times New Roman",
+    "headingFont": "Times New Roman",
+    "monoFont": "Courier New",
+    "fontSize": 12,
+    "lineSpacing": 2,
+    "spaceAfter": 0,
+    "firstLineIndent": 0.5,
+    "justify": false,
+    "textColor": "000000",
+    "headingColor": "000000",
+    "headingSizes": [12, 12, 12],
+    "headingBold": true,
+    "numberedHeadings": false,
+    "titleSize": 12,
+    "titleColor": "000000",
+    "titleAlign": "center",
+    "captionSize": 12,
+    "captionColor": "000000",
+    "captionItalic": true,
+    "accentColor": "000000",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}
