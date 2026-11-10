@@ -285,7 +285,8 @@ function startMove(
   const tick = () => {
     const r = view.scrollDOM.getBoundingClientRect();
     const edge = 48;
-    const dy = y < r.top + edge ? -(r.top + edge - y) : y > r.bottom - edge ? y - (r.bottom - edge) : 0;
+    const dy =
+      y < r.top + edge ? -(r.top + edge - y) : y > r.bottom - edge ? y - (r.bottom - edge) : 0;
     if (dy) {
       view.scrollDOM.scrollTop += Math.max(-24, Math.min(24, dy / 2));
       place();

@@ -41,7 +41,14 @@ export function createPeanutStage(container: HTMLElement): PeanutStage {
   key.position.set(3.5, 5.0, 3.5);
   key.castShadow = true;
   key.shadow.mapSize.set(1024, 1024);
-  Object.assign(key.shadow.camera, { near: 1, far: 14, left: -2.5, right: 2.5, top: 4, bottom: -1 });
+  Object.assign(key.shadow.camera, {
+    near: 1,
+    far: 14,
+    left: -2.5,
+    right: 2.5,
+    top: 4,
+    bottom: -1,
+  });
   key.shadow.bias = -0.0003;
   key.shadow.radius = 3.5;
   const fill = new THREE.DirectionalLight(0xe5edfa, 1.1);

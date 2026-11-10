@@ -15,7 +15,12 @@ export interface PeanutModelHandle {
   group: THREE.Group;
   // Advance the pose. bounceProgress runs 0→1 during a bounce, else 0;
   // blinkProgress likewise during a blink.
-  animate: (time: number, bounceProgress: number, blinkProgress: number, deltaSeconds: number) => void;
+  animate: (
+    time: number,
+    bounceProgress: number,
+    blinkProgress: number,
+    deltaSeconds: number,
+  ) => void;
   setSitting: (sitting: boolean) => void;
   setLegsCrossed: (crossed: boolean) => void;
   dispose: () => void;
@@ -600,7 +605,12 @@ export function createPeanutModel(): PeanutModelHandle {
     isLegsCrossed = crossed;
   }
 
-  function animate(time: number, bounceProgress: number, blinkProgress: number, deltaSeconds: number) {
+  function animate(
+    time: number,
+    bounceProgress: number,
+    blinkProgress: number,
+    deltaSeconds: number,
+  ) {
     const sitSpeed = 2.0; // ~0.5s transition
     const crossSpeed = 2.4; // ~0.4s transition
     if (isSitting && sitProgress < 1.0) {
