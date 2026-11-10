@@ -1,0 +1,36 @@
+# Introduction
+
+Peanut Writer is a word processor for people who want their documents to look good without having to fiddle with them.
+It feels like Word: a ribbon of buttons across the top, your text on the left, and the finished pages on the right,
+updating as you type. Underneath, though, it borrows two ideas that technical writers have relied on for decades:
+
+- **From Markdown**, it keeps your words as plain text. The file is readable in any app, on any computer, today and in
+  twenty years.
+- **From LaTeX**, it keeps _what you write_ apart from _how it looks_, and it does the bookkeeping for you: numbering
+  figures and tables, keeping cross-references up to date, and building a table of contents.
+
+You don't need to know either of them. Everything is a button on the ribbon. The two pages that follow explain the
+ideas, because once you see them the rest of the app makes sense:
+
+1. [Style apart from content](./style-and-content): why you never pick a font for a heading.
+2. [Markdown and LaTeX, without the fuss](./markdown-and-latex): what Peanut Writer borrows from each, and what it
+   leaves behind.
+
+## A quick tour
+
+- **Type on the left.** Headings, bold, lists, quotes and pictures look like themselves while you write.
+- **Read on the right.** The preview is the actual typeset page, the same one your PDF will be.
+- **Pick a look on the Design tab.** Seven templates are built in, from a fresh Word document to a LaTeX-style
+  article. Change your mind at any time.
+- **Insert pictures and tables.** Give them a caption and they get a number. Refer to them and the reference keeps
+  up.
+- **Export** to PDF or Word with one click, or **Sync files** to keep a fresh copy of both beside your document.
+
+## Your first document
+
+The first time you open Peanut Writer, it shows a short welcome guide written in Peanut Writer itself. It's a good
+document to poke at: move the picture below the table and watch both numbers change. Help → Welcome Guide opens it
+again any time, and Help → Markdown Cheat Sheet lists everything you can type.
+
+To start your own, choose **New** (⌘N). Peanut Writer asks for a name and a place, and makes a folder there to hold
+your document, its pictures and its backups. See [Documents, saving and export](./documents).

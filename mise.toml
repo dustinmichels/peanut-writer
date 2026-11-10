@@ -30,6 +30,16 @@ run = "bunx vue-tsc --noEmit"
 description = "Format our Go with gofmt (skips Wails' build/ scaffolding) and everything else with oxfmt (skips generated bindings)"
 run = ["gofmt -w *.go internal", "oxfmt '!frontend/bindings/**'"]
 
+[tasks.docs]
+description = "Run the documentation site (VitePress) with hot reload"
+dir = "docs"
+run = ["bun install", "bun run dev"]
+
+[tasks."docs:build"]
+description = "Build the documentation site into docs/.vitepress/dist"
+dir = "docs"
+run = ["bun install", "bun run build"]
+
 [tasks.cleanup]
 description = "Delete build output (bin/, frontend/dist, .task, .wails) and forget stale app bundles in Launch Services. Afterwards `go build .` fails (main.go embeds frontend/dist) until the next `mise run build` or `dev`"
 run = '''

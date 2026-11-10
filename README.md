@@ -12,6 +12,9 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
 - **Ribbon**: File, Home (formatting, lists, styles), Insert (picture, picture grid, table, link, footnote, code,
   divider, page break), References (cross-reference, footnote, contents), Design (templates, managing your own templates,
   document properties) and View (Markdown, outline).
+- **Command palette**: ⇧⌘P (View → Command Palette…) lists every menu and ribbon command, plus one per template to
+  switch to it. Type to filter (each word matches the start of a word: “ex wo” finds Export as Word), ↑↓ to choose,
+  Return to run, Esc to close. Commands that wouldn't do anything right now are dimmed.
 - **Pictures**: drag one onto the editor, paste one, or use Insert → Picture. It's copied into an `images/` folder
   beside the document and shown in the editor. Hover a picture to place it left, centered or right, drag its corner
   to resize it, or drag its grip (⠿) to move it elsewhere in the document; **Edit figure** sets its caption, reference
@@ -26,12 +29,19 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
   the editor, highlighting the section you're scrolled to. Click a heading to jump there in both the editor and the
   preview.
 - **Scroll sync**: the editor and the preview scroll together, lined up at each heading.
-- **Document settings**: Design → Settings (or File → Document Settings…, ⌘,). **Auto format** tidies the Markdown
-  with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) each time you save (⌘S, Save As, Sync files): blank lines,
-  list markers, table columns, trailing spaces. **Title case headings** also puts headings in title case (“The Lord of
-  the Rings”; NASA, iPhone and code are left alone). It's one undoable edit; autosaves don't format. The settings are
-  saved in the document's front matter. Needs `oxfmt` and Node.js installed (`npm install -g oxfmt`, or
-  `mise install`); they aren't bundled in the app.
+- **Settings**: the top bar's settings button, Design → Settings, or File → Settings… (⌘,). Two panes:
+  **Global** settings apply to every document
+  and are kept in `~/Library/Application Support/Peanut Writer/settings.json`; **This Document** settings override
+  them for one document and are kept in `Name.settings.json` beside `Name.md` (an untitled document's are written
+  when it's first saved; Save As brings them along). Both are plain JSON (`{"autoFormat": true, "titleCase": true}`)
+  and can be edited by hand; a key a document's file leaves out uses the global value. **Auto format** tidies the
+  Markdown with [oxfmt](https://oxc.rs/docs/guide/usage/formatter) each time you save (⌘S, Save As, Sync files):
+  blank lines, list markers, table columns, trailing spaces. **Title case headings** also puts headings in title case
+  (“The Lord of the Rings”; NASA, iPhone and code are left alone). It's one undoable edit; autosaves don't format.
+  Needs `oxfmt` and Node.js installed (`npm install -g oxfmt`, or `mise install`); they aren't bundled in the app.
+  **Default author** (Global only, `"author"`) is put in the properties of each new document; until it's set it's
+  the computer user's full name, and `""` means none. **Show Peanut** (`"peanut"`, on unless set to `false`) shows
+  Peanut beside the ribbon tabs.
 - **Tables**: Insert → Table, pick a size, fill in the grid. **Edit table** above any table reopens the grid (add and
   remove rows and columns, align columns, caption); drag the grip (⠿) at the left of its bar to move it, caption and
   all, elsewhere in the document.
@@ -61,6 +71,7 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
   down and stands up, cheers every few minutes while you're writing and at each 250 words, and says something nice
   when clicked.
 - **Recent documents**: File → Open Recent (or the ribbon's File → Recent) lists the last 10 documents opened or saved.
+  In the ribbon's list, the × beside a document takes it off the list.
 
 The first launch opens a welcome guide; later launches start a blank document and offer the recent ones. Help → Welcome
 Guide opens the guide again, and Help → Markdown Cheat Sheet lists the syntax.
@@ -76,8 +87,6 @@ author: Ann
 date: today # or any text
 abstract: One paragraph.
 template: report # classic (the default), academic, report, minimal, manuscript, elegant, peanut, or a custom one
-autoformat: true # document settings: tidy the Markdown on save (the preview and exports ignore these)
-titlecase: true # ...and title-case headings
 ---
 
 As @fig:chart shows, sales went up (@tbl:sales).
@@ -112,17 +121,30 @@ Text with a note.[^1]
 - `@fig:…` / `@tbl:…` become “Figure n” / “Table n”; one with no matching name shows as **??**, as in LaTeX, and is
   listed in the status bar's notes.
 
-## Custom templates
+## Customizing a document's template
 
-Design → **Customize** copies the current template to your templates folder
-(`~/Library/Application Support/Peanut Writer/templates/<name>/`) and selects the copy. A template is a folder with:
+Design → **Customize** gives the open document its own template, based on the template it uses at the time. The editor
+pane turns into font and color choices (body, heading and code fonts, body size; text, heading, title, caption, accent
+and table header colors), and the preview shows each change. **Done** goes back to the editor; **Remove Customization**
+goes back to the base template.
+
+The document's template is kept beside it as `Name.template.json` (the base template's id and the changes; an untitled
+document's is written when it's first saved, and Save As copies it), and its front matter says `template: custom`. It
+shows first in the template gallery. The changes reach Word through the base's Word styles and Typst through
+`style.json`, which the built-in templates read with `#import "style.typ": custom-font, custom-color, custom-size`; a
+template of your own that doesn't import `style.typ` only changes in Word.
+
+## Your own templates
+
+A template is a folder in your templates folder (`~/Library/Application Support/Peanut Writer/templates/<name>/`) with:
 
 - `template.typ`: a Typst file exporting `template(meta, body)`, a show rule that sets up the page, fonts, headings,
   captions and tables, and writes the title block from `meta` (`title`, `subtitle`, `author`, `date`, `abstract`).
 - `template.json`: its name, description, and how it looks in Word (`docx`: paper, margins, fonts, sizes, colors, heading
   numbering…; see `DocxStyle` in `internal/templates/templates.go`).
 
-Edits to a template show up in the preview on the next keystroke.
+Edits to a template show up in the preview on the next keystroke. Folders named like a built-in template, or `custom`,
+are skipped.
 
 Design → **Manage Templates** lists your own templates (not the built-in ones). For each you can use it, rename it and
 change its description, show its files in Finder to edit them, **share** it (saves a `.zip` holding `template.typ` and
@@ -140,6 +162,8 @@ mise run test      # Go tests
 mise run check     # type-check the editor
 mise run fmt       # gofmt + oxfmt
 mise run cleanup   # delete build output, unregister stale .app bundles
+mise run docs      # the documentation site (docs/, VitePress) with hot reload
+mise run docs:build # build it into docs/.vitepress/dist
 ```
 
 Layout:
