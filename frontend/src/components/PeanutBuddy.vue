@@ -26,10 +26,6 @@ const CHEERS = [
   "Write the messy version first.",
   "Look at you go!",
 ];
-const HAT_LINES: Record<HatKind, string[]> = {
-  cowboy: ["Yeehaw! Giddy up, writer!", "Howdy, partner! Let's wrangle some words."],
-  birthday: ["Party hat on! Every word's worth celebrating.", "It's a word party!"],
-};
 const MILESTONE = 250; // words
 const SAY_MS = 4000; // from popping out of his mouth to faded away
 const WALK_PX_PER_S = 28;
@@ -219,8 +215,6 @@ function changeHat() {
   }
   hat = Math.random() < 0.5 ? "cowboy" : "birthday";
   stage?.setHat(hat);
-  const lines = HAT_LINES[hat];
-  say(lines[Math.floor(Math.random() * lines.length)]);
 }
 
 // Every so often: stand up or sit back down, stroll out and back, or put on

@@ -183,6 +183,9 @@ func (w *writer) styles() string {
 		styleDef{typ: "paragraph", id: "Footer", name: "footer", basedOn: "Normal", priority: 99, hidden: true,
 			ppr: `<w:spacing w:after="0"/>` + noIndent + jc("center"),
 			rpr: rpr("", false, false, "", st.FontSize*0.9)},
+		styleDef{typ: "paragraph", id: "Header", name: "header", basedOn: "Normal", priority: 99, hidden: true,
+			ppr: `<w:spacing w:after="0"/>` + noIndent + jc("right"),
+			rpr: rpr("", false, false, "", st.FontSize*0.9)},
 	)
 	headerFill := ""
 	if fill := color(st.TableHeaderFill); fill != "" {

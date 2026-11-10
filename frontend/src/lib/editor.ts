@@ -21,6 +21,7 @@ import {
 } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import {
+  type ChangeSpec,
   Compartment,
   EditorSelection,
   EditorState,
@@ -31,7 +32,7 @@ import {
   type Range,
   RangeSetBuilder,
   StateField,
-  type Transaction,
+  Transaction,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -717,7 +718,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       }),
     });
   } else if (!show) {
-    const by = [fm.meta.author, fm.meta.date].filter(Boolean).join(" · ");
+    const by = [fm.meta.author, fm.meta.organization, fm.meta.date].filter(Boolean).join(" · ");
     const end = doc.lineAt(Math.max(fm.to - 1, 0)).to;
     ranges.push({
       from: 0,
@@ -1199,6 +1200,9 @@ function hiddenAt(
 // rule or code fence line (onward, in the direction it was going), and past
 // a line's hidden prefix, so typing lands in the text.
 function settle(state: EditorState, pos: number, forward: boolean): number {
+  // The properties are edited in their dialog, never in place.
+  const fmEnd = state.field(frontMatterEnd);
+  if (pos < fmEnd) return fmEnd;
   for (let i = 0; i < 8; i++) {
     const line = state.doc.lineAt(pos);
     if (covered(state, line.from)) return pos;
@@ -1219,6 +1223,43 @@ const settleCursor = EditorState.transactionFilter.of((tr) => {
   if (!sel.empty) return tr;
   const pos = settle(tr.state, sel.head, sel.head >= tr.startState.selection.main.head);
   return pos === sel.head ? tr : [tr, { selection: { anchor: pos }, sequential: true }];
+});
+
+// guardProperties keeps typing, deleting and dragging out of the front
+// matter while the Markdown is hidden: the card stands in for it, and its
+// dialog is the one way to change it. Edits reaching into it are cut back to
+// where the text begins. Changes the app makes (the dialog, Auto Format) are
+// dispatched with filter: false; undo and redo pass as they are.
+const guardProperties = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || tr.startState.facet(showMarkdown)) return tr;
+  if (!tr.isUserEvent("input") && !tr.isUserEvent("delete") && !tr.isUserEvent("move")) return tr;
+  const start = tr.startState;
+  const end = start.field(frontMatterEnd);
+  if (!end) return tr;
+  // Text typed right after a closing fence with no line break after it
+  // starts a line of its own.
+  const open = start.doc.sliceString(end - 1, end) !== "\n";
+  // The cursor goes after what the cut-back edit puts where the text begins.
+  let after = -1;
+  const changes: ChangeSpec[] = [];
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    const to = Math.max(toA, end);
+    if (fromA < end || (open && fromA === end)) after = to;
+    const from = Math.max(fromA, end);
+    let insert = inserted.toString();
+    if (open && from === end && insert) insert = "\n" + insert;
+    changes.push({ from, to, insert });
+  });
+  if (after < 0) return tr;
+  const set = start.changes(changes);
+  const head = set.mapPos(after, 1);
+  return {
+    changes: set,
+    selection: EditorSelection.cursor(head),
+    effects: tr.effects,
+    scrollIntoView: tr.scrollIntoView,
+    userEvent: tr.annotation(Transaction.userEvent),
+  };
 });
 
 // moveChar moves the cursor one character, stepping over hidden marks as if
@@ -1772,6 +1813,7 @@ export function createEditor(
     lineStyles,
     hiddenMarks,
     settleCursor,
+    guardProperties,
     EditorView.contentAttributes.of({
       spellcheck: "true",
       autocorrect: "on",

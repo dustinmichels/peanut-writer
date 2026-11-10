@@ -33,6 +33,7 @@
   set page(
     paper: "us-letter",
     margin: 1in,
+    header: if get("organization") != "" { align(right, text(size: 9pt, fill: roast, get("organization"))) },
     footer: context align(center, text(size: 9pt, fill: roast)[
       #peanut(size: 7pt) #h(3pt) #counter(page).display()
     ]),

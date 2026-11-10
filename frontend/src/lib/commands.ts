@@ -240,6 +240,8 @@ const fixed: Command[] = [
 
   { id: "welcome", group: "Help", label: "Welcome Guide", run: () => menu("welcome") },
   { id: "cheatsheet", group: "Help", label: "Markdown Cheat Sheet", run: () => menu("cheatsheet") },
+  { id: "docs", group: "Help", label: "Documentation", run: () => menu("docs") },
+  { id: "about", group: "Help", label: "About Peanut Writer", run: () => menu("about") },
 ];
 
 // commands lists every command, with one per template to switch to it.

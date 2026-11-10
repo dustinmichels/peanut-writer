@@ -7,6 +7,7 @@ import LinkDialog from "./dialogs/LinkDialog.vue";
 import PropertiesDialog from "./dialogs/PropertiesDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
 import CheatSheet from "./dialogs/CheatSheet.vue";
+import AboutDialog from "./dialogs/AboutDialog.vue";
 import RecentDialog from "./dialogs/RecentDialog.vue";
 import TemplatesDialog from "./dialogs/TemplatesDialog.vue";
 import CommandPalette from "./dialogs/CommandPalette.vue";
@@ -42,6 +43,7 @@ function close() {
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
     <SettingsDialog v-else-if="state.dialog.kind === 'settings'" @close="close" />
     <CheatSheet v-else-if="state.dialog.kind === 'cheatsheet'" @close="close" />
+    <AboutDialog v-else-if="state.dialog.kind === 'about'" @close="close" />
     <RecentDialog
       v-else-if="state.dialog.kind === 'recent'"
       :files="state.dialog.files"

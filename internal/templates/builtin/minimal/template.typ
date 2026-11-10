@@ -23,7 +23,10 @@
   set page(
     paper: "us-letter",
     margin: (x: 1.1in, top: 1.1in, bottom: 1.1in),
-    footer: context align(right, text(font: font, size: 8.5pt, fill: gray, counter(page).display())),
+    footer: context {
+      set text(font: font, size: 8.5pt, fill: gray)
+      grid(columns: (1fr, auto), get("organization"), counter(page).display())
+    },
   )
   set text(font: font, size: custom-size("fontSize", 10.5pt), fill: ink, lang: "en")
   set par(leading: 0.8em, spacing: 1.3em)

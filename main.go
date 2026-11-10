@@ -144,5 +144,8 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	help := m.AddSubmenu("Help")
 	help.Add("Welcome Guide").OnClick(send("welcome"))
 	help.Add("Markdown Cheat Sheet").OnClick(send("cheatsheet"))
+	help.Add("Documentation").OnClick(send("docs"))
+	help.AddSeparator()
+	help.Add("About Peanut Writer").OnClick(send("about"))
 	return m
 }

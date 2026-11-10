@@ -19,6 +19,7 @@ type Dialog =
   | { kind: "properties" }
   | { kind: "settings" }
   | { kind: "cheatsheet" }
+  | { kind: "about" }
   | { kind: "recent"; files: RecentFile[] }
   | { kind: "templates" }
   | { kind: "commands" };

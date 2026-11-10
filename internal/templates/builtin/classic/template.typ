@@ -19,7 +19,13 @@
     title: if get("title") != "" { get("title") } else { none },
     author: if get("author") != "" { get("author") } else { () },
   )
-  set page(paper: "us-letter", margin: 1in, numbering: "1", number-align: center)
+  set page(
+    paper: "us-letter",
+    margin: 1in,
+    numbering: "1",
+    number-align: center,
+    header: if get("organization") != "" { align(right, text(size: 9pt, fill: luma(110), get("organization"))) },
+  )
   set text(font: body-font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")
   set par(leading: 0.72em, spacing: 1.15em)
 

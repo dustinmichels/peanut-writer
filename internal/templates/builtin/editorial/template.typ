@@ -27,10 +27,11 @@
     footer: context {
       set text(font: sans, size: 8pt, fill: quiet, tracking: 0.06em)
       grid(
-        columns: (auto, 1fr),
+        columns: (auto, 1fr, auto),
         column-gutter: 1em,
         text(weight: "bold", fill: accent, counter(page).display()),
         upper(get("title")),
+        upper(get("organization")),
       )
     },
   )

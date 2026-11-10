@@ -4,6 +4,7 @@ import { redo, undo } from "@codemirror/commands";
 import { diff } from "@codemirror/merge";
 import { openSearchPanel } from "@codemirror/search";
 import { type ChangeSpec, Transaction } from "@codemirror/state";
+import { Browser } from "@wailsio/runtime";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocInfo, SettingsInfo } from "../../bindings/peanut-writer/models";
 import type { Style } from "../../bindings/peanut-writer/internal/templates/models";
@@ -25,6 +26,9 @@ import {
   writeTable,
 } from "./markdown";
 import { editor, errorText, scheduleRender, state, toast } from "./store";
+
+export const docsUrl = "https://dustinmichels.github.io/peanut-writer/";
+export const repoUrl = "https://github.com/dustinmichels/peanut-writer";
 
 function view() {
   const v = editor.value;
@@ -227,7 +231,9 @@ export async function autoFormat() {
     to: c.toA,
     insert: after.slice(c.fromB, c.toB),
   }));
-  v.dispatch({ changes, userEvent: "input.format" });
+  // Formatting may tidy the front matter too, which the properties guard
+  // would otherwise keep from changing.
+  v.dispatch({ changes, userEvent: "input.format", filter: false });
 }
 
 // stampVersion records the app's version in the front matter of a document
@@ -326,6 +332,11 @@ export function menu(action: string) {
     case "cheatsheet":
       state.dialog = { kind: "cheatsheet" };
       return;
+    case "about":
+      state.dialog = { kind: "about" };
+      return;
+    case "docs":
+      return Browser.OpenURL(docsUrl);
     case "settings":
       state.dialog = { kind: "settings" };
       return;
@@ -571,6 +582,7 @@ export function setMeta(patch: Partial<Meta>, history = true) {
   v.dispatch({
     changes: { from: 0, to: fm.to, insert: block },
     userEvent: "input",
+    filter: false, // past the guard that keeps typing out of the properties
     annotations: history ? [] : Transaction.addToHistory.of(false),
   });
 }

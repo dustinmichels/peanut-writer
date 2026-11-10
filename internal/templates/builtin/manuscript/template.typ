@@ -24,7 +24,7 @@
   set page(
     paper: "us-letter",
     margin: 1in,
-    header: context align(right, counter(page).display()),
+    header: context grid(columns: (1fr, auto), get("organization"), counter(page).display()),
   )
   set text(font: font, size: size, fill: ink, lang: "en")
   // Double spacing: the gap between paragraphs is the gap between lines.

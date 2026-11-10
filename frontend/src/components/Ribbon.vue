@@ -17,6 +17,7 @@ import {
   History,
   Image,
   Images,
+  Info,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -223,6 +224,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
           <div class="row">
             <RibbonButton big :icon="Sparkles" label="Welcome" @click="openWelcome" />
             <RibbonButton big :icon="BookOpen" label="Cheat Sheet" @click="menu('cheatsheet')" />
+            <RibbonButton big :icon="Info" label="About" @click="menu('about')" />
           </div>
           <label>Help</label>
         </div>
@@ -336,6 +338,18 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
             <RibbonButton big :icon="Search" label="Find" title="Find (⌘F)" @click="menu('find')" />
           </div>
           <label>Editing</label>
+        </div>
+        <div class="group">
+          <div class="row">
+            <RibbonButton
+              big
+              :icon="Settings2"
+              label="Properties"
+              title="Title, author, date and other document properties"
+              @click="state.dialog = { kind: 'properties' }"
+            />
+          </div>
+          <label>Document</label>
         </div>
       </template>
 
@@ -459,12 +473,6 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton
-              big
-              :icon="Settings2"
-              label="Properties"
-              @click="state.dialog = { kind: 'properties' }"
-            />
             <RibbonButton
               big
               :icon="SlidersHorizontal"

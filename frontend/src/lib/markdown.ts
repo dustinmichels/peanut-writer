@@ -8,6 +8,7 @@ export interface Meta {
   subtitle: string;
   author: string;
   date: string;
+  organization: string; // a class, team, project or company, for headers and footers
   abstract: string;
   template: string;
   "peanut-version": string; // the app's version that last saved it
@@ -18,6 +19,7 @@ const metaKeys: (keyof Meta)[] = [
   "subtitle",
   "author",
   "date",
+  "organization",
   "abstract",
   "template",
   "peanut-version",
@@ -38,6 +40,7 @@ function emptyMeta(): Meta {
     subtitle: "",
     author: "",
     date: "",
+    organization: "",
     abstract: "",
     template: "",
     "peanut-version": "",

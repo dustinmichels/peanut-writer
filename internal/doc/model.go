@@ -4,7 +4,7 @@
 // The dialect is CommonMark + GFM tables and strikethrough + footnotes, with:
 //
 //   - YAML-style front matter (flat `key: value` lines): title, subtitle,
-//     author, date, abstract, template.
+//     author, date, organization, abstract, template.
 //   - Figures: a paragraph holding only an image, optionally followed by an
 //     attribute block: `![Caption](images/a.png){#fig:a width=60% align=left}`.
 //   - Picture grids: a paragraph of two or more images (one per line, or
@@ -39,8 +39,11 @@ type Meta struct {
 	Subtitle string `json:"subtitle,omitempty"`
 	Author   string `json:"author,omitempty"`
 	Date     string `json:"date,omitempty"`
-	Abstract string `json:"abstract,omitempty"`
-	Template string `json:"template,omitempty"`
+	// Organization is who or what the document is for: a class, team,
+	// project or company. Templates show it in page headers or footers.
+	Organization string `json:"organization,omitempty"`
+	Abstract     string `json:"abstract,omitempty"`
+	Template     string `json:"template,omitempty"`
 }
 
 // Block types.

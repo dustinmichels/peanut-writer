@@ -48,6 +48,11 @@ function submit() {
       </label>
     </div>
     <label class="field">
+      Organization
+      <input v-model="meta.organization" placeholder="e.g. HIST 101, Acme Corp., Project Atlas" />
+      <span class="hint">A class, team, project or company. Templates show it in the page header or footer.</span>
+    </label>
+    <label class="field">
       Abstract
       <textarea v-model="meta.abstract" rows="4" placeholder="A short summary (optional)" />
       <span class="hint">One paragraph.</span>

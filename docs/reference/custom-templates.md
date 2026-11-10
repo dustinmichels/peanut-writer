@@ -25,7 +25,8 @@ change them.
 
 A [Typst](https://typst.app/docs) file exporting `template(meta, body)`: a function that sets up the page, fonts,
 headings, captions and tables, writes the title block from `meta` (`title`, `subtitle`, `author`, `date`,
-`abstract`), then shows `body`.
+`abstract`), then shows `body`. `meta` also has `organization` (a class, team, project or company), which the built-in
+templates show in the page header or footer. Missing properties are absent, so read them with a default.
 
 ```typst
 #import "style.typ": custom-color, custom-font, custom-size
@@ -35,7 +36,11 @@ headings, captions and tables, writes the title block from `meta` (`title`, `sub
 
 #let template(meta, body) = {
   let get(k) = meta.at(k, default: "")
-  set page(paper: "us-letter", margin: 1in)
+  set page(
+    paper: "us-letter",
+    margin: 1in,
+    header: if get("organization") != "" { align(right, text(size: 9pt, get("organization"))) },
+  )
   set text(font: font, size: custom-size("fontSize", 11pt), fill: ink)
   show heading.where(level: 1): set text(size: 16pt)
 

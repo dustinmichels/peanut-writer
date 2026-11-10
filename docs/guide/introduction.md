@@ -32,7 +32,8 @@ ideas, because once you see them the rest of the app makes sense:
 
 The first time you open Peanut Writer, it shows a short welcome guide written in Peanut Writer itself. It's a good
 document to poke at: move the picture below the table and watch both numbers change. Help → Welcome Guide opens it
-again any time, and Help → Markdown Cheat Sheet lists everything you can type.
+again any time, Help → Markdown Cheat Sheet lists everything you can type, and Help → About Peanut Writer shows the
+version, with links to these docs and the source on GitHub.
 
 To start your own, choose **New** (⌘N). Peanut Writer asks for a name and a place, and makes a `.peanut` package there
 to hold your document, its pictures and its backups. See [Documents, saving and export](./documents).

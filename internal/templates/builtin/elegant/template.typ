@@ -22,6 +22,9 @@
   set page(
     paper: "us-letter",
     margin: (x: 1.3in, top: 1.2in, bottom: 1.2in),
+    header: if get("organization") != "" {
+      align(center, smallcaps(all: true, text(size: 9pt, tracking: 0.08em, fill: claret, get("organization"))))
+    },
     footer: context align(center, text(size: 9.5pt, fill: claret)[— #counter(page).display() —]),
   )
   set text(font: font, size: custom-size("fontSize", 11.5pt), fill: ink, lang: "en", number-type: "old-style")

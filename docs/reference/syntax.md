@@ -100,6 +100,7 @@ title: My Report
 subtitle: Third quarter
 author: Ann
 date: today # or any text
+organization: HIST 101
 abstract: One paragraph.
 template: report
 ---

@@ -124,6 +124,8 @@ func splitFrontMatter(source string) (Meta, string) {
 				value = time.Now().Format("January 2, 2006")
 			}
 			m.Date = value
+		case "organization":
+			m.Organization = value
 		case "abstract":
 			m.Abstract = value
 		case "template":

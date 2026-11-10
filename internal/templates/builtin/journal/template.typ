@@ -26,6 +26,7 @@
     columns: 2,
     numbering: "1",
     number-align: center,
+    header: if get("organization") != "" { text(size: 8pt, style: "italic", fill: luma(90), get("organization")) },
   )
   set columns(gutter: 0.25in)
   set text(font: body-font, size: custom-size("fontSize", 10pt), fill: ink, lang: "en")

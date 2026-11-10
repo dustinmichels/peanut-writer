@@ -41,9 +41,11 @@ below it. Press ⌘/ again to go back.
 
 ## Title, author and abstract
 
-A document's title, subtitle, author, date and abstract are its **properties** (Design → Properties, or File →
-Properties…). The template decides where and how they appear on the first page. The date can be a fixed
-text or `today`. New documents get the default author from [Settings](./settings).
+A document's title, subtitle, author, date, organization and abstract are its **properties** (Design → Properties,
+or File → Properties…). The template decides where and how they appear on the first page. The date can be a fixed
+text or `today`. The organization is who or what the document is for (a class like `HIST 101`, a team, a project
+or a company); templates show it in the page header or footer, and Word copies in the page header. New documents get
+the default author from [Settings](./settings).
 
 ## Outline and scrolling
 

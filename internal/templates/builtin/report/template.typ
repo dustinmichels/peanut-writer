@@ -32,7 +32,7 @@
     },
     footer: context {
       set text(font: sans, size: 8.5pt, fill: luma(110))
-      align(right)[Page #counter(page).display() of #counter(page).final().first()]
+      grid(columns: (1fr, auto), get("organization"), [Page #counter(page).display() of #counter(page).final().first()])
     },
   )
   set text(font: serif, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")

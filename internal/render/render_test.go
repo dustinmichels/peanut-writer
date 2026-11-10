@@ -18,6 +18,7 @@ title: Everything
 subtitle: All of it
 author: Ann
 date: today
+organization: Course 101
 abstract: Short.
 ---
 [TOC]
