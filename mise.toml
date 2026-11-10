@@ -27,11 +27,11 @@ dir = "frontend"
 run = "bunx vue-tsc --noEmit"
 
 [tasks.fmt]
-description = "Format Go with gofmt and everything else with oxfmt (skips generated bindings)"
-run = ["gofmt -w .", "oxfmt '!frontend/bindings/**'"]
+description = "Format our Go with gofmt (skips Wails' build/ scaffolding) and everything else with oxfmt (skips generated bindings)"
+run = ["gofmt -w *.go internal", "oxfmt '!frontend/bindings/**'"]
 
 [tasks.cleanup]
-description = "Delete build output (bin/, frontend/dist, .task, .wails) and forget stale app bundles in Launch Services"
+description = "Delete build output (bin/, frontend/dist, .task, .wails) and forget stale app bundles in Launch Services. Afterwards `go build .` fails (main.go embeds frontend/dist) until the next `mise run build` or `dev`"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -40,7 +40,7 @@ if [[ "$(uname)" == Darwin ]]; then
   # Unregister our bundles first so "Open With" and Spotlight stop offering them.
   for app in "$PWD"/bin/*.app; do
     if [[ -e "$app" ]]; then
-      "$lsregister" -u "$app"
+      "$lsregister" -u "$app" || true
       echo "unregistered $app"
     fi
   done
