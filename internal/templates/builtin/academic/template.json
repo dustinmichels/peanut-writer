@@ -1,0 +1,34 @@
+{
+  "name": "Academic",
+  "description": "In the spirit of a LaTeX article: Computer Modern, numbered sections, justified text, centered title.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1.25,
+    "bodyFont": "CMU Serif",
+    "headingFont": "CMU Serif",
+    "monoFont": "CMU Typewriter Text",
+    "fontSize": 11,
+    "lineSpacing": 1.1,
+    "spaceAfter": 0,
+    "firstLineIndent": 0.25,
+    "justify": true,
+    "textColor": "000000",
+    "headingColor": "000000",
+    "headingSizes": [
+      14.4,
+      12,
+      11
+    ],
+    "headingBold": true,
+    "numberedHeadings": true,
+    "titleSize": 17.3,
+    "titleColor": "000000",
+    "titleAlign": "center",
+    "captionSize": 10,
+    "captionColor": "000000",
+    "captionItalic": false,
+    "accentColor": "000000",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

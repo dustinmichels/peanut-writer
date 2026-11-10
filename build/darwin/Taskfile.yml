@@ -173,6 +173,15 @@ tasks:
           cp build/darwin/Assets.car "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/Resources"
         fi
       - cp "{{.BIN_DIR}}/{{.APP_NAME}}" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS"
+      # Peanut Writer typesets with Typst and looks for it beside its own
+      # executable first. `mise which` gives the real binary, not mise's shim.
+      - |
+        TYPST="$(mise which typst 2>/dev/null || command -v typst || true)"
+        if [ -n "$TYPST" ]; then
+          cp "$TYPST" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/typst"
+        else
+          echo "warning: typst not found; the app will need it installed (brew install typst)"
+        fi
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 

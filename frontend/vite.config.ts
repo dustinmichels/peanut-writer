@@ -10,4 +10,6 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [vue(), wails("./bindings")],
+  // Loaded from inside the app, not over a network: one bundle is fine.
+  build: { chunkSizeWarningLimit: 1500 },
 });

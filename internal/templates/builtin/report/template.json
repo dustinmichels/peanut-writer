@@ -1,0 +1,34 @@
+{
+  "name": "Report",
+  "description": "A polished business report: serif body, crisp sans headings, a teal accent and running headers.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "Charter",
+    "headingFont": "Helvetica Neue",
+    "monoFont": "Menlo",
+    "fontSize": 11,
+    "lineSpacing": 1.2,
+    "spaceAfter": 8,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "1F2328",
+    "headingColor": "0F6E6E",
+    "headingSizes": [
+      18,
+      14,
+      12
+    ],
+    "headingBold": true,
+    "numberedHeadings": true,
+    "titleSize": 30,
+    "titleColor": "0F6E6E",
+    "titleAlign": "left",
+    "captionSize": 9.5,
+    "captionColor": "4A5560",
+    "captionItalic": false,
+    "accentColor": "0F6E6E",
+    "tableHeaderFill": "DCEFEF",
+    "pageNumbers": true
+  }
+}

@@ -1,0 +1,31 @@
+<script setup lang="ts">
+import FigureDialog from "./dialogs/FigureDialog.vue";
+import TableDialog from "./dialogs/TableDialog.vue";
+import CrossRefDialog from "./dialogs/CrossRefDialog.vue";
+import LinkDialog from "./dialogs/LinkDialog.vue";
+import PropertiesDialog from "./dialogs/PropertiesDialog.vue";
+import CheatSheet from "./dialogs/CheatSheet.vue";
+import { editor, state } from "../lib/store";
+
+function close() {
+  state.dialog = null;
+  editor.value?.focus();
+}
+</script>
+
+<template>
+  <template v-if="state.dialog">
+    <FigureDialog v-if="state.dialog.kind === 'figure'" :item="state.dialog.item" @close="close" />
+    <TableDialog
+      v-else-if="state.dialog.kind === 'table'"
+      :item="state.dialog.item"
+      :cols="state.dialog.cols"
+      :rows="state.dialog.rows"
+      @close="close"
+    />
+    <CrossRefDialog v-else-if="state.dialog.kind === 'crossref'" @close="close" />
+    <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
+    <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
+    <CheatSheet v-else-if="state.dialog.kind === 'cheatsheet'" @close="close" />
+  </template>
+</template>

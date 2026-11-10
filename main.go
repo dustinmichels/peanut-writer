@@ -2,86 +2,102 @@ package main
 
 import (
 	"embed"
-
 	"log"
-	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
-// Wails uses Go's `embed` package to embed the frontend files into the binary.
-// Any files in the frontend/dist folder will be embedded into the binary and
-// made available to the frontend.
-// See https://pkg.go.dev/embed for more information.
-
+// The built editor, embedded into the binary.
+//
 //go:embed all:frontend/dist
 var assets embed.FS
 
-func init() {
-	// Register a custom event whose associated data type is string.
-	// This is not required, but the binding generator will pick up registered events
-	// and provide a strongly typed JS/TS API for them.
-	application.RegisterEvent[string]("time")
-}
-
-// main function serves as the application's entry point. It initializes the application, creates a window,
-// and starts a goroutine that emits a time-based event every second. It subsequently runs the application and
-// logs any error that might occur.
 func main() {
-
-	// Create a new Wails application by providing the necessary options.
-	// Variables 'Name' and 'Description' are for application metadata.
-	// 'Assets' configures the asset server with the 'FS' variable pointing to the frontend files.
-	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
-	// 'Mac' options tailor the application when running an macOS.
+	docs := newDocService()
 	app := application.New(application.Options{
 		Name:        "Peanut Writer",
-		Description: "A lightly peanut-themed text editor",
-		Services: []application.Service{
-			application.NewService(&GreetService{}),
-		},
-		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(assets),
-		},
-		Mac: application.MacOptions{
-			ApplicationShouldTerminateAfterLastWindowClosed: true,
+		Description: "A friendly writer for documents with figures, tables and cross-references",
+		Services:    []application.Service{application.NewService(docs)},
+		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
+		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		ShouldQuit:  docs.shouldClose,
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: "com.dustinmichels.peanutwriter",
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				if docs.window != nil {
+					docs.window.UnMinimise()
+					docs.window.Focus()
+				}
+			},
 		},
 	})
+	docs.app = app
+	app.Menu.Set(menu(app))
 
-	// Create a new window with the necessary options.
-	// 'Title' is the title of the window.
-	// 'Mac' options tailor the window when running on macOS.
-	// 'BackgroundColour' is the background colour of the window.
-	// 'URL' is the URL that will be loaded into the webview.
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title: "Peanut Writer",
-		// Window sized to the golden ratio (1000 / 618 ≈ 1.618).
-		Width:  1000,
-		Height: 618,
+	docs.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:     "Peanut Writer",
+		Width:     1440,
+		Height:    900,
+		MinWidth:  960,
+		MinHeight: 600,
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 50,
-			Backdrop:                application.MacBackdropTranslucent,
+			InvisibleTitleBarHeight: 44,
 			TitleBar:                application.MacTitleBarHiddenInset,
 		},
-		BackgroundColour: application.NewRGB(6, 7, 15),
+		BackgroundColour: application.NewRGB(251, 247, 241),
 		URL:              "/",
 	})
-
-	// Create a goroutine that emits an event containing the current time every second.
-	// The frontend can listen to this event and update the UI accordingly.
-	go func() {
-		for {
-			now := time.Now().Format(time.RFC1123)
-			app.Event.Emit("time", now)
-			time.Sleep(time.Second)
+	// Closing the window quits; with unsaved changes the editor asks first.
+	docs.window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if !docs.shouldClose() {
+			e.Cancel()
 		}
-	}()
+	})
 
-	// Run the application. This blocks until the application has been exited.
-	err := app.Run()
-
-	// If an error occurred while running the application, log it and exit.
-	if err != nil {
+	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// menu builds the menu bar. File and Edit commands go to the editor as
+// "menu" events, so they act on its state (and its undo history).
+func menu(app *application.App) *application.Menu {
+	send := func(action string) func(*application.Context) {
+		return func(*application.Context) { app.Event.Emit("menu", action) }
+	}
+	m := app.Menu.New()
+	m.AddRole(application.AppMenu)
+
+	file := m.AddSubmenu("File")
+	file.Add("New").SetAccelerator("CmdOrCtrl+N").OnClick(send("new"))
+	file.Add("Open…").SetAccelerator("CmdOrCtrl+O").OnClick(send("open"))
+	file.AddSeparator()
+	file.Add("Save").SetAccelerator("CmdOrCtrl+S").OnClick(send("save"))
+	file.Add("Save As…").SetAccelerator("CmdOrCtrl+Shift+S").OnClick(send("saveAs"))
+	file.AddSeparator()
+	file.Add("Export as PDF…").SetAccelerator("CmdOrCtrl+E").OnClick(send("exportPdf"))
+	file.Add("Export as Word…").SetAccelerator("CmdOrCtrl+Shift+E").OnClick(send("exportDocx"))
+
+	edit := m.AddSubmenu("Edit")
+	edit.Add("Undo").SetAccelerator("CmdOrCtrl+Z").OnClick(send("undo"))
+	edit.Add("Redo").SetAccelerator("CmdOrCtrl+Shift+Z").OnClick(send("redo"))
+	edit.AddSeparator()
+	edit.AddRole(application.Cut)
+	edit.AddRole(application.Copy)
+	edit.AddRole(application.Paste)
+	edit.AddRole(application.SelectAll)
+	edit.AddSeparator()
+	edit.Add("Find…").SetAccelerator("CmdOrCtrl+F").OnClick(send("find"))
+
+	view := m.AddSubmenu("View")
+	view.Add("Zoom In").SetAccelerator("CmdOrCtrl+=").OnClick(send("zoomIn"))
+	view.Add("Zoom Out").SetAccelerator("CmdOrCtrl+-").OnClick(send("zoomOut"))
+	view.Add("Actual Size").SetAccelerator("CmdOrCtrl+0").OnClick(send("zoomReset"))
+
+	m.AddRole(application.WindowMenu)
+	help := m.AddSubmenu("Help")
+	help.Add("Welcome Guide").OnClick(send("welcome"))
+	help.Add("Markdown Cheat Sheet").OnClick(send("cheatsheet"))
+	return m
 }

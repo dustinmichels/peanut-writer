@@ -1,0 +1,331 @@
+:root {
+  /* Roasted-peanut palette. */
+  --bg: #f7f1e8;
+  --surface: #fffdf9;
+  --panel: #fbf6ef;
+  --border: #eadccb;
+  --border-strong: #dcc8b1;
+  --ink: #2b2118;
+  --muted: #8a7663;
+  --marks: #c4ab90;
+  --quote: #6e5a48;
+  --shell: #d99e82;
+  --accent: #c1694f;
+  --accent-ink: #9c5b2e;
+  --roast: #8b5528;
+  --cream: #f6e3cc;
+  --hover: rgba(217, 158, 130, 0.16);
+  --active: rgba(217, 158, 130, 0.3);
+  --canvas: #e8e0d4;
+  --danger: #b4412f;
+  --ok: #4f7f52;
+
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --rounded: ui-rounded, "SF Pro Rounded", "Nunito", "Avenir Next", var(--ui);
+  --writing: "Iowan Old Style", "Charter", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius: 10px;
+  --shadow: 0 10px 30px -8px rgba(120, 70, 20, 0.22), 0 2px 8px rgba(120, 70, 20, 0.08);
+
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: default;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Shared controls. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-weight: 500;
+  transition: background 0.12s, transform 0.12s;
+}
+.btn:hover {
+  background: var(--panel);
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn.primary {
+  background: linear-gradient(180deg, #cf7a5d, var(--accent));
+  border-color: #a95940;
+  color: white;
+  box-shadow: 0 2px 6px rgba(160, 80, 40, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.btn.primary:hover {
+  background: linear-gradient(180deg, #d5856a, #c86f54);
+}
+.btn.danger {
+  color: var(--danger);
+}
+.btn:disabled {
+  opacity: 0.5;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-weight: 500;
+  color: var(--quote);
+}
+.field input,
+.field textarea,
+.field select {
+  font-weight: 400;
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: white;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  border-color: var(--shell);
+  box-shadow: 0 0 0 3px rgba(217, 158, 130, 0.25);
+}
+.field .hint {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Editor widgets (built outside Vue, in lib/editor.ts). */
+.cm-editor .pw-h {
+  color: var(--roast);
+  font-family: var(--writing);
+}
+.cm-editor .pw-h1 {
+  font-size: 1.75em;
+  line-height: 1.35;
+  padding-top: 0.5em !important;
+}
+.cm-editor .pw-h2 {
+  font-size: 1.4em;
+  line-height: 1.4;
+  padding-top: 0.4em !important;
+}
+.cm-editor .pw-h3 {
+  font-size: 1.18em;
+  padding-top: 0.3em !important;
+}
+.cm-editor .pw-quote-line {
+  border-left: 3px solid var(--shell);
+  padding-left: 14px !important;
+  color: var(--quote);
+  font-style: italic;
+}
+.cm-editor .pw-code-line {
+  background: #f8f1e7;
+  font-family: var(--mono);
+  font-size: 0.86em;
+  padding-left: 12px !important;
+}
+.cm-editor .pw-table-line {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  white-space: pre;
+  color: #4d3d30;
+  background: #fdf8f1;
+}
+.cm-editor .pw-caption-line,
+.cm-editor .pw-figure-line {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-family: var(--ui);
+}
+.pw-figure {
+  margin: 4px 0 14px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.pw-figure-frame {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 80px;
+}
+.pw-figure-frame img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.pw-figure-frame.missing {
+  padding: 24px;
+  border: 1.5px dashed var(--marks);
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: var(--ui);
+  font-size: 12px;
+}
+.pw-figure-caption,
+.pw-tablebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ui);
+  font-size: 12.5px;
+  color: var(--quote);
+  margin-top: 8px;
+}
+.pw-figure-caption {
+  justify-content: center;
+}
+.pw-tablebar {
+  margin: 10px 0 4px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pw-tablebar-caption {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pw-badge {
+  flex: none;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--roast);
+  background: var(--cream);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.pw-widget-btn {
+  flex: none;
+  font-family: var(--ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.pw-widget-btn:hover {
+  background: var(--cream);
+}
+.pw-ref {
+  font-family: var(--ui);
+  font-size: 0.82em;
+  font-weight: 650;
+  color: var(--roast);
+  background: var(--cream);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin: 0 1px;
+  white-space: nowrap;
+}
+.pw-ref.broken {
+  color: var(--danger);
+  background: #fbe3dc;
+}
+.cm-editor .pw-footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  color: var(--accent);
+  font-family: var(--ui);
+  font-weight: 650;
+}
+.pw-props {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff8ee, #fbebd8);
+  border: 1px solid var(--border);
+  font-family: var(--ui);
+}
+.pw-props > div {
+  flex: 1;
+  min-width: 0;
+}
+.pw-props-title {
+  font-family: var(--writing);
+  font-size: 1.35em;
+  font-weight: 700;
+  color: var(--roast);
+}
+.pw-props-by {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* CodeMirror's completion list and search panel, in our colors. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-family: var(--ui);
+}
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--cream) !important;
+  color: var(--ink) !important;
+}
+.cm-completionDetail {
+  color: var(--roast);
+  font-style: normal !important;
+  font-weight: 600;
+}
+.cm-panel.cm-search {
+  font-family: var(--ui);
+  padding: 8px 12px !important;
+}
+.cm-panel.cm-search input,
+.cm-panel.cm-search button {
+  border-radius: 6px;
+}

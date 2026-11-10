@@ -2,6 +2,7 @@
 go = "1.27.3"
 bun = "1.4.4"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"
+typst = "0.15.1"
 
 [tasks.dev]
 description = "Run the app in dev mode (Vite HMR + Go rebuild on change)"
@@ -12,5 +13,14 @@ description = "Build the app binary into bin/"
 run = "wails3 build"
 
 [tasks.package]
-description = "Package a production build (.app on macOS)"
+description = "Package a production build (.app on macOS, with Typst inside)"
 run = "wails3 package"
+
+[tasks.test]
+description = "Go tests (the Typst ones need typst, which mise installs)"
+run = "go test ./internal/..."
+
+[tasks.check]
+description = "Type-check the editor"
+dir = "frontend"
+run = "bunx vue-tsc --noEmit"
