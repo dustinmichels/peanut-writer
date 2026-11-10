@@ -82,3 +82,10 @@ run = ["bun install", "bun run dev"]
 description = "Build the documentation site into docs/.vitepress/dist"
 dir = "docs"
 run = ["bun install", "bun run build"]
+
+[tasks."docs:screenshots"]
+description = "Screenshot the app (server mode, in WebKit) into docs/public/screenshots. Pass scene names to redo only those"
+run = [
+  "wails3 task build:server",
+  "cd docs && bun install && bunx playwright install webkit && bun scripts/screenshots.ts",
+]

@@ -7,6 +7,8 @@ two panes:
 - **This Document** settings override them for the open document only. Anything a document doesn't set uses the global
   value.
 
+![The Settings dialog's Global pane](/screenshots/settings.png)
+
 | Setting                 | What it does                                                                                                                                                                            |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Auto format**         | Tidies the document's Markdown each time you save (⌘S, Save As, Sync files): blank lines, list markers, table columns, trailing spaces. Autosaves don't format. It's one undoable edit. |

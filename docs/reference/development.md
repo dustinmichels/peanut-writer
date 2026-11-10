@@ -12,9 +12,19 @@ mise run package   # bin/peanut-writer.app, with typst inside
 mise run test      # Go tests
 mise run check     # type-check the editor
 mise run fmt       # gofmt + oxfmt
+mise run cleanup   # delete build output, unregister stale .app bundles
 mise run docs      # this site, with hot reload
 mise run docs:build # this site, built into docs/.vitepress/dist
+mise run docs:screenshots # the app's screenshots in docs/public/screenshots
 ```
+
+## Screenshots
+
+`mise run docs:screenshots` builds the app in Wails server mode (`bin/peanut-writer-server`) and drives it in headless
+WebKit with Playwright (`docs/scripts/screenshots.ts`). Each scene starts the app with a fresh, empty home folder, so
+it opens on the welcome guide with default settings, then clicks its way to what the picture shows. Pages use them as
+`/screenshots/<name>.png`. Name scenes to redo only those: `mise run docs:screenshots -- settings outline`. To add one,
+add a scene to the `scenes` list.
 
 ## How a document becomes pages
 

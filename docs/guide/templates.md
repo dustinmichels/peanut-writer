@@ -9,6 +9,8 @@ content](./style-and-content).
 The **Design** tab shows each template on a sample page. Click one and the preview changes; your text doesn't. The
 choice is saved in the document. You can also switch from the [command palette](./writing#the-command-palette).
 
+![The Design tab: each template on a sample page, then Properties, Settings, Customize and Manage Templates](/screenshots/design-tab.png)
+
 Built in are _Classic_ (the default, like a fresh Word document), _Academic_, _Report_, _Minimal_, _Manuscript_,
 _Elegant_, _Editorial_, _Journal_ (two columns) and _Peanut_. See
 [the built-in templates](./style-and-content#the-built-in-templates) for what each looks like.
@@ -25,6 +27,8 @@ a panel of choices:
 
 The preview shows each change as you make it. **Done** goes back to the editor; **Remove Customization** goes back to
 the original template. A customized document's own template shows first in the template gallery.
+
+![Customizing a document's template: fonts and colors on the left, the preview following on the right](/screenshots/customize.png)
 
 The customization is kept beside the document as `Name.template.json`, and reaches both the PDF and the Word file.
 

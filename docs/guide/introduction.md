@@ -18,6 +18,8 @@ ideas, because once you see them the rest of the app makes sense:
 
 ## A quick tour
 
+![The Peanut Writer window: the ribbon across the top, the editor on the left and the typeset page on the right](/screenshots/editor.png)
+
 - **Type on the left.** Headings, bold, lists, quotes and pictures look like themselves while you write.
 - **Read on the right.** The preview is the actual typeset page, the same one your PDF will be.
 - **Pick a look on the Design tab.** Seven templates are built in, from a fresh Word document to a LaTeX-style

@@ -22,6 +22,8 @@ Press **⇧⌘P** (View → Command Palette…) to search every command by name.
 word, so "ex wo" finds _Export as Word_. Use ↑ and ↓ to choose, Return to run it and Esc to close. There's one command
 per template too, so "acad" switches to _Academic_. Commands that wouldn't do anything right now are dimmed.
 
+![The command palette, finding the export commands from "ex"](/screenshots/command-palette.png)
+
 _Lorem Ipsum_ (palette only) inserts sample headings, text, figures and tables at the cursor, handy for seeing how a
 template looks. Its pictures are saved in the document's `images/` folder.
 
@@ -35,6 +37,8 @@ ribbon.
 **View → Markdown** (⌘/) shows the plain text underneath, to read or edit directly, with each figure's picture shown
 below it. Press ⌘/ again to go back.
 
+![View → Markdown: the plain text behind the document, beside the typeset page](/screenshots/markdown-view.png)
+
 ## Title, author and abstract
 
 A document's title, subtitle, author, date and abstract are its **properties** (Design → Properties, or File →
@@ -45,6 +49,8 @@ text or `today`. New documents get the default author from [Settings](./settings
 
 **View → Outline** (or the button beside the zoom controls) lists your headings to the left of the editor and
 highlights the section you're in. Click a heading to jump there in both the editor and the preview.
+
+![The outline beside the editor](/screenshots/outline.png)
 
 The editor and the preview scroll together, lined up at each heading, so the page on the right always shows what
 you're working on.
