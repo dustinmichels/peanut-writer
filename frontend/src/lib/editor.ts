@@ -902,7 +902,10 @@ class FenceWidget extends WidgetType {
 // linePrefix is the marks before a line's text that are hidden: an ATX
 // heading's #s, quote marks and bullets, each with the space after it.
 // Indentation and numbers stay visible.
-function linePrefix(state: EditorState, line: Line): { from: number; to: number; bullet: boolean }[] {
+function linePrefix(
+  state: EditorState,
+  line: Line,
+): { from: number; to: number; bullet: boolean }[] {
   const tree = syntaxTree(state);
   const out: { from: number; to: number; bullet: boolean }[] = [];
   let pos = line.from;
@@ -1093,7 +1096,8 @@ const hiddenMarks = ViewPlugin.fromClass(
   },
   {
     decorations: (v) => v.hidden.deco,
-    provide: (p) => EditorView.atomicRanges.of((v) => v.plugin(p)?.hidden.atomic ?? Decoration.none),
+    provide: (p) =>
+      EditorView.atomicRanges.of((v) => v.plugin(p)?.hidden.atomic ?? Decoration.none),
   },
 );
 
@@ -1185,7 +1189,11 @@ const wrapperMark: Record<string, string> = {
 
 // emptied is the styled text or link that deleting from..to would leave
 // empty (so it goes whole, marks and all), or null.
-function emptied(state: EditorState, from: number, to: number): { from: number; to: number } | null {
+function emptied(
+  state: EditorState,
+  from: number,
+  to: number,
+): { from: number; to: number } | null {
   for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(from, 1); n; n = n.parent) {
     const mark = wrapperMark[n.name];
     if (!mark) continue;
@@ -1246,8 +1254,16 @@ function deleteChar(view: EditorView, forward: boolean): boolean {
 }
 
 const hiddenKeymap = keymap.of([
-  { key: "ArrowLeft", run: (v) => moveChar(v, false, false), shift: (v) => moveChar(v, false, true) },
-  { key: "ArrowRight", run: (v) => moveChar(v, true, false), shift: (v) => moveChar(v, true, true) },
+  {
+    key: "ArrowLeft",
+    run: (v) => moveChar(v, false, false),
+    shift: (v) => moveChar(v, false, true),
+  },
+  {
+    key: "ArrowRight",
+    run: (v) => moveChar(v, true, false),
+    shift: (v) => moveChar(v, true, true),
+  },
   { key: "Backspace", run: (v) => deleteChar(v, false) },
   { key: "Delete", run: (v) => deleteChar(v, true) },
 ]);

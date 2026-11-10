@@ -58,7 +58,9 @@ onMounted(async () => {
   offSync = syncScroll(editor.value!, preview.value!.scroller!, preview.value!.headingTops);
   offMenu = Events.On("menu", (e: { data: string }) => menu(e.data));
   offRecent = Events.On("openRecent", (e: { data: string }) => openRecent(e.data));
-  offBackup = Events.On("backupFailed", (e: { data: string }) => toast(`Backup: ${e.data}`, "error"));
+  offBackup = Events.On("backupFailed", (e: { data: string }) =>
+    toast(`Backup: ${e.data}`, "error"),
+  );
   // A file dropped outside the editor mustn't replace the page.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
