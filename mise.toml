@@ -29,3 +29,33 @@ run = "bunx vue-tsc --noEmit"
 [tasks.fmt]
 description = "Format Go with gofmt and everything else with oxfmt (skips generated bindings)"
 run = ["gofmt -w .", "oxfmt '!frontend/bindings/**'"]
+
+[tasks.cleanup]
+description = "Delete build output (bin/, frontend/dist, .task, .wails) and forget stale app bundles in Launch Services"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$(uname)" == Darwin ]]; then
+  lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+  # Unregister our bundles first so "Open With" and Spotlight stop offering them.
+  for app in "$PWD"/bin/*.app; do
+    if [[ -e "$app" ]]; then
+      "$lsregister" -u "$app"
+      echo "unregistered $app"
+    fi
+  done
+  # Registrations whose bundle is already gone (moved, deleted, ejected DMG).
+  "$lsregister" -dump | awk '/^path:/ { sub(/^path: +/, ""); sub(/ \(0x[0-9a-f]+\)$/, ""); p = $0 }
+    /^identifier: +com\.dustinmichels\.peanutwriter$/ { print p }' | sort -u |
+    while IFS= read -r app; do
+      if [[ ! -e "$app" ]]; then
+        "$lsregister" -u "$app" 2>/dev/null || true
+        echo "unregistered missing $app"
+      elif [[ "$app" != "$PWD"/bin/* ]]; then
+        echo "kept other copy: $app"
+      fi
+    done
+fi
+rm -rf bin frontend/dist .task .wails
+echo "removed bin/ frontend/dist/ .task/ .wails/"
+'''
