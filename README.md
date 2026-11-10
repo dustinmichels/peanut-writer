@@ -12,7 +12,7 @@ The idea is to be famililar, resembling Microsoft Word, while also incorporating
 
 There are two views: the editor on the left and the pdf preview on the right.
 
-The left pane is basically a markown editor, allowing basic markdown features, plus a few bonus features.
+The left pane is basically a markown editor, allowing basic markdown features, plus a few bonus features drawing from latex/typst, but with UI elements to control them.
 
 Some key features that make it different from Word:
 
@@ -20,7 +20,11 @@ Some key features that make it different from Word:
 - I can drag to add images, and easily create tables.
 - I can give them figure captions, which use automatic numbering (eg, table/fig number is auto incremented based on order.) In the text I can reference a figure, and references to it also auto-increment. There is a UI btn for this.
 
-The output style is similar to a word doc.
+The output style is similar to a word doc. I want the ability to use different output templates to customize how output looks. Prebuild a few of them.
+
+I want to be able to output docx files, as well as pdf.
+
+---
 
 The visual can also draw a little inspiration from peanuts. See:
 
