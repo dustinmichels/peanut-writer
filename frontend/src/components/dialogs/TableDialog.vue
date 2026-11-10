@@ -14,16 +14,23 @@ import {
 } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { applyTable, deleteBlock } from "../../lib/actions";
-import { type Align, emptyTable, type Item, parseTable, uniqueLabel } from "../../lib/markdown";
+import {
+  type Align,
+  emptyTable,
+  type Item,
+  parseTable,
+  type Table,
+  uniqueLabel,
+} from "../../lib/markdown";
 import { state } from "../../lib/store";
 
-const props = defineProps<{ item?: Item; cols?: number; rows?: number }>();
+const props = defineProps<{ item?: Item; cols?: number; rows?: number; table?: Table }>();
 const emit = defineEmits<{ close: [] }>();
 
 const t = reactive(
   props.item
     ? parseTable(state.content.slice(props.item.tableFrom, props.item.tableTo))
-    : emptyTable(props.cols ?? 3, Math.max(1, (props.rows ?? 3) - 1)),
+    : (props.table ?? emptyTable(props.cols ?? 3, Math.max(1, (props.rows ?? 3) - 1))),
 );
 const caption = ref(props.item?.caption ?? "");
 const label = ref(props.item?.label ?? "");

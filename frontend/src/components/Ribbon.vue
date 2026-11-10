@@ -6,6 +6,7 @@ import {
   BookOpen,
   Code,
   CodeXml,
+  ClipboardPaste,
   FilePlus2,
   FileCode,
   FileText,
@@ -71,7 +72,7 @@ import {
   toggleList,
   toggleMark,
 } from "../lib/editor";
-import { editor, errorText, state, toast } from "../lib/store";
+import { canSave, canSync, editor, errorText, state, toast } from "../lib/store";
 
 type Tab = "file" | "home" | "insert" | "references" | "design" | "view";
 const tab = ref<Tab>("home");
@@ -186,7 +187,15 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               title="Open a recent document"
               @click="showRecent"
             />
-            <RibbonButton big :icon="Save" label="Save" title="Save (⌘S)" @click="save" />
+            <RibbonButton
+              big
+              :icon="Save"
+              label="Save"
+              :title="state.dirty ? 'Save unsaved changes (⌘S)' : 'Save (⌘S)'"
+              :attention="state.dirty"
+              :disabled="!canSave"
+              @click="save"
+            />
             <RibbonButton
               big
               :icon="SaveAll"
@@ -217,7 +226,12 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               big
               :icon="RefreshCw"
               label="Sync Files"
-              title="Save, then write PDF and Word copies beside the file (⇧⌘Y)"
+              :title="
+                canSync
+                  ? 'Save, then write PDF and Word copies beside the file (⇧⌘Y)'
+                  : 'The PDF and Word copies are up to date'
+              "
+              :disabled="!canSync"
               @click="syncFiles"
             />
           </div>
@@ -376,6 +390,13 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               <RibbonButton big :icon="Table" label="Table" @click="tablePicker = !tablePicker" />
               <div v-if="tablePicker" class="popover"><TableGridPicker @pick="pickTable" /></div>
             </div>
+            <RibbonButton
+              big
+              :icon="ClipboardPaste"
+              label="Paste Table"
+              title="Make a table from CSV or cells copied from Excel or Google Sheets"
+              @click="state.dialog = { kind: 'pasteTable' }"
+            />
           </div>
           <label>Figures &amp; Tables</label>
         </div>

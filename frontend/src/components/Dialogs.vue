@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import FigureDialog from "./dialogs/FigureDialog.vue";
 import TableDialog from "./dialogs/TableDialog.vue";
+import PasteTableDialog from "./dialogs/PasteTableDialog.vue";
 import CrossRefDialog from "./dialogs/CrossRefDialog.vue";
 import LinkDialog from "./dialogs/LinkDialog.vue";
 import PropertiesDialog from "./dialogs/PropertiesDialog.vue";
@@ -29,8 +30,10 @@ function close() {
       :item="state.dialog.item"
       :cols="state.dialog.cols"
       :rows="state.dialog.rows"
+      :table="state.dialog.table"
       @close="close"
     />
+    <PasteTableDialog v-else-if="state.dialog.kind === 'pasteTable'" @close="close" />
     <CrossRefDialog v-else-if="state.dialog.kind === 'crossref'" @close="close" />
     <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />

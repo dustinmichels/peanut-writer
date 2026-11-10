@@ -453,6 +453,56 @@ export function emptyTable(cols: number, rows: number): Table {
   };
 }
 
+// parseDelimited reads text copied from a spreadsheet (tab-separated, as
+// Excel and Google Sheets put on the clipboard) or CSV (comma or semicolon)
+// into a table whose first row is the header. Quoted cells may hold
+// delimiters, newlines, and "" for a quote. Null when there's nothing in it.
+export function parseDelimited(text: string): Table | null {
+  const src = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "");
+  if (!src.trim()) return null;
+  const first = src.slice(0, src.indexOf("\n") + 1 || undefined);
+  const sep = src.includes("\t")
+    ? "\t"
+    : first.split(";").length > first.split(",").length
+      ? ";"
+      : ",";
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c !== '"') cell += c;
+      else if (src[i + 1] === '"') ((cell += '"'), i++);
+      else quoted = false;
+    } else if (c === '"' && cell.trim() === "") {
+      cell = "";
+      quoted = true;
+    } else if (c === sep) {
+      row.push(cell.trim());
+      cell = "";
+    } else if (c === "\n") {
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else cell += c;
+  }
+  row.push(cell.trim());
+  rows.push(row);
+
+  const kept = rows.filter((r) => r.some((c) => c !== ""));
+  const n = Math.max(...kept.map((r) => r.length));
+  const fit = (r: string[]) => Array.from({ length: n }, (_, i) => r[i] ?? "");
+  return {
+    align: Array(n).fill(""),
+    header: fit(kept[0]),
+    rows: kept.length > 1 ? kept.slice(1).map(fit) : [Array(n).fill("")],
+  };
+}
+
 // --- Words ---------------------------------------------------------------
 
 export function wordCount(text: string): number {
