@@ -97,6 +97,14 @@ Table: Sales by year {#tbl:sales}
 |---|---|
 | 1 | 2 |
 
+Math: $\frac{a}{b}$ in a line, $$\int f$$ displayed in one, and @eq:energy.
+
+$$ E = mc^2 $$ {#eq:energy}
+
+$$
+a + b
+$$
+
 ---
 
 \pagebreak
@@ -147,12 +155,15 @@ func TestWrite(t *testing.T) {
 		t.Fatal("sample has no footnotes")
 	}
 
-	rasterized := 0
+	rasterized, drawn := 0, 0
 	stub := Options{Rasterize: func(path string, widthPt float64) ([]byte, error) {
 		if filepath.Ext(path) != ".svg" {
 			return nil, errors.New("not an svg")
 		}
 		rasterized++
+		return pngBytes, nil
+	}, Equation: func(tex string, display bool, sizePt float64) ([]byte, error) {
+		drawn++
 		return pngBytes, nil
 	}}
 	tpls := templates.List()
@@ -170,6 +181,9 @@ func TestWrite(t *testing.T) {
 	}
 	if rasterized == 0 {
 		t.Error("Rasterize was never called for the SVG")
+	}
+	if drawn == 0 {
+		t.Error("Equation was never called")
 	}
 }
 

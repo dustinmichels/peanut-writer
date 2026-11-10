@@ -3,7 +3,12 @@ import { computed, onBeforeUnmount, reactive, ref } from "vue";
 import { RotateCcw } from "lucide-vue-next";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocxStyle, Style } from "../../bindings/peanut-writer/internal/templates/models";
-import { removeCustomTemplate, setTemplateStyle } from "../lib/actions";
+import {
+  removeCustomTemplate,
+  saveCustomTemplate,
+  setTemplateBase,
+  setTemplateStyle,
+} from "../lib/actions";
 import { errorText, state, toast } from "../lib/store";
 
 // Shown in place of the editor while the document's own template is being
@@ -61,15 +66,30 @@ function changed() {
   clearTimeout(timer);
   timer = setTimeout(save, 150);
 }
-// Leaving with a change still waiting saves it.
-onBeforeUnmount(() => {
+function flush() {
   if (timer !== undefined) save();
-});
+}
+// Leaving with a change still waiting saves it.
+onBeforeUnmount(flush);
 
 function remove() {
   clearTimeout(timer);
   timer = undefined;
   removeCustomTemplate();
+}
+
+function changeBase(id: string) {
+  flush();
+  setTemplateBase(id);
+}
+
+// Saving as a template of the user's own, for any document to use.
+const saving = reactive({ name: "", description: "" });
+async function saveAsTemplate() {
+  if (!saving.name.trim()) return;
+  flush();
+  if (await saveCustomTemplate(saving.name, saving.description))
+    Object.assign(saving, { name: "", description: "" });
 }
 
 function set<K extends keyof Style>(k: K, v: Style[K] | undefined) {
@@ -99,6 +119,19 @@ const fileHint = computed(() =>
     </header>
 
     <div class="body">
+      <fieldset>
+        <legend>Template</legend>
+        <label class="row">
+          <span>Based on</span>
+          <select
+            :value="state.custom?.base"
+            @change="changeBase(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="t in state.templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+          </select>
+        </label>
+      </fieldset>
+
       <fieldset>
         <legend>Fonts</legend>
         <label v-for="f in fontFields" :key="f.key" class="row">
@@ -151,6 +184,25 @@ const fileHint = computed(() =>
             </button>
           </div>
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Save as template</legend>
+        <p class="hint">Adds these fonts and colors to your templates, for any document to use.</p>
+        <form @submit.prevent="saveAsTemplate">
+          <label class="row">
+            <span>Name</span>
+            <input v-model="saving.name" type="text" :placeholder="`My ${base?.name ?? 'template'}`" />
+          </label>
+          <label class="row">
+            <span>Description</span>
+            <input v-model="saving.description" type="text" placeholder="Optional" />
+          </label>
+          <div class="row">
+            <span />
+            <button type="submit" class="btn" :disabled="!saving.name.trim()">Save as Template</button>
+          </div>
+        </form>
       </fieldset>
     </div>
 
@@ -206,7 +258,8 @@ legend {
   gap: 10px;
   padding: 5px 0;
 }
-select {
+select,
+input[type="text"] {
   min-width: 0;
   height: 28px;
   padding: 0 8px;

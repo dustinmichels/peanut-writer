@@ -8,6 +8,7 @@ import { DocService } from "../../bindings/peanut-writer";
 import type { DocInfo, SettingsInfo } from "../../bindings/peanut-writer/models";
 import type { Style } from "../../bindings/peanut-writer/internal/templates/models";
 import { insertBlock, itemsField, replaceDoc, setShowMarkdown } from "./editor";
+import { loremLabels, loremMarkdown, loremPictures } from "./lorem";
 import {
   captionMarkdown,
   type FigureSpec,
@@ -260,7 +261,7 @@ async function exported(kind: string, f: () => Promise<string>) {
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
 
-// syncFiles saves the document, then writes its PDF and Word copies into its out folder.
+// syncFiles saves the document, then writes its PDF and Word copies beside it.
 export async function syncFiles() {
   if (!(await save())) return;
   const content = state.content;
@@ -306,6 +307,8 @@ export function menu(action: string) {
       return newDoc();
     case "open":
       return openDoc();
+    case "recent":
+      return showRecent();
     case "save":
       return save();
     case "saveAs":
@@ -349,6 +352,8 @@ export function menu(action: string) {
       return;
     case "outline":
       return toggleOutline();
+    case "versions":
+      return toggleVersions();
     case "markdown":
       return toggleMarkdown();
   }
@@ -428,6 +433,20 @@ export async function choosePictureGrid() {
   if (srcs?.length) addFigure(srcs);
 }
 
+// insertLoremIpsum inserts sample headings, text, figures and tables at the
+// cursor, storing the sample pictures beside the document.
+export async function insertLoremIpsum() {
+  const srcs = await run("Lorem ipsum", () =>
+    Promise.all(loremPictures.map((p) => DocService.AddImage(p.name, btoa(p.svg)))),
+  );
+  if (!srcs) return;
+  const v = view();
+  const taken = new Set(v.state.field(itemsField).map((x) => x.label));
+  let suffix = "";
+  for (let n = 2; loremLabels.some((l) => taken.has(l + suffix)); n++) suffix = `-${n}`;
+  insertBlock(v, loremMarkdown(srcs, suffix));
+}
+
 export async function replacePicture(): Promise<string> {
   return (await run("Replace picture", () => DocService.ChooseImage())) ?? "";
 }
@@ -498,6 +517,8 @@ export function applyTable(item: Item | undefined, table: Table, caption: string
 
 // --- Cross-references ---------------------------------------------------------
 
+const labelPrefix = { figure: "fig", table: "tbl", equation: "eq" } as const;
+
 // insertCrossRef inserts a reference to item at the cursor, first giving the
 // item a label if it has none.
 export function insertCrossRef(item: Item) {
@@ -506,13 +527,15 @@ export function insertCrossRef(item: Item) {
   const changes: ChangeSpec[] = [];
   let label = item.label;
   if (!label) {
-    label = uniqueLabel(item.kind === "figure" ? "fig" : "tbl", item.caption, items);
+    label = uniqueLabel(labelPrefix[item.kind], item.caption, items);
     if (item.kind === "figure") {
       changes.push({
         from: item.from,
         to: item.to,
         insert: figureMarkdown({ ...figureSpec(item), label }),
       });
+    } else if (item.kind === "equation") {
+      changes.push({ from: item.to, insert: ` {#${label}}` });
     } else if (item.captionFrom !== undefined) {
       changes.push({
         from: item.captionFrom,
@@ -588,6 +611,37 @@ export function setTemplateStyle(style: Style) {
     state.custom = t;
     scheduleRender(0);
   });
+}
+
+// setTemplateBase bases the document's own template on another template,
+// keeping its changes.
+export function setTemplateBase(base: string) {
+  styling = styling.then(async () => {
+    const t = await run("Customize template", () => DocService.SetTemplateBase(base));
+    if (!t) return;
+    state.custom = t;
+    scheduleRender(0);
+  });
+}
+
+// saveCustomTemplate adds the document's own template to the user's
+// templates, for any document to use, and reports whether it did.
+export async function saveCustomTemplate(name: string, description: string) {
+  await styling; // its latest changes
+  const id = await run("Save as template", () =>
+    DocService.SaveCustomTemplate(name, description),
+  );
+  if (!id) return false;
+  await refreshTemplates();
+  const saved = state.templates.find((t) => t.id === id)?.name ?? id;
+  toast(`Saved the template “${saved}”.`, "success", {
+    label: "Use It",
+    run: () => {
+      state.customizing = false;
+      setTemplate(id);
+    },
+  });
+  return true;
 }
 
 // removeCustomTemplate deletes the document's own template and goes back to
@@ -673,6 +727,35 @@ export function toggleMarkdown() {
 export function toggleOutline() {
   state.outlineOpen = !state.outlineOpen;
   localStorage.setItem("outline", state.outlineOpen ? "1" : "0");
+}
+
+export function toggleVersions() {
+  state.versionsOpen = !state.versionsOpen;
+  localStorage.setItem("versions", state.versionsOpen ? "1" : "0");
+}
+
+// --- Versions ---------------------------------------------------------------------------
+
+// saveVersion saves the document (asking where, if it's untitled), then keeps
+// it as a named version with Word and PDF copies; reports whether it did.
+export async function saveVersion(name: string): Promise<boolean> {
+  if (!(await save())) return false;
+  const v = await run("Save version", () => DocService.SaveVersion(name));
+  if (!v) return false;
+  toast(`Saved the version “${v.name}”.`, "success", {
+    label: "Show in Finder",
+    run: () => DocService.Reveal(v.path),
+  });
+  return true;
+}
+
+// loadVersion saves the document, then asks and replaces it with a version.
+export async function loadVersion(name: string) {
+  if (!(await ensureSaved())) return;
+  const info = await run("Load version", () => DocService.LoadVersion(name));
+  if (!info || info.canceled) return;
+  loadDoc(info);
+  toast(`Loaded the version “${name}”. The text it replaced is in backups.`, "success");
 }
 
 // --- Text -----------------------------------------------------------------------------

@@ -30,21 +30,23 @@ watch(() => docTemplates.value.map(key).join("\n"), load);
 
 <template>
   <div class="gallery">
-    <button
-      v-for="t in docTemplates"
-      :key="t.id"
-      class="card"
-      :class="{ active: state.template === t.id }"
-      :title="t.description"
-      @mousedown.prevent
-      @click="setTemplate(t.id)"
-    >
-      <div class="thumb">
-        <img v-if="previews[key(t)]" :src="previews[key(t)]" alt="" />
-        <div v-else class="loading" />
-      </div>
-      <span>{{ t.name }}</span>
-    </button>
+    <template v-for="t in docTemplates" :key="t.id">
+      <button
+        class="card"
+        :class="{ active: state.template === t.id }"
+        :title="t.description"
+        @mousedown.prevent
+        @click="setTemplate(t.id)"
+      >
+        <div class="thumb">
+          <img v-if="previews[key(t)]" :src="previews[key(t)]" alt="" />
+          <div v-else class="loading" />
+        </div>
+        <span>{{ t.name }}</span>
+      </button>
+      <!-- The document's own template, set apart from the rest. -->
+      <div v-if="t.id === 'custom'" class="separator" />
+    </template>
   </div>
 </template>
 
@@ -72,6 +74,13 @@ watch(() => docTemplates.value.map(key).join("\n"), load);
 .card.active {
   background: var(--active);
   border-color: rgba(193, 105, 79, 0.35);
+}
+.separator {
+  align-self: stretch;
+  flex: none;
+  width: 1px;
+  margin: 6px 2px;
+  background: var(--border);
 }
 .thumb {
   width: 54px;

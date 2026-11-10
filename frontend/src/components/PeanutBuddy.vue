@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { state } from "../lib/store";
+import type { HatKind } from "../peanut/hats";
 import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "../peanut/stage";
 
 // Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
 // the edge of the tab row with his legs dangling over the ribbon; now and
-// then he stands up, or strolls along the open stretch of the title bar and
-// sits down somewhere new. He breathes, blinks, and cheers you on while you
-// write; click him for a word of encouragement.
+// then he stands up, strolls along the open stretch of the title bar and
+// sits down somewhere new, or puts on a cowboy or party hat. He breathes,
+// blinks, and cheers you on while you write; click him for a word of
+// encouragement. What he says fades away slowly.
 
 const CHEERS = [
   "You can do it!",
@@ -24,8 +26,12 @@ const CHEERS = [
   "Write the messy version first.",
   "Look at you go!",
 ];
+const HAT_LINES: Record<HatKind, string[]> = {
+  cowboy: ["Yeehaw! Giddy up, writer!", "Howdy, partner! Let's wrangle some words."],
+  birthday: ["Party hat on! Every word's worth celebrating.", "It's a word party!"],
+};
 const MILESTONE = 250; // words
-const SAY_MS = 6000;
+const SAY_MS = 4000; // from popping out of his mouth to faded away
 const WALK_PX_PER_S = 28;
 const MIN_STROLL_PX = 40;
 const GAP = 10; // kept clear around the title, title bar buttons and tabs
@@ -38,6 +44,7 @@ const abovePx = `${STAGE_ABOVE}px`;
 const dropPx = `${LEDGE_DROP_PX}px`;
 const bubbleGapPx = `${BUBBLE_GAP}px`;
 const bubbleBottomPx = `${BUBBLE_BOTTOM}px`;
+const sayMs = `${SAY_MS}ms`;
 
 const homeEl = ref<HTMLElement>();
 const walkerEl = ref<HTMLElement>();
@@ -117,9 +124,12 @@ function drawTail() {
 
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let lastSaidAt = 0;
+// Bumped per line, so a new one replaces the bubble and restarts its fade.
+const said = ref(0);
 async function say(text: string) {
   placeBubble();
   message.value = text;
+  said.value++;
   lastSaidAt = Date.now();
   stage?.bounce();
   clearTimeout(hideTimer);
@@ -180,10 +190,26 @@ async function stroll() {
   perch(true);
 }
 
-// Every so often: stand up or sit back down, or stroll somewhere new and sit.
+let hat: HatKind | null = null;
+function changeHat() {
+  if (hat) {
+    hat = null;
+    stage?.setHat(null);
+    return;
+  }
+  hat = Math.random() < 0.5 ? "cowboy" : "birthday";
+  stage?.setHat(hat);
+  const lines = HAT_LINES[hat];
+  say(lines[Math.floor(Math.random() * lines.length)]);
+}
+
+// Every so often: stand up or sit back down, stroll somewhere new and sit,
+// or put on a hat (or take it off).
 function activityLoop() {
   later(rand(20_000, 50_000), async () => {
-    if (Math.random() < 0.5) await stroll();
+    const roll = Math.random();
+    if (roll < 0.2) changeHat();
+    else if (roll < 0.6) await stroll();
     else perch(!perched);
     activityLoop();
   });
@@ -249,7 +275,7 @@ onBeforeUnmount(() => {
       :style="{ transform: `translateX(${x}px)`, transitionDuration: `${walkMs}ms` }"
     >
       <Transition name="speech">
-        <div v-if="message" ref="speechEl" class="speech" :class="bubbleSide">
+        <div v-if="message" :key="said" ref="speechEl" class="speech" :class="bubbleSide">
           <svg class="tail back" aria-hidden="true"><path ref="tailBackEl" /></svg>
           <div class="bubble" :style="{ maxWidth: `${bubbleMax}px` }" aria-live="polite">
             {{ message }}
@@ -268,7 +294,7 @@ onBeforeUnmount(() => {
    of the Show in Finder, Sync files and Export buttons in the title bar. */
 .buddy {
   position: relative;
-  z-index: 90;
+  z-index: 70; /* over menus (60), under modal scrims (80) */
   width: v-bind(widthPx);
   margin: 0 290px 0 auto; /* clear of the title bar buttons above */
   pointer-events: none;
@@ -343,20 +369,32 @@ onBeforeUnmount(() => {
 .speech.right .bubble {
   left: calc(100% + v-bind(bubbleGapPx));
 }
-/* drawTail sets transform-origin to the tail's tip, so it grows from his mouth. */
+/* drawTail sets transform-origin to the tail's tip, so it grows from his mouth,
+   then fades away almost at once, gone by the time say() clears it. */
+.speech {
+  animation: speech-fade v-bind(sayMs) forwards;
+}
+@keyframes speech-fade {
+  0% {
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+    animation-timing-function: ease-in;
+  }
+  100% {
+    opacity: 0;
+  }
+}
 .speech-enter-active {
-  transition:
-    opacity 0.18s ease-out,
-    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.speech-leave-active {
-  transition:
-    opacity 0.2s ease-in,
-    transform 0.2s ease-in;
-}
-.speech-enter-from,
-.speech-leave-to {
-  opacity: 0;
+.speech-enter-from {
   transform: scale(0.4);
+}
+/* Faded already, or replaced by his next line: go at once. */
+.speech-leave-active {
+  animation: none;
+  opacity: 0;
 }
 </style>

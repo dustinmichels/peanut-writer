@@ -52,7 +52,8 @@ customized in Word.
 
 ## `template.json`
 
-Its name and description, and a `docx` block describing how it looks in Word. Colors are `RRGGBB`.
+Its name and description, and a `docx` block describing how it looks in Word. Colors are `RRGGBB`. A template saved
+from **Customize** also has a `style` block: its font and color changes, passed to Typst through `style.typ`.
 
 ```json
 {
@@ -91,6 +92,7 @@ Its name and description, and a `docx` block describing how it looks in Word. Co
 | ------------------ | ---------------------------------------------------------- |
 | `paper`            | `letter` or `a4`                                           |
 | `margin`           | Inches, every side                                         |
+| `columns`          | Text columns below the title block; leave out for one. The PDF needs `page(columns: 2)` in `template.typ` too |
 | `bodyFont`, `headingFont`, `monoFont` | Body text; headings and title; code      |
 | `fontSize`         | Body text, points                                          |
 | `lineSpacing`      | Multiple of single spacing                                 |

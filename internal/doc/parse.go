@@ -35,7 +35,7 @@ var markdown = goldmark.New(goldmark.WithExtensions(
 		extension.RightAngleQuote:  "»",
 		extension.Apostrophe:       "’",
 	})),
-))
+), goldmark.WithParserOptions(mathParsers...))
 
 // Parse reads source, resolving image paths against baseDir (the document's
 // folder).
@@ -184,6 +184,8 @@ func (p *parser) blocks(parent ast.Node) []Block {
 			out = append(out, Block{Type: BlockRule})
 		case *extast.Table:
 			out = append(out, p.table(n))
+		case *equationNode:
+			out = append(out, p.equation(n))
 		}
 		// HTML blocks and the footnote list (read up front) aren't shown.
 	}
@@ -547,6 +549,8 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 		if tag := strings.ToLower(strings.ReplaceAll(b.String(), " ", "")); tag == "<br>" || tag == "<br/>" {
 			out = append(out, Inline{Type: InlineLineBreak})
 		}
+	case *mathNode:
+		out = append(out, p.math(n))
 	case *extast.FootnoteLink:
 		if note, ok := p.notes[n.Index]; ok {
 			out = append(out, Inline{Type: InlineFootnote, Blocks: p.blocks(note)})
@@ -574,9 +578,10 @@ func mergeText(in []Inline) []Inline {
 	return out
 }
 
-var refRe = regexp.MustCompile(`@((?:fig|tbl):[A-Za-z0-9_\-]*[A-Za-z0-9_])`)
+var refRe = regexp.MustCompile(`@((?:fig|tbl|eq):[A-Za-z0-9_\-]*[A-Za-z0-9_])`)
 
-// splitRefs turns `@fig:a` and `@tbl:b` in text runs into references.
+// splitRefs turns `@fig:a`, `@tbl:b` and `@eq:c` in text runs into
+// references.
 func splitRefs(in []Inline) []Inline {
 	var out []Inline
 	for _, x := range in {
@@ -613,11 +618,11 @@ func isWordByte(c byte) bool {
 
 // --- Numbering and references ---------------------------------------------
 
-// number numbers figures and tables in document order and records their
-// labels.
+// number numbers figures, tables and labelled equations in document order
+// and records their labels.
 func (p *parser) number(blocks []Block) {
 	p.labels = map[string]Inline{}
-	figs, tables := 0, 0
+	figs, tables, eqs := 0, 0, 0
 	var walk func([]Block)
 	walk = func(bs []Block) {
 		for i := range bs {
@@ -630,6 +635,11 @@ func (p *parser) number(blocks []Block) {
 			case BlockTable:
 				tables++
 				b.Number, kind = tables, KindTable
+			case BlockEquation:
+				if b.Label != "" && b.Error == "" { // one that can't be read isn't drawn as an equation
+					eqs++
+					b.Number, kind = eqs, KindEquation
+				}
 			}
 			if kind != "" && b.Label != "" {
 				if _, dup := p.labels[b.Label]; dup {

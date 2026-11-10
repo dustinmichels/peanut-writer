@@ -56,6 +56,9 @@ things _are_ rather than how they look, swapping its style for a journal's is on
   current number. In your text it reads "Figure 2", and stays right when things move. A reference to something that no
   longer exists shows as **??**, just as in LaTeX, and is listed in the status bar so you can fix it.
 - **Footnotes and a table of contents** that write themselves.
+- **Math, written the LaTeX way.** `$\frac{a}{b}$` in a sentence, or an equation on lines of its own between `$$`
+  lines. Name it (`{#eq:euler}`) and it's numbered and can be cross-referenced like a figure. See
+  [the syntax](../reference/syntax#math).
 - **Real typesetting.** The preview is set by [Typst](https://typst.app), a modern typesetting engine in the LaTeX
   tradition: proper justification, spacing and page breaks. The _Academic_ template even looks like a LaTeX article.
 - **Templates instead of formatting.** You choose a look; you don't build one.

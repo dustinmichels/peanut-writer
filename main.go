@@ -36,6 +36,8 @@ func main() {
 		Services:    []application.Service{application.NewService(docs)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		// Documents opened from the file manager or the command line.
+		FileAssociations: []string{packageExt},
 		ShouldQuit:  docs.shouldClose,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.dustinmichels.peanutwriter",
@@ -48,6 +50,9 @@ func main() {
 		},
 	})
 	docs.app = app
+	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(e *application.ApplicationEvent) {
+		docs.openedWithFile(e.Context().Filename())
+	})
 	app.Menu.Set(menu(app, docs))
 
 	docs.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -81,6 +86,7 @@ func main() {
 		}
 		app.Event.Emit("filesDropped", drop)
 	})
+	enableSpellcheck(docs.window)
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
@@ -99,6 +105,7 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	file := m.AddSubmenu("File")
 	file.Add("New").SetAccelerator("CmdOrCtrl+N").OnClick(send("new"))
 	file.Add("Open…").SetAccelerator("CmdOrCtrl+O").OnClick(send("open"))
+	file.Add("Open Recent…").SetAccelerator("CmdOrCtrl+Shift+O").OnClick(send("recent"))
 	docs.menu, docs.recentMenu = m, file.AddSubmenu("Open Recent")
 	docs.fillRecentMenu()
 	file.AddSeparator()
@@ -129,6 +136,7 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	view.AddSeparator()
 	view.Add("Show Markdown").SetAccelerator("CmdOrCtrl+/").OnClick(send("markdown"))
 	view.Add("Outline").OnClick(send("outline"))
+	view.Add("Versions").OnClick(send("versions"))
 	view.AddSeparator()
 	view.Add("Command Palette…").SetAccelerator("CmdOrCtrl+Shift+P").OnClick(send("commands"))
 

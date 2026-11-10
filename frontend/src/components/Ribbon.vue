@@ -8,6 +8,7 @@ import {
   CodeXml,
   ClipboardPaste,
   FilePlus2,
+  FileClock,
   FileCode,
   FileText,
   FileDown,
@@ -31,6 +32,7 @@ import {
   SaveAll,
   Search,
   Settings2,
+  Sigma,
   SlidersHorizontal,
   Strikethrough,
   Table,
@@ -61,11 +63,13 @@ import {
   syncFiles,
   toggleMarkdown,
   toggleOutline,
+  toggleVersions,
 } from "../lib/actions";
 import {
   type BlockStyle,
   clearFormatting,
   insertBlock,
+  insertEquation,
   insertFootnote,
   type Mark,
   setBlockStyle,
@@ -151,7 +155,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               big
               :icon="History"
               label="Recent"
-              title="Open a recent document"
+              title="Open a recent document (⇧⌘O)"
               @click="showRecent"
             />
             <RibbonButton
@@ -169,6 +173,14 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               label="Save As"
               title="Save As (⇧⌘S)"
               @click="saveAs"
+            />
+            <RibbonButton
+              big
+              :icon="FileClock"
+              label="Versions"
+              title="Save a named version of the document, or load an earlier one"
+              :active="state.versionsOpen"
+              @click="toggleVersions"
             />
           </div>
           <label>Document</label>
@@ -195,7 +207,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               label="Sync Files"
               :title="
                 canSync
-                  ? 'Save, then write PDF and Word copies into the out folder (⇧⌘Y)'
+                  ? 'Save, then write PDF and Word copies beside the document (⇧⌘Y)'
                   : 'The PDF and Word copies are up to date'
               "
               :disabled="!canSync"
@@ -375,6 +387,13 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               :icon="Footprints"
               label="Footnote"
               @click="withView(insertFootnote)"
+            />
+            <RibbonButton
+              big
+              :icon="Sigma"
+              label="Equation"
+              title="Insert an equation (selected text becomes inline math)"
+              @click="withView(insertEquation)"
             />
           </div>
           <label>Text</label>

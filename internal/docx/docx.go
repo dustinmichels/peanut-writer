@@ -23,6 +23,10 @@ type Options struct {
 	// nil, or an error → write a short italic placeholder
 	// "[image: <file name>]" instead.
 	Rasterize func(path string, widthPt float64) ([]byte, error)
+	// Equation draws LaTeX math with sizePt text as PNG at 192 dpi; math in
+	// a line (display false) with its baseline at the picture's middle.
+	// nil, or an error → the LaTeX source, in code style.
+	Equation func(tex string, display bool, sizePt float64) ([]byte, error)
 }
 
 // Write renders d as a .docx file in style st.
@@ -72,7 +76,8 @@ type writer struct {
 	st  templates.DocxStyle
 	opt Options
 
-	pageW, pageH, margin, textW int // twips
+	pageW, pageH, margin, textW int // twips; textW is one column's width
+	cols                        int // text columns below the title block
 
 	out  *strings.Builder // where paragraphs go
 	part *part            // relationships of the part being written
@@ -83,7 +88,7 @@ type writer struct {
 	pics    map[string]*pic // image cache, by path (and raster width); nil for one Word can't show
 	drawing int             // last drawing id
 
-	bookmarks  map[string]string // figure/table label → bookmark name
+	bookmarks  map[string]string // figure/table/equation label → bookmark name
 	placed     map[string]bool   // labels whose bookmark is written
 	bookmarkID int
 
@@ -150,7 +155,8 @@ func newWriter(st templates.DocxStyle, opt Options) *writer {
 		w.pageW, w.pageH = 11906, 16838
 	}
 	w.margin = int(math.Round(st.Margin * 1440))
-	w.textW = max(w.pageW-2*w.margin, 1440)
+	w.cols = max(st.Columns, 1)
+	w.textW = max((w.pageW-2*w.margin-columnGap*(w.cols-1))/w.cols, 1440)
 	// The document part's fixed relationships come first: styles,
 	// numbering, settings, footnotes, footer.
 	w.docRels.next = 5
@@ -258,16 +264,36 @@ func relsXML(rels []rel) string {
 	return b.String()
 }
 
+// columnGap is the space between text columns, in twips (a quarter inch).
+const columnGap = 360
+
 func (w *writer) document(body string) string {
-	footer := ""
+	return fmt.Sprintf(`%s<w:document %s><w:body>%s%s</w:body></w:document>`,
+		xmlHeader, namespaces, body, w.sectPr(w.cols, w.cols > 1))
+}
+
+// sectPr is a section's properties: the page, with cols text columns. A
+// continuous section follows the one before on the same page.
+func (w *writer) sectPr(cols int, continuous bool) string {
+	var b strings.Builder
+	b.WriteString("<w:sectPr>")
 	if w.st.PageNumbers {
-		footer = `<w:footerReference w:type="default" r:id="rId5"/>`
+		b.WriteString(`<w:footerReference w:type="default" r:id="rId5"/>`)
+	}
+	if continuous {
+		b.WriteString(`<w:type w:val="continuous"/>`)
 	}
 	edge := min(720, w.margin/2)
-	return fmt.Sprintf(`%s<w:document %s><w:body>%s<w:sectPr>%s<w:pgSz w:w="%d" w:h="%d"/>`+
-		`<w:pgMar w:top="%[7]d" w:right="%[7]d" w:bottom="%[7]d" w:left="%[7]d" w:header="%[8]d" w:footer="%[8]d" w:gutter="0"/>`+
-		`<w:cols w:space="720"/></w:sectPr></w:body></w:document>`,
-		xmlHeader, namespaces, body, footer, w.pageW, w.pageH, w.margin, edge)
+	fmt.Fprintf(&b, `<w:pgSz w:w="%d" w:h="%d"/>`+
+		`<w:pgMar w:top="%[3]d" w:right="%[3]d" w:bottom="%[3]d" w:left="%[3]d" w:header="%[4]d" w:footer="%[4]d" w:gutter="0"/>`,
+		w.pageW, w.pageH, w.margin, edge)
+	if cols > 1 {
+		fmt.Fprintf(&b, `<w:cols w:num="%d" w:space="%d"/>`, cols, columnGap)
+	} else {
+		b.WriteString(`<w:cols w:space="720"/>`)
+	}
+	b.WriteString("</w:sectPr>")
+	return b.String()
 }
 
 func (w *writer) footer() string {

@@ -32,5 +32,5 @@ The first time you open Peanut Writer, it shows a short welcome guide written in
 document to poke at: move the picture below the table and watch both numbers change. Help → Welcome Guide opens it
 again any time, and Help → Markdown Cheat Sheet lists everything you can type.
 
-To start your own, choose **New** (⌘N). Peanut Writer asks for a name and a place, and makes a folder there to hold
-your document, its pictures and its backups. See [Documents, saving and export](./documents).
+To start your own, choose **New** (⌘N). Peanut Writer asks for a name and a place, and makes a `.peanut` package there
+to hold your document, its pictures and its backups. See [Documents, saving and export](./documents).

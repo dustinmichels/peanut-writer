@@ -23,6 +23,8 @@ func TestTitleCase(t *testing.T) {
 		"intro {#sec:the-intro}":             "Intro {#sec:the-intro}",
 		"a [link to it](https://x.io/a/the)": "A [Link to It](https://x.io/a/the)",
 		"*what* is *the* point":              "*What* Is *the* Point",
+		"the $\\sin x$ of a wave":            "The $\\sin x$ of a Wave",
+		"the $a \\$ b$ of it":                "The $a \\$ b$ of It",
 	} {
 		if got := TitleCase(in); got != want {
 			t.Errorf("TitleCase(%q) = %q, want %q", in, got, want)
@@ -64,6 +66,20 @@ Table: Sales by year {#tbl:sales}
 
 Text *with* a note.[^1] and a hard  
 break.
+
+Math $x_{i} * y_{j}^2$ costs $5 or $10, as @eq:one says.
+
+$$
+a_{1} * b_{2}
+$$ {#eq:one}
+
+> $$
+> a
+> $$ {#eq:quoted}
+
+- $$
+  b
+  $$ {#eq:listed}
 
 [TOC]
 

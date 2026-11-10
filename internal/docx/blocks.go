@@ -27,7 +27,8 @@ func (w *writer) para(style, ppr, runs string) {
 }
 
 // titleBlock writes the front matter's title, subtitle, author, date and
-// abstract, each only when given.
+// abstract, each only when given. With text columns, it's a section of its
+// own, across the page.
 func (w *writer) titleBlock(m doc.Meta) {
 	type line struct{ style, text string }
 	var lines []line
@@ -49,6 +50,9 @@ func (w *writer) titleBlock(m doc.Meta) {
 		if i == len(lines)-1 {
 			// A gap between the title block and the text.
 			ppr = fmt.Sprintf(`<w:spacing w:after="%d"/>`, twips(max(w.st.SpaceAfter*2, 18)))
+			if w.cols > 1 {
+				ppr += w.sectPr(1, false)
+			}
 		}
 		w.para(l.style, ppr, w.run(l.text, runProps{}))
 	}
@@ -106,6 +110,8 @@ func (w *writer) block(b *doc.Block) {
 		w.para("", "", `<w:r><w:br w:type="page"/></w:r>`)
 	case doc.BlockTOC:
 		w.toc()
+	case doc.BlockEquation:
+		w.equation(b)
 	}
 }
 
@@ -344,8 +350,9 @@ func (w *writer) toc() {
 	w.para("", `<w:ind w:firstLine="0"/>`, sb.String())
 }
 
-// collectBookmarks names a bookmark for each labelled figure and table, the
-// first one only when a label is used twice (as references resolve).
+// collectBookmarks names a bookmark for each labelled figure, table and
+// equation, the first one only when a label is used twice (as references
+// resolve).
 func (w *writer) collectBookmarks(blocks []doc.Block) {
 	w.bookmarks = map[string]string{}
 	w.placed = map[string]bool{}
@@ -354,7 +361,7 @@ func (w *writer) collectBookmarks(blocks []doc.Block) {
 	walk = func(bs []doc.Block) {
 		for i := range bs {
 			b := &bs[i]
-			if (b.Type == doc.BlockFigure || b.Type == doc.BlockTable) && b.Label != "" && b.Number > 0 {
+			if (b.Type == doc.BlockFigure || b.Type == doc.BlockTable || b.Type == doc.BlockEquation) && b.Label != "" && b.Number > 0 {
 				if _, ok := w.bookmarks[b.Label]; !ok {
 					w.bookmarks[b.Label] = bookmarkName(b.Label, used)
 				}

@@ -148,6 +148,8 @@ func (w *writer) styles() string {
 			rpr: rpr("", false, st.CaptionItalic, st.CaptionColor, st.CaptionSize)},
 		styleDef{typ: "paragraph", id: "Figure", name: "Figure", basedOn: "Normal", next: "Caption", quick: true,
 			ppr: spacing(6, 4) + noIndent + jc("center")},
+		styleDef{typ: "paragraph", id: "Equation", name: "Equation", basedOn: "Normal", next: "Normal", quick: true,
+			ppr: spacing(6, 6) + noIndent + jc("center")},
 		styleDef{typ: "paragraph", id: "Quote", name: "Quote", basedOn: "Normal", next: "Normal", quick: true, priority: 29,
 			ppr: `<w:ind w:left="720" w:right="720" w:firstLine="0"/>`,
 			rpr: rpr("", false, true, "", 0)},

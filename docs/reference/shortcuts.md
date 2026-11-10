@@ -5,6 +5,7 @@
 | ⇧⌘P          | Command palette              |
 | ⌘N           | New document                 |
 | ⌘O           | Open                         |
+| ⇧⌘O          | Open Recent                  |
 | ⌘S           | Save                         |
 | ⇧⌘S          | Save As                      |
 | ⌘E           | Export as PDF                |

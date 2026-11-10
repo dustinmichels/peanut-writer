@@ -1,9 +1,18 @@
+# ─── Tools ────────────────────────────────────────────────────────────────────
+
 [tools]
+# Languages & runtimes
 go = "1.27.3"
 bun = "1.4.4"
+
+# App framework & bundled renderer
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"
 typst = "0.15.1"
+
+# Formatting
 "npm:oxfmt" = "0.77.0"
+
+# ─── App ──────────────────────────────────────────────────────────────────────
 
 [tasks.dev]
 description = "Run the app in dev mode (Vite HMR + Go rebuild on change)"
@@ -16,29 +25,6 @@ run = "wails3 build"
 [tasks.package]
 description = "Package a production build (.app on macOS, with Typst inside)"
 run = "wails3 package"
-
-[tasks.test]
-description = "Go tests (the Typst ones need typst, which mise installs)"
-run = "go test ./internal/..."
-
-[tasks.check]
-description = "Type-check the editor"
-dir = "frontend"
-run = "bunx vue-tsc --noEmit"
-
-[tasks.fmt]
-description = "Format our Go with gofmt (skips Wails' build/ scaffolding) and everything else with oxfmt (skips generated bindings)"
-run = ["gofmt -w *.go internal", "oxfmt '!frontend/bindings/**'"]
-
-[tasks.docs]
-description = "Run the documentation site (VitePress) with hot reload"
-dir = "docs"
-run = ["bun install", "bun run dev"]
-
-[tasks."docs:build"]
-description = "Build the documentation site into docs/.vitepress/dist"
-dir = "docs"
-run = ["bun install", "bun run build"]
 
 [tasks.cleanup]
 description = "Delete build output (bin/, frontend/dist, .task, .wails) and forget stale app bundles in Launch Services. Afterwards `go build .` fails (main.go embeds frontend/dist) until the next `mise run build` or `dev`"
@@ -69,3 +55,30 @@ fi
 rm -rf bin frontend/dist .task .wails
 echo "removed bin/ frontend/dist/ .task/ .wails/"
 '''
+
+# ─── Quality ──────────────────────────────────────────────────────────────────
+
+[tasks.test]
+description = "Go tests (the Typst ones need typst, which mise installs)"
+run = "go test ./internal/..."
+
+[tasks.check]
+description = "Type-check the editor"
+dir = "frontend"
+run = "bunx vue-tsc --noEmit"
+
+[tasks.fmt]
+description = "Format our Go with gofmt (skips Wails' build/ scaffolding) and everything else with oxfmt (skips generated bindings)"
+run = ["gofmt -w *.go internal", "oxfmt '!frontend/bindings/**'"]
+
+# ─── Docs ─────────────────────────────────────────────────────────────────────
+
+[tasks.docs]
+description = "Run the documentation site (VitePress) with hot reload"
+dir = "docs"
+run = ["bun install", "bun run dev"]
+
+[tasks."docs:build"]
+description = "Build the documentation site into docs/.vitepress/dist"
+dir = "docs"
+run = ["bun install", "bun run build"]

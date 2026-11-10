@@ -1,6 +1,6 @@
 // Reading and writing the parts of Peanut Writer's Markdown the editor
-// helps with: front matter, figures, tables, captions and labels. The Go
-// side (internal/doc) is what renders; this mirrors its rules closely
+// helps with: front matter, figures, tables, equations, captions and labels.
+// The Go side (internal/doc) is what renders; this mirrors its rules closely
 // enough to number things the same way while typing.
 
 export interface Meta {
@@ -97,9 +97,16 @@ export function writeFrontMatter(meta: Meta, extra: string[] = []): string {
   return lines.length ? `---\n${lines.join("\n")}\n---\n` : "";
 }
 
-// --- Figures and tables ---------------------------------------------------
+// --- Figures, tables and equations -----------------------------------------
 
-type Kind = "figure" | "table";
+export type Kind = "figure" | "table" | "equation";
+
+// What a reference to each kind reads as: "Figure 2".
+export const kindName: Record<Kind, string> = {
+  figure: "Figure",
+  table: "Table",
+  equation: "Equation",
+};
 
 export interface Picture {
   src: string;
@@ -110,10 +117,12 @@ export interface Item {
   kind: Kind;
   number: number;
   label: string; // "" when it has none
-  caption: string; // as written (Markdown)
+  // as written (Markdown); an equation's is its TeX on one line
+  caption: string;
   // Figure: the image line, or a grid's lines through its `Figure:` caption.
   // Table: from the header row through the caption line (or the last row
-  // when there's no caption).
+  // when there's no caption). Equation: its first `$$` line through the
+  // closing one.
   from: number;
   to: number;
   line: number; // 1-based line of `from`
@@ -139,6 +148,30 @@ const delimiterRow = /^\s{0,3}\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 const setextUnderline = /^\s*-+\s*$/;
 const captionLine = /^(?:Table:|:\s)\s*(.*?)\s*(\{[^{}]*\})?\s*$/i;
 const fence = /^\s{0,3}(```|~~~)/;
+
+// displayMathStart is where the `$$` opening a display equation is on line,
+// or -1: a line starting (after up to three spaces) with `$$`.
+export function displayMathStart(line: string): number {
+  const m = /^ {0,3}\$\$/.exec(line);
+  return m ? m[0].length - 2 : -1;
+}
+
+// displayMathClose finds the `$$` closing a display equation on line, looking
+// from `from`: the line's text, less an optional attribute block, ends with
+// it. Null when line doesn't close the equation.
+export function displayMathClose(
+  line: string,
+  from: number,
+): { at: number; attrs: string; attrsFrom: number } | null {
+  const m = /\$\$[ \t]*(\{[^{}]*\})?\s*$/.exec(line.slice(from));
+  if (!m) return null;
+  const at = from + m.index;
+  return {
+    at,
+    attrs: m[1] ?? "",
+    attrsFrom: m[1] ? at + m[0].indexOf("{") : -1,
+  };
+}
 
 // Where a figure sits across the text width; "" is centered.
 export type Position = "" | "left" | "right";
@@ -176,9 +209,9 @@ function gridPictures(line: string): Picture[] | null {
   }));
 }
 
-// scan finds the document's figures and tables, numbered in order the way
-// internal/doc numbers them. It only sees top-level blocks: ones inside
-// lists or quotes, which the Go side also counts, are missed.
+// scan finds the document's figures, tables and labelled equations, numbered
+// in order the way internal/doc numbers them. It only sees top-level blocks:
+// ones inside lists or quotes, which the Go side also counts, are missed.
 export function scan(text: string): Item[] {
   const lines = text.split("\n");
   const starts: number[] = [];
@@ -193,6 +226,7 @@ export function scan(text: string): Item[] {
   const items: Item[] = [];
   let figs = 0;
   let tables = 0;
+  let equations = 0;
   let i = 0;
   const fm = readFrontMatter(text);
   if (fm.to > 0) while (i < lines.length && starts[i] < fm.to) i++;
@@ -207,6 +241,36 @@ export function scan(text: string): Item[] {
     }
     if (f) {
       inFence = f[1];
+      continue;
+    }
+    // A display equation: raw TeX through the line ending in `$$` (or the
+    // end of the document). Only labelled ones are numbered.
+    const math = displayMathStart(line);
+    if (math >= 0) {
+      let j = i;
+      let close = displayMathClose(line, math + 2);
+      while (!close && j + 1 < lines.length) close = displayMathClose(lines[++j], 0);
+      if (close) {
+        const id = parseAttrs(close.attrs || undefined).id;
+        if (id.startsWith("eq:")) {
+          const tex =
+            j === i
+              ? line.slice(math + 2, close.at)
+              : [line.slice(math + 2), ...lines.slice(i + 1, j), lines[j].slice(0, close.at)].join(
+                  "\n",
+                );
+          items.push({
+            kind: "equation",
+            number: ++equations,
+            label: id,
+            caption: tex.replace(/\s+/g, " ").trim(),
+            from: starts[i],
+            to: end(j),
+            line: i + 1,
+          });
+        }
+      }
+      i = j;
       continue;
     }
     const prevBoundary = blank(i - 1) || /^\s{0,3}#/.test(lines[i - 1]);
@@ -262,7 +326,7 @@ export function scan(text: string): Item[] {
       splitRow(line).length === splitRow(lines[i + 1]).length
     ) {
       let j = i + 2;
-      while (j < lines.length && !blank(j)) j++;
+      while (j < lines.length && !blank(j) && displayMathStart(lines[j]) < 0) j++;
       const lastRow = j - 1;
       const item: Item = {
         kind: "table",
@@ -311,13 +375,14 @@ function slug(s: string): string {
 
 // uniqueLabel is `<prefix>:<slug of text>`, numbered if it's taken.
 export function uniqueLabel(
-  prefix: "fig" | "tbl",
+  prefix: "fig" | "tbl" | "eq",
   text: string,
   items: Item[],
   except = "",
 ): string {
   const taken = new Set(items.map((x) => x.label).filter((l) => l && l !== except));
-  const base = `${prefix}:${slug(text || (prefix === "fig" ? "figure" : "table"))}`;
+  const fallback = { fig: "figure", tbl: "table", eq: "equation" }[prefix];
+  const base = `${prefix}:${slug(text || fallback)}`;
   let label = base;
   for (let n = 2; taken.has(label); n++) label = `${base}-${n}`;
   return label;

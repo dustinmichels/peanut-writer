@@ -1,0 +1,30 @@
+{
+  "name": "Editorial",
+  "description": "A modern magazine feature: Iowan Old Style text, Avenir Next headlines, a brick-red accent, pull quotes.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1.15,
+    "bodyFont": "Iowan Old Style",
+    "headingFont": "Avenir Next",
+    "monoFont": "Menlo",
+    "fontSize": 11,
+    "lineSpacing": 1.2,
+    "spaceAfter": 9,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "1C1B1A",
+    "headingColor": "1C1B1A",
+    "headingSizes": [19, 13.5, 10],
+    "headingBold": true,
+    "numberedHeadings": false,
+    "titleSize": 34,
+    "titleColor": "1C1B1A",
+    "titleAlign": "left",
+    "captionSize": 8.5,
+    "captionColor": "5F5A55",
+    "captionItalic": false,
+    "accentColor": "B23A26",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

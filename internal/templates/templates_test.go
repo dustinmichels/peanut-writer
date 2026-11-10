@@ -191,3 +191,40 @@ func TestImportAvoidsTheCustomID(t *testing.T) {
 		t.Errorf("imported as %s; want custom-2", filepath.Base(dir))
 	}
 }
+
+func TestSavedCustomTemplateKeepsItsChanges(t *testing.T) {
+	userHome(t)
+	id, err := Save(Custom{Base: "elegant", Style: Style{BodyFont: "Georgia", HeadingColor: "AA0000"}}, " House Style ", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := Get(id)
+	if id != "house-style" || saved.Name != "House Style" || saved.Builtin {
+		t.Fatalf("saved as %q (%q, builtin %v)", id, saved.Name, saved.Builtin)
+	}
+	if saved.Docx.BodyFont != "Georgia" || saved.TypstStyle().HeadingColor != "AA0000" {
+		t.Errorf("changes lost: docx %q, typst %+v", saved.Docx.BodyFont, saved.TypstStyle())
+	}
+	if src, _ := saved.Source(); !bytes.Equal(src, mustSource(t, "elegant")) {
+		t.Error("source isn't the base's")
+	}
+
+	// Customizing the saved template changes only what it sets over it.
+	got := Custom{Base: id, Style: Style{HeadingColor: "0000AA"}}.Template()
+	if s := got.TypstStyle(); s.BodyFont != "Georgia" || s.HeadingColor != "0000AA" {
+		t.Errorf("custom over saved: %+v", s)
+	}
+	if got.Style != (Style{HeadingColor: "0000AA"}) {
+		t.Errorf("custom's own changes include its base's: %+v", got.Style)
+	}
+
+	if err := Rename(id, "Renamed", ""); err != nil {
+		t.Fatal(err)
+	}
+	if s := Get(id).TypstStyle(); s.BodyFont != "Georgia" {
+		t.Error("renaming dropped the saved changes")
+	}
+	if _, err := Save(Custom{Base: "classic"}, "  ", ""); err == nil {
+		t.Error("saved without a name")
+	}
+}

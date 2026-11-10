@@ -38,7 +38,7 @@ const Default = "classic"
 const CustomID = "custom"
 
 // Order of the built-in templates in the gallery.
-var builtinOrder = []string{"classic", "academic", "report", "minimal", "manuscript", "elegant", "peanut"}
+var builtinOrder = []string{"classic", "academic", "report", "minimal", "manuscript", "elegant", "editorial", "journal", "peanut"}
 
 // reserved reports whether a user template folder can't be named id.
 func reserved(id string) bool { return id == CustomID || slices.Contains(builtinOrder, id) }
@@ -51,10 +51,15 @@ type Template struct {
 	Builtin     bool      `json:"builtin"`
 	Docx        DocxStyle `json:"docx"`
 	Base        string    `json:"base"`  // a custom template's base template; "" for others
-	Style       Style     `json:"style"` // a custom template's changes to its base; empty for others
+	Style       Style     `json:"style"` // a custom template's changes to its base; a saved one's (see Save) to the template it was made from
 
-	dir string // the user template's folder; "" for a built-in one
+	dir       string // the user template's folder; "" for a built-in one
+	baseStyle Style  // a custom template's base's Style
 }
+
+// TypstStyle is the style.json Typst gets: a custom template's changes over
+// its base's own.
+func (t Template) TypstStyle() Style { return t.Style.over(t.baseStyle) }
 
 // Style is the fonts and colors a document's custom template changes in the
 // template it's based on; "" and 0 keep the base's. Colors are RRGGBB.
@@ -74,6 +79,22 @@ type Style struct {
 	TableHeaderFill string  `json:"tableHeaderFill,omitempty"`
 }
 
+// over is s with b's values where s keeps the base's.
+func (s Style) over(b Style) Style {
+	return Style{
+		BodyFont:        cmp.Or(s.BodyFont, b.BodyFont),
+		HeadingFont:     cmp.Or(s.HeadingFont, b.HeadingFont),
+		MonoFont:        cmp.Or(s.MonoFont, b.MonoFont),
+		FontSize:        cmp.Or(s.FontSize, b.FontSize),
+		TextColor:       cmp.Or(s.TextColor, b.TextColor),
+		HeadingColor:    cmp.Or(s.HeadingColor, b.HeadingColor),
+		TitleColor:      cmp.Or(s.TitleColor, b.TitleColor),
+		CaptionColor:    cmp.Or(s.CaptionColor, b.CaptionColor),
+		AccentColor:     cmp.Or(s.AccentColor, b.AccentColor),
+		TableHeaderFill: cmp.Or(s.TableHeaderFill, b.TableHeaderFill),
+	}
+}
+
 // Custom is a document's own template: the template it's based on, with
 // some fonts and colors changed. It's kept beside the document (see
 // ReadCustom) and named in its front matter by CustomID.
@@ -87,8 +108,9 @@ type Custom struct {
 func (c Custom) Template() Template {
 	t := Get(c.Base)
 	t.Description = "This document's own version of " + t.Name + "."
+	t.baseStyle = t.Style
 	t.Base, t.ID, t.Style = t.ID, CustomID, c.Style
-	t.Name += " (custom)"
+	t.Name = "Custom"
 	s, d := c.Style, &t.Docx
 	d.BodyFont = cmp.Or(s.BodyFont, d.BodyFont)
 	d.HeadingFont = cmp.Or(s.HeadingFont, d.HeadingFont)
@@ -101,6 +123,29 @@ func (c Custom) Template() Template {
 	d.AccentColor = cmp.Or(s.AccentColor, d.AccentColor)
 	d.TableHeaderFill = cmp.Or(s.TableHeaderFill, d.TableHeaderFill)
 	return t
+}
+
+// Save adds c to the user's templates folder as a new template named name,
+// which keeps c's changes to its base, and returns its id.
+func Save(c Custom, name, description string) (string, error) {
+	if err := c.Style.Check(); err != nil {
+		return "", err
+	}
+	t := c.Template()
+	src, err := t.Source()
+	if err != nil {
+		return "", err
+	}
+	if t.Name = strings.TrimSpace(name); t.Name == "" {
+		return "", errors.New("a template needs a name")
+	}
+	t.Description = strings.TrimSpace(description)
+	t.Style = t.TypstStyle()
+	dir, err := create(slug(t.Name), src, t)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(dir), nil
 }
 
 var hexColor = regexp.MustCompile(`^[0-9A-F]{6}$`)
@@ -159,6 +204,7 @@ func WriteCustom(p string, c *Custom) error {
 type DocxStyle struct {
 	Paper            string    `json:"paper"`            // "letter" or "a4"
 	Margin           float64   `json:"margin"`           // inches, every side
+	Columns          int       `json:"columns"`          // text columns below the title block; 0 or 1 for one
 	BodyFont         string    `json:"bodyFont"`         //
 	HeadingFont      string    `json:"headingFont"`      // headings and the title
 	MonoFont         string    `json:"monoFont"`         // code
@@ -457,7 +503,8 @@ func writeMeta(dir string, t Template) error {
 		Name        string    `json:"name"`
 		Description string    `json:"description"`
 		Docx        DocxStyle `json:"docx"`
-	}{t.Name, t.Description, t.Docx}, "", "  ")
+		Style       Style     `json:"style,omitzero"`
+	}{t.Name, t.Description, t.Docx, t.Style}, "", "  ")
 	if err != nil {
 		return err
 	}

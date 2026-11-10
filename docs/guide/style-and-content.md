@@ -52,6 +52,8 @@ Caption, Quote and so on. Whoever opens the Word file can keep editing it proper
 | **Minimal**    | Quiet Swiss-style sans: black and grays, generous white space, hairline rules.            |
 | **Manuscript** | An APA-style paper ready to submit: Times 12 pt, double spaced, indented paragraphs.      |
 | **Elegant**    | A finely set book page: old-style serif, justified text, small-caps headings, claret.     |
+| **Editorial**  | A modern magazine feature: Iowan Old Style text, Avenir Next headlines, brick red, pull quotes. |
+| **Journal**    | A two-column paper: STIX Two at 10 pt, numbered sections, title and abstract across the top. |
 | **Peanut**     | Warm and friendly: rounded headings, roasted-peanut browns, soft cream table headers.     |
 
 ## "But I want a different font"

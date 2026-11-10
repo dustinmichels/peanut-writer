@@ -55,6 +55,9 @@ dev_mode:
 
 # File Associations
 # More information at: https://v3.wails.io/noit/done/yet
+# The .peanut document package is declared by hand in build/darwin/Info.plist and Info.dev.plist
+# (CFBundleDocumentTypes and UTExportedTypeDeclarations, conforming to com.apple.package), which
+# these entries can't express; re-add it there if `common:update:build-assets` regenerates them.
 fileAssociations:
 #  - ext: wails
 #    name: Wails

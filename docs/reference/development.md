@@ -37,6 +37,7 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/docx`: the model → .docx, written directly (no Word or pandoc needed).
 - `internal/templates`: built-in and user templates, and per-document customization.
 - `internal/backup`: `.md` + `.docx` backups in timestamped `backups/<datetime>/` folders.
+- `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
 - `starter/`: the welcome guide.
 - `frontend/`: the editor. `src/lib/editor.ts` is CodeMirror with the figure, table, reference and properties widgets;

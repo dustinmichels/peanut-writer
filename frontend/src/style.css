@@ -13,6 +13,7 @@
   --accent: #c1694f;
   --accent-ink: #9c5b2e;
   --roast: #8b5528;
+  --math: #4f6b45;
   --cream: #f6e3cc;
   --hover: rgba(217, 158, 130, 0.16);
   --active: rgba(217, 158, 130, 0.3);
@@ -173,6 +174,14 @@ select {
   background: #f8f1e7;
   font-family: var(--mono);
   font-size: 0.86em;
+  padding-left: 12px !important;
+}
+/* Display equations: TeX on a tinted band, like code but sage. The math spans
+   inside are 0.92em of this. */
+.cm-editor .pw-math-line {
+  background: #f1f4ea;
+  font-family: var(--mono);
+  font-size: 0.94em;
   padding-left: 12px !important;
 }
 .cm-editor .pw-table-line {

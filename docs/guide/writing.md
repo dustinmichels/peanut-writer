@@ -10,7 +10,7 @@ Everything you can do is a button on the ribbon across the top:
 | -------------- | -------------------------------------------------------------------------------------- |
 | **File**       | New, open, save, recent documents, export, settings                                    |
 | **Home**       | Bold, italic, strikethrough, code, headings, lists, quotes                             |
-| **Insert**     | Picture, picture grid, table, link, footnote, code, divider, page break                |
+| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break      |
 | **References** | Cross-reference, footnote, table of contents                                           |
 | **Design**     | Templates, Customize, Manage Templates, document properties, settings                  |
 | **View**       | Markdown view, outline                                                                 |
@@ -21,6 +21,9 @@ Everything you can do is a button on the ribbon across the top:
 Press **⇧⌘P** (View → Command Palette…) to search every command by name. Each word you type matches the start of a
 word, so "ex wo" finds _Export as Word_. Use ↑ and ↓ to choose, Return to run it and Esc to close. There's one command
 per template too, so "acad" switches to _Academic_. Commands that wouldn't do anything right now are dimmed.
+
+_Lorem Ipsum_ (palette only) inserts sample headings, text, figures and tables at the cursor, handy for seeing how a
+template looks. Its pictures are saved in the document's `images/` folder.
 
 ## Text that looks like itself
 
@@ -56,4 +59,5 @@ you're working on.
 ## Peanut
 
 A little 3D Peanut keeps you company at the top right, by the Export button. He breathes, blinks, sits down and stands
-up, cheers every few minutes while you're writing and at every 250 words, and says something nice when you click him.
+up, now and then puts on a cowboy hat or a party hat, cheers every few minutes while you're writing and at every 250
+words, and says something nice when you click him. His words fade away soon after he says them.

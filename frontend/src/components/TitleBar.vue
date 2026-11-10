@@ -60,7 +60,7 @@ function pick(f: () => unknown) {
         class="btn"
         :title="
           canSync
-            ? 'Save, then write PDF and Word copies into the out folder (⇧⌘Y)'
+            ? 'Save, then write PDF and Word copies beside the document (⇧⌘Y)'
             : 'The PDF and Word copies are up to date'
         "
         :disabled="!canSync"

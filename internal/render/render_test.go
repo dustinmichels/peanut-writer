@@ -26,7 +26,15 @@ abstract: Short.
 
 Text with **bold**, *emph*, ~~strike~~, ` + "`code`" + `, a [link](https://example.com),
 a hard  
-break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b and @fig:nope.
+break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b, @eq:e and @fig:nope.
+
+Math: $\frac{a}{b}$, $$\sum_{i=1}^n i$$ in a line, and $x}$ that can't be read.
+
+$$ E = mc^2 $$ {#eq:e}
+
+$$
+\begin{aligned} a &= b \\ c &= d \end{aligned}
+$$
 
 ![Caption *here*](images/p.svg){#fig:a width=30% align=right}
 
@@ -104,6 +112,32 @@ func TestEveryTemplateRendersEverything(t *testing.T) {
 	}
 	if !bytes.HasPrefix(png, []byte("\x89PNG")) {
 		t.Error("PNG: not a PNG")
+	}
+	for _, display := range []bool{false, true} {
+		png, err := ty.Equation(ctx, `\frac{a}{b}`, display, 11)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.HasPrefix(png, []byte("\x89PNG")) {
+			t.Error("Equation: not a PNG")
+		}
+	}
+}
+
+// Math mitex can't read shows as LaTeX, with a warning, rather than
+// stopping the preview.
+func TestUnreadableMathFallsBack(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := doc.Parse("See @eq:a.\n\n$$ \\text{a $ b} $$ {#eq:a}\n", "")
+	pages, warnings, err := ty.Preview(context.Background(), d, templates.List()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) == 0 || len(warnings) == 0 || !strings.Contains(warnings[len(warnings)-1], "math can't be read") {
+		t.Errorf("%d pages, warnings %q", len(pages), warnings)
 	}
 }
 

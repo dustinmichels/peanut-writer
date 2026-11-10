@@ -2,7 +2,7 @@
 // Markdown is shown, its marks are out of sight: headings, emphasis, links,
 // quotes and bullets read as formatted text, figures and tables as pictures
 // and grids, cross-references as "Figure 2", and the front matter as a
-// document properties card.
+// document properties card. Math stays as its TeX, set apart.
 
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import {
@@ -52,6 +52,7 @@ import {
   figureSpec,
   type FigureSpec,
   type Item,
+  kindName,
   parseTable,
   plain,
   type Position,
@@ -59,6 +60,7 @@ import {
   scan,
   type Table,
 } from "./markdown";
+import { math, mathTag } from "./math";
 
 export interface Handlers {
   editFigure(item: Item): void;
@@ -667,7 +669,7 @@ class PropertiesCard extends WidgetType {
   }
 }
 
-const refRe = /(^|[^\w])@((?:fig|tbl):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
+const refRe = /(^|[^\w])@((?:fig|tbl|eq):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
 const footRe = /\[\^[^\]\s]+\](?!:)/g;
 
 // Whether the editor shows the document's Markdown, or hides its marks and
@@ -739,9 +741,10 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   }
 
   // Figures and tables replace their Markdown unless it's shown; nothing
-  // else is decorated inside them then.
+  // else is decorated inside them then. Equations stay as their TeX.
   const hidden: Item[] = [];
   for (const it of items) {
+    if (it.kind === "equation") continue;
     if (it.kind === "figure") {
       const widget = new FigureWidget(it, handlers);
       if (!show) {
@@ -809,12 +812,12 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     }
   }
 
-  // Cross-references and footnote markers, outside code.
+  // Cross-references and footnote markers, outside code and math.
   const text = doc.toString();
   const tree = syntaxTree(state);
   const inCode = (pos: number) => {
     for (let n: SyntaxNode | null = tree.resolve(pos, 1); n; n = n.parent) {
-      if (n.name === "InlineCode" || n.name === "FencedCode" || n.name === "CodeBlock") return true;
+      if (/^(InlineCode|FencedCode|CodeBlock|InlineMath|BlockMath)$/.test(n.name)) return true;
     }
     return false;
   };
@@ -826,9 +829,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       if (from < fm.to || inCode(from) || hidden.some((h) => from >= h.from && from <= h.to))
         continue;
       const target = labels.get(m[2]);
-      const label = target
-        ? `${target.kind === "figure" ? "Figure" : "Table"} ${target.number}`
-        : `?? ${m[2]}`;
+      const label = target ? `${kindName[target.kind]} ${target.number}` : `?? ${m[2]}`;
       ranges.push({
         from,
         to,
@@ -876,7 +877,12 @@ function decorations(handlers: Handlers): Extension {
   return field;
 }
 
-// Block-level line styling from the syntax tree: headings, quotes, code.
+// Block-level line styling from the syntax tree: headings, quotes, code, math.
+const blockLineClass: Partial<Record<string, string>> = {
+  Blockquote: "pw-quote-line",
+  FencedCode: "pw-code-line",
+  BlockMath: "pw-math-line",
+};
 const lineStyles = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
@@ -902,12 +908,12 @@ const lineStyles = ViewPlugin.fromClass(
           to,
           enter: (n) => {
             const h = /^ATXHeading(\d)$/.exec(n.name);
+            const cls = blockLineClass[n.name];
             if (h) add(n.from, `pw-h pw-h${h[1]}`);
-            else if (n.name === "Blockquote" || n.name === "FencedCode") {
+            else if (cls) {
               for (let p = n.from; p <= n.to;) {
                 const line = view.state.doc.lineAt(p);
-                if (line.from >= from && line.from <= to)
-                  add(line.from, n.name === "Blockquote" ? "pw-quote-line" : "pw-code-line");
+                if (line.from >= from && line.from <= to) add(line.from, cls);
                 p = line.to + 1;
               }
               return false;
@@ -1024,7 +1030,7 @@ function deadLine(state: EditorState, line: Line): "hr" | "fence" | null {
 function covered(state: EditorState, pos: number): boolean {
   return (
     pos < state.field(frontMatterEnd) ||
-    state.field(itemsField).some((x) => pos >= x.from && pos <= x.to)
+    state.field(itemsField).some((x) => x.kind !== "equation" && pos >= x.from && pos <= x.to)
   );
 }
 
@@ -1357,6 +1363,12 @@ const highlight = HighlightStyle.define([
     fontSize: "0.92em",
     color: "var(--roast)",
   },
+  {
+    tag: mathTag,
+    fontFamily: "var(--mono)",
+    fontSize: "0.92em",
+    color: "var(--math)",
+  },
   { tag: [t.processingInstruction, t.meta], color: "var(--marks)" },
   { tag: t.contentSeparator, color: "var(--marks)" },
   { tag: t.quote, color: "var(--quote)" },
@@ -1667,7 +1679,39 @@ export function insertFootnote(view: EditorView) {
   view.focus();
 }
 
+// insertEquation wraps text selected within a line as inline math ($…$), or
+// else puts a display equation on lines of its own, the cursor between its
+// `$$` lines (and the selected lines there, if any).
+export function insertEquation(view: EditorView) {
+  const { from, to } = view.state.selection.main;
+  const doc = view.state.doc;
+  const text = doc.sliceString(from, to);
+  const tex = text.trim();
+  if (tex && doc.lineAt(from).number === doc.lineAt(to).number) {
+    // Math can't start or end with a space: keep any outside the dollars.
+    const lead = text.indexOf(tex);
+    const start = from + lead + 1;
+    view.dispatch({
+      changes: { from: from + lead, to: from + lead + tex.length, insert: `$${tex}$` },
+      selection: { anchor: start, head: start + tex.length },
+      userEvent: "input",
+    });
+    view.focus();
+    return;
+  }
+  insertBlock(view, `$$\n${tex}\n$$`, {
+    replace: tex ? { from, to } : undefined,
+    cursorOffset: 3 + tex.length,
+  });
+}
+
 // --- Cross-reference completion -----------------------------------------
+
+const completionType: Record<Item["kind"], string> = {
+  figure: "variable",
+  table: "class",
+  equation: "constant",
+};
 
 function refCompletions(ctx: CompletionContext) {
   const word = ctx.matchBefore(/@[\w:-]*/);
@@ -1678,9 +1722,9 @@ function refCompletions(ctx: CompletionContext) {
     .filter((x) => x.label)
     .map((x) => ({
       label: "@" + x.label,
-      detail: `${x.kind === "figure" ? "Figure" : "Table"} ${x.number}`,
+      detail: `${kindName[x.kind]} ${x.number}`,
       info: plain(x.caption),
-      type: x.kind === "figure" ? "variable" : "class",
+      type: completionType[x.kind],
     }));
   return options.length ? { from: word.from, options, validFor: /^@[\w:-]*$/ } : null;
 }
@@ -1717,7 +1761,7 @@ export function createEditor(
     EditorView.lineWrapping,
     EditorState.allowMultipleSelections.of(false),
     bodyHint,
-    markdown({ base: markdownLanguage, addKeymap: false }),
+    markdown({ base: markdownLanguage, addKeymap: false, extensions: [math] }),
     syntaxHighlighting(highlight),
     theme,
     hiddenKeymap,

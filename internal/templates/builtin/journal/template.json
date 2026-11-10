@@ -1,0 +1,31 @@
+{
+  "name": "Journal",
+  "description": "A two-column paper: STIX Two at 10 pt, justified columns, numbered sections, title and abstract across the top.",
+  "docx": {
+    "paper": "letter",
+    "margin": 0.75,
+    "columns": 2,
+    "bodyFont": "STIX Two Text",
+    "headingFont": "STIX Two Text",
+    "monoFont": "Menlo",
+    "fontSize": 10,
+    "lineSpacing": 1,
+    "spaceAfter": 0,
+    "firstLineIndent": 0.14,
+    "justify": true,
+    "textColor": "000000",
+    "headingColor": "000000",
+    "headingSizes": [10, 10, 10],
+    "headingBold": true,
+    "numberedHeadings": true,
+    "titleSize": 22,
+    "titleColor": "000000",
+    "titleAlign": "center",
+    "captionSize": 8,
+    "captionColor": "000000",
+    "captionItalic": false,
+    "accentColor": "000000",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

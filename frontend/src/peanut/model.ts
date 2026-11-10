@@ -1,7 +1,7 @@
 // Peanut, the plush character from github.com/dustinmichels/peanut, trimmed
-// to what the writing buddy needs: body, face, legs, perching on a ledge,
-// walking, bouncing and blinking. Accessories, material modes and jumps are
-// left behind.
+// to what the writing buddy needs: body, face, legs, hats, perching on a
+// ledge, walking, bouncing and blinking. Boots, the mustache, material modes
+// and jumps are left behind.
 
 import * as THREE from "three";
 import { fbm3D } from "./noise";
@@ -11,6 +11,7 @@ import {
   createContactShadowTexture,
   type CorduroyTextureBundle,
 } from "./textureGenerator";
+import { createBirthdayHat, createCowboyHat, type HatKind } from "./hats";
 
 export interface PeanutModelHandle {
   group: THREE.Group;
@@ -30,6 +31,8 @@ export interface PeanutModelHandle {
   // Walk in place facing screen-left (-1) or screen-right (1); 0 stops and
   // turns back to the camera. Moving him across the screen is the caller's job.
   walk: (direction: -1 | 0 | 1) => void;
+  // Pop a hat on (swapping out any other) or, with null, take it off.
+  setHat: (kind: HatKind | null) => void;
   dispose: () => void;
 }
 
@@ -570,6 +573,9 @@ export function createPeanutModel(): PeanutModelHandle {
   mouth.position.set(0, 2.28, 0.835);
   bodyContainer.add(mouth);
 
+  const hats = { cowboy: createCowboyHat(), birthday: createBirthdayHat() };
+  bodyContainer.add(hats.cowboy.group, hats.birthday.group);
+
   // 4. Corduroy Legs & Booties
   const { legGroup: leftLeg, footGroup: leftFoot } = createCorduroyLeg(false, corduroyTextures);
   const { legGroup: rightLeg, footGroup: rightFoot } = createCorduroyLeg(true, corduroyTextures);
@@ -604,6 +610,11 @@ export function createPeanutModel(): PeanutModelHandle {
     walkDir = direction;
   }
 
+  function setHat(kind: HatKind | null) {
+    hats.cowboy.setVisible(kind === "cowboy");
+    hats.birthday.setVisible(kind === "birthday");
+  }
+
   function animate(
     time: number,
     bounceProgress: number,
@@ -630,6 +641,8 @@ export function createPeanutModel(): PeanutModelHandle {
     const eyeScaleY = 1.0 - 0.9 * Math.sin(blinkProgress * Math.PI);
     leftEye.scale.y = eyeScaleY;
     rightEye.scale.y = eyeScaleY;
+    hats.cowboy.update(deltaSeconds);
+    hats.birthday.update(deltaSeconds);
 
     const s = sitProgress * sitProgress * (3 - 2 * sitProgress); // smoothstep
 
@@ -734,7 +747,10 @@ export function createPeanutModel(): PeanutModelHandle {
     ]) {
       t.dispose();
     }
+    // For the birthday hat's textures; their meshes went with the rest above.
+    hats.cowboy.dispose();
+    hats.birthday.dispose();
   }
 
-  return { group: rootGroup, mouth, animate, setSitting, walk, dispose };
+  return { group: rootGroup, mouth, animate, setSitting, walk, setHat, dispose };
 }

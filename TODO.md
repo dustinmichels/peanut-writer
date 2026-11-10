@@ -11,6 +11,10 @@ Things the app doesn't do yet, or does differently in different places. Each ent
 - **Front matter is flat `key: value`**: no multi-line values (`|`, `>`), no `''` escapes in single quotes; unknown
   keys are dropped silently.
 - **HTML**: HTML blocks are dropped; inline HTML other than `<br>` is dropped.
+- **Math is checked only for a stray `}`**: other LaTeX that mitex rejects (e.g. `$` inside `\text{…}` in an equation)
+  is found only when Typst runs, and then the preview shows _all_ math as source, and PDF export fails.
+- **Equation labels must start `eq:`**; `{#name}` after `$$` is ignored. Attribute blocks after `$$…$$` in text are
+  plain text.
 - **Online images** (`https://…`) aren't fetched; they show as missing with a note.
 
 ## Editor (`frontend/src`)
@@ -40,6 +44,11 @@ Other gaps:
 - `FigureDialog.vue` reference count counts `@fig:a` inside `@fig:ab` (only used in a hint).
 - `applyTable` always writes a `Table:` caption line with a generated label, even with an empty caption.
 
+## Formatting (`internal/mdfmt`)
+
+- Equation attribute blocks are taken off before oxfmt runs (its math ends only at a bare `$$`) and put back after;
+  an equation inside a code fence that's itself in a list or quote is mistaken for one, which can misplace labels.
+
 ## Word export (`internal/docx`)
 
 - Lists inside quotes or footnotes use List Paragraph, losing the quote look / footnote size; a quote inside a footnote
@@ -53,6 +62,9 @@ Other gaps:
 - WebP figures and size-less SVGs without `width=` are drawn full width; PNG/JPEG natural size assumes 96 dpi; JPEG
   EXIF rotation is ignored (rotated photos may be stretched).
 - Without Typst, SVG and WebP images become an `[image: name]` placeholder.
+- Math is a picture, not a Word equation (not editable in Word's equation editor), drawn in Typst's default math font
+  at the body size (also in footnotes); without Typst it's the LaTeX source in code style. Each formula is a separate
+  Typst run, so math-heavy documents export slowly. Numbered equations in lists or quotes aren't indented with them.
 
 ## App and templates (`service.go`, `internal/templates`, `internal/render`)
 

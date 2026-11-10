@@ -32,10 +32,32 @@ import (
 	"peanut-writer/internal/mdfmt"
 	"peanut-writer/internal/render"
 	"peanut-writer/internal/templates"
+	"peanut-writer/internal/versions"
 )
 
 //go:embed starter
 var starter embed.FS
+
+// Sample documents the template gallery shows each template with, one per
+// built-in template, named by its ID.
+//
+//go:embed samples
+var samples embed.FS
+
+// sampleFor is the sample document tpl's preview shows: its own, else its
+// base template's, else Classic's.
+func sampleFor(tpl templates.Template) (name, content string, err error) {
+	for _, id := range []string{tpl.ID, tpl.Base} {
+		if id == "" {
+			continue
+		}
+		if b, err := samples.ReadFile("samples/" + id + ".md"); err == nil {
+			return id, string(b), nil
+		}
+	}
+	b, err := samples.ReadFile("samples/" + templates.Default + ".md")
+	return templates.Default, string(b), err
+}
 
 // DocService is the editor's link to the file system and to Typst: it holds
 // the open document's location and renders, saves and exports it.
@@ -58,6 +80,8 @@ type DocService struct {
 	untitled  Settings          // the open document's settings while it has no file
 	untitledT *templates.Custom // ...and its own template
 	scratches []string          // scratch folders, removed on quit
+	started   bool              // the editor has called Startup
+	pending   string            // a document Finder asked to open before then
 
 	backupMu   sync.Mutex // one backup at a time
 	backupOnce sync.Once  // starts the periodic backups
@@ -137,8 +161,9 @@ func newDocService() *DocService {
 
 // --- Documents ---------------------------------------------------------------
 
-// Startup opens the welcome guide on the first run, and a blank document
-// (offering the recent ones) after that.
+// Startup opens the document Finder launched the app with, if any; else the
+// welcome guide on the first run, and a blank document (offering the recent
+// ones) after that.
 func (s *DocService) Startup() (StartupInfo, error) {
 	s.backupOnce.Do(func() { go s.backupPeriodically() })
 	info := StartupInfo{Templates: templates.List(), Version: appVersion}
@@ -146,8 +171,18 @@ func (s *DocService) Startup() (StartupInfo, error) {
 		info.TypstError = s.typstErr.Error()
 	}
 	s.mu.Lock()
-	welcomed := s.state.Welcomed
+	welcomed, pending := s.state.Welcomed, s.pending
+	s.started, s.pending = true, ""
 	s.mu.Unlock()
+	if pending != "" {
+		opened, err := s.OpenPath(pending)
+		if err == nil {
+			info.Document = opened
+			return info, nil
+		}
+		s.app.Dialog.Error().SetTitle("Couldn't open " + filepath.Base(pending)).
+			SetMessage(err.Error()).AttachToWindow(s.window).Show()
+	}
 	var err error
 	if !welcomed {
 		if info.Document, err = s.OpenWelcome(); err == nil {
@@ -173,11 +208,11 @@ func (s *DocService) newUntitled() (DocInfo, error) {
 	return DocInfo{Name: "Untitled"}, nil
 }
 
-// NewDocument asks for a name and a place, and starts a document in a folder
+// NewDocument asks for a name and a place, and starts a document in a package
 // of that name there, its properties titled with the name (in title case),
 // authored by the default author, dated today and marked with the app's version.
 func (s *DocService) NewDocument() (DocInfo, error) {
-	p, err := s.chooseDocFolder("Untitled", "")
+	p, err := s.choosePackage("Untitled", "")
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
@@ -209,13 +244,44 @@ func frontMatterValue(v string) string {
 
 var frontMatterQuote = regexp.MustCompile("^[\\s\"'\\[{>|*&!%@`#-]|:\\s|\\s$|#")
 
-// chooseDocFolder asks for a document's name and where to put it, makes a
-// folder of that name there (it holds the document, its images and its
-// backups) and returns the path of the document's file inside it. "" means
-// the user canceled, or chose not to replace an existing document.
-func (s *DocService) chooseDocFolder(name, dir string) (string, error) {
+// packageExt is the extension of a document's package: a folder, shown by
+// Finder as one file (build/darwin/Info.plist declares the type), holding
+// Name.md, its settings, template, images and backups.
+const packageExt = ".peanut"
+
+// shownPath is the document whose file is p as Finder shows it: its package,
+// or p itself if it isn't in one.
+func shownPath(p string) string {
+	if dir := filepath.Dir(p); strings.EqualFold(filepath.Ext(dir), packageExt) {
+		return dir
+	}
+	return p
+}
+
+// docFile is the Markdown file of the document at p: p itself, or for a
+// package, the Markdown file inside it (Name.md, or its only one if the
+// package was renamed).
+func docFile(p string) (string, error) {
+	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
+		return p, err
+	}
+	md := filepath.Join(p, docName(p)+".md")
+	if _, err := os.Stat(md); err == nil {
+		return md, nil
+	}
+	if found, _ := filepath.Glob(filepath.Join(p, "*.md")); len(found) == 1 {
+		return found[0], nil
+	}
+	return "", fmt.Errorf("%s holds no document", filepath.Base(p))
+}
+
+// choosePackage asks for a document's name and where to put it, makes a
+// package of that name there (Name.peanut: it holds the document, its images
+// and its backups) and returns the path of the document's file inside it. ""
+// means the user canceled, or chose not to replace an existing document.
+func (s *DocService) choosePackage(name, dir string) (string, error) {
 	d := s.app.Dialog.SaveFile().
-		SetMessage("The document gets a folder of this name, for it, its pictures and its backups.").
+		SetMessage("The document is saved as a " + packageExt + " package holding it, its pictures and its backups.").
 		SetFilename(name).
 		CanCreateDirectories(true).
 		AttachToWindow(s.window)
@@ -227,15 +293,16 @@ func (s *DocService) chooseDocFolder(name, dir string) (string, error) {
 		return "", err
 	}
 	base := filepath.Base(p)
-	if ext := strings.ToLower(filepath.Ext(base)); ext == ".md" || ext == ".markdown" {
+	switch strings.ToLower(filepath.Ext(base)) {
+	case ".md", ".markdown", packageExt:
 		base = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	name = safeFileName(base)
-	folder := filepath.Join(filepath.Dir(p), name)
-	if err := os.MkdirAll(folder, 0o755); err != nil {
+	pkg := filepath.Join(filepath.Dir(p), name+packageExt)
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
 		return "", err
 	}
-	p = filepath.Join(folder, name+".md")
+	p = filepath.Join(pkg, name+".md")
 	s.mu.Lock()
 	cur := s.path
 	s.mu.Unlock()
@@ -250,7 +317,7 @@ func (s *DocService) confirmReplace(name string) bool {
 	choice := make(chan bool, 1)
 	d := s.app.Dialog.Question().
 		SetTitle(fmt.Sprintf("“%s” already exists. Do you want to replace it?", name)).
-		SetMessage("Its folder already holds a document of that name; replacing it overwrites that document.")
+		SetMessage("Its package already holds a document of that name; replacing it overwrites that document.")
 	d.AddButton("Replace").OnClick(func() { choice <- true })
 	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
 	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
@@ -285,11 +352,12 @@ func copyStarter(dir string) (string, error) {
 	return string(b), err
 }
 
-// OpenDocument asks for a Markdown file and opens it.
+// OpenDocument asks for a document (a package, or a Markdown file) and opens
+// it.
 func (s *DocService) OpenDocument() (DocInfo, error) {
 	p, err := s.app.Dialog.OpenFile().
 		SetTitle("Open").
-		AddFilter("Markdown", "*.md;*.markdown;*.txt").
+		AddFilter("Documents", "*"+packageExt+";*.md;*.markdown;*.txt").
 		CanChooseFiles(true).
 		AttachToWindow(s.window).
 		PromptForSingleSelection()
@@ -299,10 +367,14 @@ func (s *DocService) OpenDocument() (DocInfo, error) {
 	return s.OpenPath(p)
 }
 
-// OpenPath opens the Markdown file at p. A file that's gone is dropped from
-// the recent list.
+// OpenPath opens the document at p: a package, or a Markdown file. A file
+// that's gone is dropped from the recent list.
 func (s *DocService) OpenPath(p string) (DocInfo, error) {
-	b, err := os.ReadFile(p)
+	md, err := docFile(p)
+	var b []byte
+	if err == nil {
+		b, err = os.ReadFile(md)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		s.ForgetRecent(p)
 		return DocInfo{}, fmt.Errorf("%s isn't there anymore", filepath.Base(p))
@@ -310,10 +382,25 @@ func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	if err != nil {
 		return DocInfo{}, err
 	}
-	s.setOpen(p, filepath.Dir(p))
-	s.remember(p)
-	go s.backup(p)
-	return DocInfo{Path: p, Name: docName(p), Content: string(b)}, nil
+	s.setOpen(md, filepath.Dir(md))
+	s.remember(md)
+	go s.backup(md)
+	return DocInfo{Path: md, Name: docName(md), Content: string(b)}, nil
+}
+
+// openedWithFile opens the document at p, which Finder asked the app to open:
+// through the editor once it has started (so it deals with unsaved changes
+// first), else as the document it starts with.
+func (s *DocService) openedWithFile(p string) {
+	s.mu.Lock()
+	started := s.started
+	if !started {
+		s.pending = p
+	}
+	s.mu.Unlock()
+	if started {
+		s.app.Event.Emit("openRecent", p)
+	}
 }
 
 // Save writes the document to its file, asking where first if it has none.
@@ -331,7 +418,7 @@ func (s *DocService) Save(content string) (DocInfo, error) {
 	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
 }
 
-// SaveAs asks for a name and a place and saves the document in a folder of
+// SaveAs asks for a name and a place and saves the document in a package of
 // that name there, bringing its images along.
 func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	s.mu.Lock()
@@ -339,15 +426,15 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	s.mu.Unlock()
 	name, dir := "Untitled", ""
 	if oldPath != "" {
-		// Start beside the document's own folder, not inside it.
-		name, dir = docName(oldPath), filepath.Dir(oldPath)
+		// Start beside the document's package (or older folder), not inside it.
+		name, dir = docName(oldPath), filepath.Dir(shownPath(oldPath))
 		if filepath.Base(dir) == name {
 			dir = filepath.Dir(dir)
 		}
 	} else if t := doc.Parse(content, "").Meta.Title; t != "" {
 		name = safeFileName(t)
 	}
-	p, err := s.chooseDocFolder(name, dir)
+	p, err := s.choosePackage(name, dir)
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
@@ -774,9 +861,9 @@ func (s *DocService) ExportDOCX(content string) (string, error) {
 	return p, os.WriteFile(p, b, 0o644)
 }
 
-// SyncFiles writes a PDF and a Word copy of the saved document into the
-// "out" folder beside its file, under the same name, replacing earlier
-// copies; returns their paths. Neither is written unless both render.
+// SyncFiles writes a PDF and a Word copy of the saved document beside it (its
+// package, if it's in one), under the same name, replacing earlier copies;
+// returns their paths. Neither is written unless both render.
 func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if s.typstErr != nil {
 		return nil, s.typstErr
@@ -800,11 +887,7 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Word: %w", err)
 	}
-	out := filepath.Join(filepath.Dir(cur), "out")
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return nil, err
-	}
-	base := filepath.Join(out, strings.TrimSuffix(filepath.Base(cur), filepath.Ext(cur)))
+	base := filepath.Join(filepath.Dir(shownPath(cur)), docName(cur))
 	paths := []string{base + ".pdf", base + ".docx"}
 	for i, b := range [][]byte{pdf, word} {
 		if err := os.WriteFile(paths[i], b, 0o644); err != nil {
@@ -819,6 +902,9 @@ func (s *DocService) docxBytes(d *doc.Document, tpl templates.Template) ([]byte,
 	if s.typst != nil {
 		opt.Rasterize = func(path string, widthPt float64) ([]byte, error) {
 			return s.typst.PNG(context.Background(), path, widthPt)
+		}
+		opt.Equation = func(tex string, display bool, sizePt float64) ([]byte, error) {
+			return s.typst.Equation(context.Background(), tex, display, sizePt)
 		}
 	}
 	return docx.Write(d, tpl.Docx, opt)
@@ -845,7 +931,7 @@ func (s *DocService) exportTarget(content, ext, kind, pattern string) (*doc.Docu
 		CanCreateDirectories(true).
 		AttachToWindow(s.window)
 	if cur != "" {
-		dlg.SetDirectory(filepath.Dir(cur))
+		dlg.SetDirectory(filepath.Dir(shownPath(cur)))
 	}
 	p, err := dlg.PromptForSingleSelection()
 	if err != nil || p == "" {
@@ -873,6 +959,84 @@ func (s *DocService) Reveal(p string) error {
 	}
 	go cmd.Wait()
 	return nil
+}
+
+// --- Versions ----------------------------------------------------------------
+
+// docSidecars are the files beside the document at p that belong to it: its
+// own template and its settings.
+func docSidecars(p string) []string {
+	return []string{customTemplatePath(p), documentSettingsPath(p)}
+}
+
+// SaveVersion keeps the saved document, with its own template and settings,
+// as a version named name in its versions folder, with Word and PDF copies.
+// Nothing is kept unless both render.
+func (s *DocService) SaveVersion(name string) (versions.Version, error) {
+	if s.typstErr != nil {
+		return versions.Version{}, s.typstErr
+	}
+	p := s.openPath()
+	if p == "" {
+		return versions.Version{}, errors.New("save the document first")
+	}
+	if strings.TrimSpace(name) == "" {
+		return versions.Version{}, errors.New("a version needs a name")
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return versions.Version{}, err
+	}
+	d := doc.Parse(string(b), filepath.Dir(p))
+	tpl, err := s.templateFor(p, d.Meta.Template)
+	if err != nil {
+		return versions.Version{}, err
+	}
+	pdf, err := s.typst.PDF(context.Background(), d, tpl)
+	if err != nil {
+		return versions.Version{}, fmt.Errorf("PDF: %w", err)
+	}
+	word, err := s.docxBytes(d, tpl)
+	if err != nil {
+		return versions.Version{}, fmt.Errorf("Word: %w", err)
+	}
+	return versions.Save(p, safeFileName(name), docSidecars(p), word, pdf)
+}
+
+// Versions lists the open document's versions, newest first; none while
+// it's untitled.
+func (s *DocService) Versions() ([]versions.Version, error) {
+	p := s.openPath()
+	if p == "" {
+		return nil, nil
+	}
+	return versions.List(p)
+}
+
+// LoadVersion asks, then replaces the saved document, its own template and
+// its settings with the version named name, after backing the document up.
+func (s *DocService) LoadVersion(name string) (DocInfo, error) {
+	p := s.openPath()
+	if p == "" {
+		return DocInfo{}, errors.New("save the document first")
+	}
+	choice := make(chan bool, 1)
+	d := s.app.Dialog.Question().
+		SetTitle(fmt.Sprintf("Load the version “%s”?", name)).
+		SetMessage("It replaces the document's text, template and settings. The current text is kept in backups.")
+	d.AddButton("Load").OnClick(func() { choice <- true })
+	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
+	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
+	if !<-choice {
+		return DocInfo{Canceled: true}, nil
+	}
+	s.backup(p)
+	content, err := versions.Restore(p, name, docSidecars(p))
+	if err != nil {
+		return DocInfo{}, err
+	}
+	s.SetDirty(false)
+	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
 }
 
 // --- Formatting --------------------------------------------------------------
@@ -909,8 +1073,8 @@ func (s *DocService) Format(content string, titleCase bool) (string, error) {
 // Templates lists the output templates.
 func (s *DocService) Templates() []templates.Template { return templates.List() }
 
-// TemplatePreview is the welcome guide's first page in a template (the open
-// document's own for templates.CustomID), as SVG.
+// TemplatePreview is the first page of a sample document (see sampleFor) in a
+// template (the open document's own for templates.CustomID), as SVG.
 func (s *DocService) TemplatePreview(id string) (string, error) {
 	if s.typstErr != nil {
 		return "", s.typstErr
@@ -926,28 +1090,24 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	style, err := json.Marshal(tpl.Style)
+	style, err := json.Marshal(tpl.TypstStyle())
+	if err != nil {
+		return "", err
+	}
+	name, content, err := sampleFor(tpl)
 	if err != nil {
 		return "", err
 	}
 	sum := sha256.Sum256(append(src, style...))
-	key := tpl.ID + ":" + hex.EncodeToString(sum[:8])
+	key := tpl.ID + ":" + name + ":" + hex.EncodeToString(sum[:8])
 	s.mu.Lock()
 	cached, ok := s.previews[key]
 	s.mu.Unlock()
 	if ok {
 		return cached, nil
 	}
-	dir, err := os.MkdirTemp("", "peanut-preview-*")
-	if err != nil {
-		return "", err
-	}
-	defer os.RemoveAll(dir)
-	content, err := copyStarter(dir)
-	if err != nil {
-		return "", err
-	}
-	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(content, dir), tpl)
+	// The samples have no pictures, so they need no folder.
+	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(content, ""), tpl)
 	if err != nil {
 		return "", err
 	}
@@ -1078,6 +1238,38 @@ func (s *DocService) SetTemplateStyle(style templates.Style) (templates.Template
 		return templates.Template{}, err
 	}
 	return c.Template(), nil
+}
+
+// SetTemplateBase bases the open document's own template on the template
+// base, keeping its changes, and returns it.
+func (s *DocService) SetTemplateBase(base string) (templates.Template, error) {
+	p := s.openPath()
+	c, err := s.readCustom(p)
+	if err != nil {
+		return templates.Template{}, err
+	}
+	if c == nil {
+		return templates.Template{}, errors.New("this document has no template of its own: use Customize first")
+	}
+	c.Base = templates.Get(base).ID
+	if err := s.writeCustom(p, c); err != nil {
+		return templates.Template{}, err
+	}
+	return c.Template(), nil
+}
+
+// SaveCustomTemplate adds the open document's own template to the user's
+// templates as a new one named name, for any document to use, and returns
+// its id.
+func (s *DocService) SaveCustomTemplate(name, description string) (string, error) {
+	c, err := s.readCustom(s.openPath())
+	if err != nil {
+		return "", err
+	}
+	if c == nil {
+		return "", errors.New("this document has no template of its own: use Customize first")
+	}
+	return templates.Save(*c, name, description)
 }
 
 // RemoveCustomTemplate deletes the open document's own template and returns
@@ -1231,7 +1423,7 @@ func (s *DocService) RecentFiles() []RecentFile {
 		if _, err := os.Stat(p); err != nil {
 			continue // moved, deleted, or on a drive that isn't mounted
 		}
-		folder := filepath.Dir(p)
+		folder := filepath.Dir(shownPath(p))
 		if home != "" && (folder == home || strings.HasPrefix(folder, home+string(filepath.Separator))) {
 			folder = "~" + folder[len(home):]
 		}

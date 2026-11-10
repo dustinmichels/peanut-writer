@@ -31,11 +31,22 @@ function blank() {
   emit("close");
   newDoc();
 }
+
+// move focuses the next or previous document with ↓ / ↑, wrapping around.
+function move(e: KeyboardEvent) {
+  const by = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+  if (!by || !list.value) return;
+  e.preventDefault();
+  const items = [...list.value.querySelectorAll<HTMLButtonElement>(".open")];
+  const at = items.findIndex((b) => b.parentElement?.contains(document.activeElement));
+  const next = at < 0 ? (by > 0 ? 0 : items.length - 1) : (at + by + items.length) % items.length;
+  items[next]?.focus();
+}
 </script>
 
 <template>
   <Modal title="Open Recent" @close="emit('close')" @submit="blank">
-    <ul v-if="files.length" ref="list">
+    <ul v-if="files.length" ref="list" @keydown="move">
       <li v-for="f in files" :key="f.path">
         <button type="button" class="open" :title="f.path" @click="open(f.path)">
           <FileText :size="18" />

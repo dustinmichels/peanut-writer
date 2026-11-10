@@ -60,12 +60,35 @@ Table: Snacks, ranked very scientifically {#tbl:snacks}
 
 ## Cross-references
 
-`@fig:name` and `@tbl:name` become "Figure 1" and "Table 1". One with no matching name shows as **??** and is listed in
-the status bar's notes.
+`@fig:name`, `@tbl:name` and `@eq:name` become "Figure 1", "Table 1" and "Equation 1". One with no matching name shows
+as **??** and is listed in the status bar's notes.
 
 ```markdown
 As @fig:chart shows, sales went up (@tbl:sales).
 ```
+
+## Math
+
+Math is written in [LaTeX](https://en.wikibooks.org/wiki/LaTeX/Mathematics) between dollar signs. `$…$` puts it in a
+sentence; an equation goes on lines of its own between `$$` lines, and a name in braces after the closing `$$` numbers
+it, "(1)", so you can refer to it:
+
+```markdown
+The area of a circle is $\pi r^2$, and Euler's identity is @eq:euler:
+
+$$
+e^{i\pi} + 1 = 0
+$$ {#eq:euler}
+```
+
+- Only named equations are numbered. A name must start `eq:`.
+- A short equation can be one line: `$$ E = mc^2 $$`.
+- Dollar signs in ordinary text stay as they are: math must start right after its `$` (no space) and end right before
+  a `$` that isn't followed by a digit, with no other `$` in between. So "$5 or $10" and "from $5–$10" are text. To be
+  sure, write `\$`.
+- Math that can't be read shows as its LaTeX, in red, with a note in the status bar.
+- In the Word file each piece of math is a picture of the typeset formula, so it looks right but can't be edited in
+  Word's equation editor.
 
 ## Properties
 
@@ -82,7 +105,8 @@ template: report
 ---
 ```
 
-`template` is one of `classic` (the default), `academic`, `report`, `minimal`, `manuscript`, `elegant`, `peanut`,
+`template` is one of `classic` (the default), `academic`, `report`, `minimal`, `manuscript`, `elegant`, `editorial`,
+`journal`, `peanut`,
 `custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
 [your own templates](./custom-templates).
 

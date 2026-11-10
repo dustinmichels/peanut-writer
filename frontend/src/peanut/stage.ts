@@ -2,6 +2,7 @@
 // lights, and a render loop capped at 30 fps so an idle companion stays cheap.
 
 import * as THREE from "three";
+import type { HatKind } from "./hats";
 import { createPeanutModel } from "./model";
 
 const BOUNCE_MS = 750;
@@ -17,6 +18,7 @@ export interface PeanutStage {
   blink: () => void;
   setSitting: (sitting: boolean) => void;
   walk: (direction: -1 | 0 | 1) => void;
+  setHat: (kind: HatKind | null) => void;
   hits: (clientX: number, clientY: number) => boolean;
   dispose: () => void;
 }
@@ -124,6 +126,7 @@ export function createPeanutStage(
     blink: () => (blinkStart = performance.now()),
     setSitting: peanut.setSitting,
     walk: peanut.walk,
+    setHat: peanut.setHat,
     hits(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
       if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {
@@ -131,9 +134,12 @@ export function createPeanutStage(
       }
       pointer.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
       raycaster.setFromCamera(pointer, camera);
-      return raycaster
-        .intersectObject(peanut.group, true)
-        .some((hit) => !hit.object.userData.isShadow);
+      // The raycaster ignores visibility, so skip a hat that's off.
+      return raycaster.intersectObject(peanut.group, true).some((hit) => {
+        if (hit.object.userData.isShadow) return false;
+        for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) if (!o.visible) return false;
+        return true;
+      });
     },
     dispose() {
       cancelAnimationFrame(frame);

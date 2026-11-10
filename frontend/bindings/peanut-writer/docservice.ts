@@ -14,6 +14,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as templates$0 from "./internal/templates/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as versions$0 from "./internal/versions/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -155,7 +158,15 @@ export function ImportTemplate(): $CancellablePromise<string> {
 }
 
 /**
- * NewDocument asks for a name and a place, and starts a document in a folder
+ * LoadVersion asks, then replaces the saved document, its own template and
+ * its settings with the version named name, after backing the document up.
+ */
+export function LoadVersion(name: string): $CancellablePromise<$models.DocInfo> {
+    return $Call.ByID(2002394957, name);
+}
+
+/**
+ * NewDocument asks for a name and a place, and starts a document in a package
  * of that name there, its properties titled with the name (in title case),
  * authored by the default author, dated today and marked with the app's version.
  */
@@ -164,15 +175,16 @@ export function NewDocument(): $CancellablePromise<$models.DocInfo> {
 }
 
 /**
- * OpenDocument asks for a Markdown file and opens it.
+ * OpenDocument asks for a document (a package, or a Markdown file) and opens
+ * it.
  */
 export function OpenDocument(): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(4107990858);
 }
 
 /**
- * OpenPath opens the Markdown file at p. A file that's gone is dropped from
- * the recent list.
+ * OpenPath opens the document at p: a package, or a Markdown file. A file
+ * that's gone is dropped from the recent list.
  */
 export function OpenPath(p: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(362042680, p);
@@ -244,11 +256,29 @@ export function Save(content: string): $CancellablePromise<$models.DocInfo> {
 }
 
 /**
- * SaveAs asks for a name and a place and saves the document in a folder of
+ * SaveAs asks for a name and a place and saves the document in a package of
  * that name there, bringing its images along.
  */
 export function SaveAs(content: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(2321284714, content);
+}
+
+/**
+ * SaveCustomTemplate adds the open document's own template to the user's
+ * templates as a new one named name, for any document to use, and returns
+ * its id.
+ */
+export function SaveCustomTemplate(name: string, description: string): $CancellablePromise<string> {
+    return $Call.ByID(2349127179, name, description);
+}
+
+/**
+ * SaveVersion keeps the saved document, with its own template and settings,
+ * as a version named name in its versions folder, with Word and PDF copies.
+ * Nothing is kept unless both render.
+ */
+export function SaveVersion(name: string): $CancellablePromise<versions$0.Version> {
+    return $Call.ByID(2034288978, name);
 }
 
 /**
@@ -264,6 +294,14 @@ export function SetDirty(dirty: boolean): $CancellablePromise<void> {
  */
 export function SetDocumentSettings($set: $models.Settings): $CancellablePromise<void> {
     return $Call.ByID(1322207221, $set);
+}
+
+/**
+ * SetTemplateBase bases the open document's own template on the template
+ * base, keeping its changes, and returns it.
+ */
+export function SetTemplateBase(base: string): $CancellablePromise<templates$0.Template> {
+    return $Call.ByID(631011578, base);
 }
 
 /**
@@ -299,25 +337,26 @@ export function ShareTemplate(id: string): $CancellablePromise<string> {
 }
 
 /**
- * Startup opens the welcome guide on the first run, and a blank document
- * (offering the recent ones) after that.
+ * Startup opens the document Finder launched the app with, if any; else the
+ * welcome guide on the first run, and a blank document (offering the recent
+ * ones) after that.
  */
 export function Startup(): $CancellablePromise<$models.StartupInfo> {
     return $Call.ByID(1598475524);
 }
 
 /**
- * SyncFiles writes a PDF and a Word copy of the saved document into the
- * "out" folder beside its file, under the same name, replacing earlier
- * copies; returns their paths. Neither is written unless both render.
+ * SyncFiles writes a PDF and a Word copy of the saved document beside it (its
+ * package, if it's in one), under the same name, replacing earlier copies;
+ * returns their paths. Neither is written unless both render.
  */
 export function SyncFiles(content: string): $CancellablePromise<string[] | null> {
     return $Call.ByID(1439229203, content);
 }
 
 /**
- * TemplatePreview is the welcome guide's first page in a template (the open
- * document's own for templates.CustomID), as SVG.
+ * TemplatePreview is the first page of a sample document (see sampleFor) in a
+ * template (the open document's own for templates.CustomID), as SVG.
  */
 export function TemplatePreview(id: string): $CancellablePromise<string> {
     return $Call.ByID(3553919739, id);
@@ -328,4 +367,12 @@ export function TemplatePreview(id: string): $CancellablePromise<string> {
  */
 export function Templates(): $CancellablePromise<templates$0.Template[] | null> {
     return $Call.ByID(1919557398);
+}
+
+/**
+ * Versions lists the open document's versions, newest first; none while
+ * it's untitled.
+ */
+export function Versions(): $CancellablePromise<versions$0.Version[] | null> {
+    return $Call.ByID(2503097242);
 }

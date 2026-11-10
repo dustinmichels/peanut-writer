@@ -48,6 +48,7 @@ export const state = reactive({
   outline: [] as Heading[], // the headings, from the latest render
   outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
   currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none
+  versionsOpen: localStorage.getItem("versions") === "1", // the named versions beside the editor
 
   templates: [] as Template[],
   template: "classic", // the template the preview used

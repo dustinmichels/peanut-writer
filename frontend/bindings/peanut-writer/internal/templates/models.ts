@@ -14,6 +14,11 @@ export interface DocxStyle {
      * inches, every side
      */
     "margin": number;
+
+    /**
+     * text columns below the title block; 0 or 1 for one
+     */
+    "columns": number;
     "bodyFont": string;
 
     /**
@@ -146,7 +151,7 @@ export interface Template {
     "base": string;
 
     /**
-     * a custom template's changes to its base; empty for others
+     * a custom template's changes to its base; a saved one's (see Save) to the template it was made from
      */
     "style": Style;
 }

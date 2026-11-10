@@ -2,10 +2,28 @@
 // written from internal/doc) into Typst content. Templates style the result
 // with show and set rules; this file only says what each element is.
 
+// LaTeX math is read by mitex (bundled, so nothing is downloaded).
+#import "mitex/lib.typ": mimath
+
 #let _align(a) = if a == "left" { left } else if a == "center" { center } else if a == "right" { right } else { auto }
 
 // The live preview (not PDF export) compiles with `--input peanut-preview=1`.
 #let _preview = sys.inputs.at("peanut-preview", default: "") == "1"
+
+// `--input peanut-math=source` shows all math as its LaTeX source: the
+// preview's fallback when mitex can't read some of it.
+#let _math_source = sys.inputs.at("peanut-math", default: "") == "source"
+
+// _math is LaTeX math (display: on its own line), or its source in red when
+// it can't be read.
+#let _math(n, display: false, ..args) = {
+  if n.at("error", default: "") != "" or _math_source {
+    let src = text(fill: rgb("#b42318"), raw(n.text))
+    if display { block(width: 100%, align(center, src)) } else { src }
+  } else {
+    mimath(n.text, block: display, ..args)
+  }
+}
 
 // Whether content is being laid out inside the outline.
 #let _in_outline = state("peanut-in-outline", false)
@@ -34,11 +52,13 @@
   else if t == "code" { raw(n.text) }
   else if t == "link" { link(n.url, all(n.children)) }
   else if t == "linebreak" { linebreak() }
+  else if t == "math" { _math(n, display: n.at("display", default: false)) }
   else if t == "image" {
     if n.at("src", default: "") != "" { box(image(n.src, height: 1.2em), baseline: 20%) } else { [\[image\]] }
   }
   else if t == "ref" {
-    if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
+    if n.at("kind", default: "") == "equation" and _math_source { text(weight: "bold")[??] }
+    else if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
   }
   else if t == "footnote" {
     // A note whose text isn't typed yet ("[^1]: ") has no blocks.
@@ -72,6 +92,12 @@
   else if t == "rule" { block(above: 1.2em, below: 1.2em, line(length: 100%, stroke: 0.6pt + luma(160))) }
   else if t == "pagebreak" { pagebreak(weak: true) }
   else if t == "toc" { outline() }
+  else if t == "equation" {
+    // Only a labelled equation is numbered.
+    let numbered = n.at("number", default: 0) > 0 and not _math_source
+    let eq = _math(n, display: true, numbering: if numbered { "(1)" } else { none })
+    if numbered [#eq#label(n.label)] else { eq }
+  }
   else if t == "figure" {
     let w = n.at("width", default: 0)
     let pics = n.at("pictures", default: ())
@@ -122,6 +148,10 @@
   // Footnote numbers are drawn smaller and raised rather than with the
   // font's superscript glyphs: many fonts have ¹ ² ³ but not 4 and up.
   set super(typographic: false)
+  // Braille (the editor's ⠿ grip, written in prose) is in few text fonts, and
+  // Typst's own fallback can pick macOS's LastResort, which draws a box.
+  // Name fonts that have it: macOS, Linux, Windows.
+  show regex("[\u{2800}-\u{28FF}]+"): set text(font: ("Apple Braille", "Apple Symbols", "DejaVu Sans", "Segoe UI Symbol"))
   // Outline entries repeat heading text: leave the preview's marks and
   // footnotes out.
   show outline: it => {

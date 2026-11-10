@@ -9,6 +9,7 @@ import CustomizePane from "./components/CustomizePane.vue";
 import OutlinePane from "./components/OutlinePane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
 import StatusBar from "./components/StatusBar.vue";
+import VersionsPane from "./components/VersionsPane.vue";
 import Dialogs from "./components/Dialogs.vue";
 import Toasts from "./components/Toasts.vue";
 import { loadDoc, menu, openRecent } from "./lib/actions";
@@ -25,7 +26,7 @@ function startResize(e: PointerEvent) {
   const target = e.currentTarget as HTMLElement; // the splitter, which captures the pointer
   target.setPointerCapture(e.pointerId);
   const rect = el.getBoundingClientRect();
-  // The split is between editor and preview; the outline, when shown, is left of both.
+  // The split is between editor and preview; the outline and versions, when shown, are left of both.
   const left = (target.previousElementSibling as HTMLElement).getBoundingClientRect().left;
   const move = (ev: PointerEvent) => {
     split.value = Math.min(0.75, Math.max(0.28, (ev.clientX - left) / (rect.right - left)));
@@ -39,9 +40,10 @@ function startResize(e: PointerEvent) {
   target.addEventListener("lostpointercapture", done, { once: true });
 }
 
+const side = "clamp(150px, 16%, 240px) ";
 const columns = computed(
   () =>
-    `${state.outlineOpen ? "clamp(150px, 16%, 240px) " : ""}${split.value}fr 6px ${1 - split.value}fr`,
+    `${state.outlineOpen ? side : ""}${state.versionsOpen ? side : ""}${split.value}fr 6px ${1 - split.value}fr`,
 );
 
 // jump shows a heading from the outline in the editor; the preview follows.
@@ -90,6 +92,7 @@ onUnmounted(() => {
     <Ribbon />
     <main ref="main" class="main" :style="{ gridTemplateColumns: columns }">
       <OutlinePane v-if="state.outlineOpen" @jump="jump" />
+      <VersionsPane v-if="state.versionsOpen" />
       <!-- The editor stays mounted (hidden) while the template is customized. -->
       <EditorPane v-show="!state.customizing" />
       <CustomizePane v-if="state.customizing" />

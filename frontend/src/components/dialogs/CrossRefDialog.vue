@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Image, Table } from "lucide-vue-next";
+import { Image, Sigma, Table } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { insertCrossRef } from "../../lib/actions";
-import { type Item, plain } from "../../lib/markdown";
+import { type Item, type Kind, kindName, plain } from "../../lib/markdown";
 import { state } from "../../lib/store";
 
 const emit = defineEmits<{ close: [] }>();
-const kind = ref<"all" | "figure" | "table">("all");
+const kinds = [
+  { id: "all", label: "Everything" },
+  { id: "figure", label: "Figures" },
+  { id: "table", label: "Tables" },
+  { id: "equation", label: "Equations" },
+] as const;
+const icons: Record<Kind, typeof Image> = { figure: Image, table: Table, equation: Sigma };
+const kind = ref<"all" | Kind>("all");
 const list = computed(() =>
   state.items.filter((x) => kind.value === "all" || x.kind === kind.value),
 );
@@ -35,13 +42,13 @@ onUnmounted(() => window.removeEventListener("keydown", key));
   <Modal title="Cross-reference" @close="emit('close')" @submit="insert(list[picked])">
     <div class="seg">
       <button
-        v-for="k in ['all', 'figure', 'table'] as const"
-        :key="k"
+        v-for="k in kinds"
+        :key="k.id"
         type="button"
-        :class="{ on: kind === k }"
-        @click="((kind = k), (picked = 0))"
+        :class="{ on: kind === k.id }"
+        @click="((kind = k.id), (picked = 0))"
       >
-        {{ k === "all" ? "Everything" : k === "figure" ? "Figures" : "Tables" }}
+        {{ k.label }}
       </button>
     </div>
     <div v-if="list.length" class="list">
@@ -54,15 +61,16 @@ onUnmounted(() => window.removeEventListener("keydown", key));
         @mouseenter="picked = i"
         @click="insert(it)"
       >
-        <component :is="it.kind === 'figure' ? Image : Table" :size="16" />
-        <b>{{ it.kind === "figure" ? "Figure" : "Table" }} {{ it.number }}</b>
-        <span class="cap">{{ plain(it.caption) || "No caption" }}</span>
+        <component :is="icons[it.kind]" :size="16" />
+        <b>{{ kindName[it.kind] }} {{ it.number }}</b>
+        <code v-if="it.kind === 'equation'" class="cap tex">{{ it.caption }}</code>
+        <span v-else class="cap">{{ plain(it.caption) || "No caption" }}</span>
         <code v-if="it.label">@{{ it.label }}</code>
       </button>
     </div>
     <div v-else class="none">
       <img src="/peanut.svg" alt="" />
-      Nothing to refer to yet. Add a picture or a table first.
+      Nothing to refer to yet. Add a picture, a table or a labelled equation first.
     </div>
     <p class="hint">
       The reference reads like “Figure 2” and keeps up when things move. You can also type
@@ -137,6 +145,10 @@ code {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--muted);
+}
+code.tex {
+  font-size: 12px;
+  color: var(--math);
 }
 .none {
   display: flex;

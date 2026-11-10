@@ -88,6 +88,9 @@ func find(name string, candidates ...string) string {
 
 // Format returns src as oxfmt lays it out.
 func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
+	// oxfmt's math ends only at a bare `$$` line: an equation's attribute
+	// block (`$$ {#eq:a}`) is taken out, and put back afterwards.
+	src, attrs := takeEquationAttrs(src)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, o.Bin, "--stdin-filepath", "document.md")
@@ -106,7 +109,87 @@ func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 		}
 		return "", err
 	}
-	return stdout.String(), nil
+	out, ok := putEquationAttrs(stdout.String(), attrs)
+	if !ok {
+		return "", errors.New("formatting would lose equation labels")
+	}
+	return out, nil
+}
+
+var (
+	// A line's quote markers and list marker, before its content.
+	container = regexp.MustCompile(`^(?:[ \t]*>)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?[ \t]*`)
+	mathClose = regexp.MustCompile(`\$\$[ \t]*(\{[^{}]*\})?[ \t]*$`)
+)
+
+// equationEnds finds the last line of each equation block (in quotes and
+// lists too): from a line starting `$$` to one ending `$$` (and maybe an
+// attribute block), outside top-level code fences.
+func equationEnds(lines []string) []int {
+	var ends []int
+	open := "" // the open code fence
+	for i := 0; i < len(lines); i++ {
+		body := strings.TrimRight(lines[i], "\r\n")
+		if m := fence.FindStringSubmatch(body); m != nil {
+			switch {
+			case open == "":
+				open = m[1]
+			case m[1][0] == open[0] && len(m[1]) >= len(open) && strings.TrimSpace(body[len(m[0]):]) == "":
+				open = ""
+			}
+			continue
+		}
+		content := body[len(container.FindString(body)):]
+		if open != "" || !strings.HasPrefix(content, "$$") {
+			continue
+		}
+		// The opening line closes it too if more follows its `$$`.
+		j, rest := i, content[2:]
+		for !mathClose.MatchString(rest) {
+			if j++; j == len(lines) {
+				return ends // unclosed
+			}
+			rest = strings.TrimRight(lines[j], "\r\n")
+		}
+		ends = append(ends, j)
+		i = j
+	}
+	return ends
+}
+
+// takeEquationAttrs removes equations' attribute blocks, returning them in
+// order ("" for none).
+func takeEquationAttrs(src string) (string, []string) {
+	lines := strings.SplitAfter(src, "\n")
+	var attrs []string
+	for _, i := range equationEnds(lines) {
+		body := strings.TrimRight(lines[i], "\r\n")
+		m := mathClose.FindStringSubmatchIndex(body)
+		a := ""
+		if m[2] >= 0 {
+			a = body[m[2]:m[3]]
+			lines[i] = strings.TrimRight(body[:m[2]], " \t") + lines[i][len(body):]
+		}
+		attrs = append(attrs, a)
+	}
+	return strings.Join(lines, ""), attrs
+}
+
+// putEquationAttrs puts attribute blocks back on src's equations; false if
+// the equations aren't the ones they were taken from.
+func putEquationAttrs(src string, attrs []string) (string, bool) {
+	lines := strings.SplitAfter(src, "\n")
+	ends := equationEnds(lines)
+	if len(ends) != len(attrs) {
+		return "", false
+	}
+	for k, i := range ends {
+		if attrs[k] != "" {
+			body := strings.TrimRight(lines[i], "\r\n")
+			lines[i] = body + " " + attrs[k] + lines[i][len(body):]
+		}
+	}
+	return strings.Join(lines, ""), true
 }
 
 // --- Title case ----------------------------------------------------------------
@@ -114,10 +197,10 @@ func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 var (
 	atxHeading = regexp.MustCompile(`^( {0,3}#{1,6}[ \t]+)(.*?)([ \t]+#+)?[ \t]*$`)
 	fence      = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
-	// Parts of a heading that aren't its words: code, link targets and
+	// Parts of a heading that aren't its words: code, math, link targets and
 	// reference labels, attribute blocks, cross-references, footnotes,
 	// autolinks, URLs, entities and escapes.
-	protected = regexp.MustCompile("`+[^`]*`+|\\]\\([^)]*\\)|\\]\\[[^\\]]*\\]|\\{[^}]*\\}|@[\\w:.-]+|\\[\\^[^\\]]*\\]|<[^>]*>|https?://\\S+|&#?\\w+;|\\\\.")
+	protected = regexp.MustCompile("`+[^`]*`+|\\$\\$?(?:\\\\.|[^$\\\\])+\\$\\$?|\\]\\([^)]*\\)|\\]\\[[^\\]]*\\]|\\{[^}]*\\}|@[\\w:.-]+|\\[\\^[^\\]]*\\]|<[^>]*>|https?://\\S+|&#?\\w+;|\\\\.")
 	word      = regexp.MustCompile(`[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*`)
 )
 

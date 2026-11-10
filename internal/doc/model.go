@@ -14,7 +14,11 @@
 //     text is its description (alt text).
 //   - Table captions: a paragraph right after a table, starting `Table:`, with
 //     an optional attribute block: `Table: Sales by year {#tbl:sales}`.
-//   - Cross-references: `@fig:a`, `@tbl:sales`. Numbers follow document order.
+//   - Cross-references: `@fig:a`, `@tbl:sales`, `@eq:e`. Numbers follow
+//     document order.
+//   - LaTeX math: `$x^2$` in text (`$$…$$` for display math in text), and
+//     equations: a block from a line starting `$$` to one ending `$$`,
+//     optionally followed by `{#eq:name}`, which numbers it.
 //   - `[TOC]` (table of contents) and `\pagebreak` on a line of their own.
 package doc
 
@@ -51,6 +55,7 @@ const (
 	BlockRule      = "rule"
 	BlockPageBreak = "pagebreak"
 	BlockTOC       = "toc"
+	BlockEquation  = "equation"
 )
 
 // Block is a block-level element. Which fields are set depends on Type.
@@ -75,9 +80,14 @@ type Block struct {
 	// quote.
 	Children []Block `json:"children,omitempty"`
 
-	// code: the text, with its language ("" when not given).
+	// code: the text, with its language ("" when not given). equation: the
+	// LaTeX source.
 	Lang string `json:"lang,omitempty"`
 	Text string `json:"text,omitempty"`
+
+	// equation: why the LaTeX can't be read ("" when it can); it's then
+	// shown as source.
+	Error string `json:"error,omitempty"`
 
 	// figure: the image's absolute path, "" when it can't be shown (then
 	// Missing names what was asked for). Width is a percentage of the text
@@ -100,8 +110,9 @@ type Block struct {
 	Header [][]Inline   `json:"header,omitempty"`
 	Rows   [][][]Inline `json:"rows,omitempty"`
 
-	// figure, table: the label (`fig:a`, `tbl:b`; "" for none) and the
-	// number, counted separately for figures and tables in document order.
+	// figure, table, equation: the label (`fig:a`, `tbl:b`, `eq:c`; "" for
+	// none) and the number, counted separately for figures, tables and
+	// equations in document order. Only labelled equations are numbered.
 	Label  string `json:"label,omitempty"`
 	Number int    `json:"number,omitempty"`
 }
@@ -128,14 +139,20 @@ const (
 	InlineRef       = "ref"
 	InlineFootnote  = "footnote"
 	InlineLineBreak = "linebreak"
+	InlineMath      = "math"
 )
 
 // Inline is an inline element. Which fields are set depends on Type.
 type Inline struct {
 	Type string `json:"type"`
 
-	// text, code: the text.
+	// text, code: the text. math: the LaTeX source.
 	Text string `json:"text,omitempty"`
+
+	// math: display math (`$$…$$`) rather than math in the line; and why
+	// the LaTeX can't be read ("" when it can).
+	Display bool   `json:"display,omitempty"`
+	Error   string `json:"error,omitempty"`
 
 	// strong, emph, strike, link: the content.
 	Children []Inline `json:"children,omitempty"`
@@ -144,8 +161,9 @@ type Inline struct {
 	URL string `json:"url,omitempty"`
 	Src string `json:"src,omitempty"`
 
-	// ref: the label referred to, what it is ("figure" or "table") and its
-	// number. Kind is "" when no figure or table has the label.
+	// ref: the label referred to, what it is ("figure", "table" or
+	// "equation") and its number. Kind is "" when nothing numbered has the
+	// label.
 	Label  string `json:"label,omitempty"`
 	Kind   string `json:"kind,omitempty"`
 	Number int    `json:"number,omitempty"`
@@ -156,8 +174,9 @@ type Inline struct {
 
 // Kinds of numbered, referable things.
 const (
-	KindFigure = "figure"
-	KindTable  = "table"
+	KindFigure   = "figure"
+	KindTable    = "table"
+	KindEquation = "equation"
 )
 
 // Heading is an entry in the document's outline.
@@ -199,7 +218,7 @@ func PlainText(xs []Inline) string {
 	walk = func(xs []Inline) {
 		for _, x := range xs {
 			switch x.Type {
-			case InlineText, InlineCode:
+			case InlineText, InlineCode, InlineMath:
 				b.WriteString(x.Text)
 			case InlineLineBreak:
 				b.WriteString(" ")

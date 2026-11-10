@@ -4,6 +4,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"peanut-writer/internal/doc"
@@ -12,7 +13,8 @@ import (
 // runProps are the character properties that nesting accumulates.
 type runProps struct {
 	b, i, strike, code bool
-	style              string // character style
+	style              string  // character style
+	lower              float64 // points to lower the run by (an inline equation)
 }
 
 // rPr is the run properties element, "" when there are none.
@@ -28,6 +30,9 @@ func (w *writer) rPr(p runProps) string {
 	props := rpr(font, p.b, p.i, "", 0)
 	if p.strike {
 		props += "<w:strike/>"
+	}
+	if p.lower != 0 {
+		props += fmt.Sprintf(`<w:position w:val="%d"/>`, -half(p.lower))
 	}
 	if style != "" {
 		props = `<w:rStyle w:val="` + style + `"/>` + props
@@ -114,6 +119,8 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline, p runProps) {
 			w.ref(sb, x, p)
 		case doc.InlineFootnote:
 			w.footnote(sb, x, p)
+		case doc.InlineMath:
+			sb.WriteString(w.math(x, p))
 		}
 	}
 }
@@ -133,8 +140,9 @@ func (w *writer) link(sb *strings.Builder, x doc.Inline, p runProps) {
 	sb.WriteString(`</w:hyperlink>`)
 }
 
-// ref is "Figure N" or "Table N" as a REF field to the caption's bookmark;
-// an unknown reference is a bold "??", as LaTeX writes it.
+// ref is "Figure N", "Table N" or "Equation N" as a REF field to the
+// bookmarked number; an unknown reference is a bold "??", as LaTeX writes
+// it.
 func (w *writer) ref(sb *strings.Builder, x doc.Inline, p runProps) {
 	word := ""
 	switch x.Kind {
@@ -142,6 +150,15 @@ func (w *writer) ref(sb *strings.Builder, x doc.Inline, p runProps) {
 		word = "Figure"
 	case doc.KindTable:
 		word = "Table"
+	case doc.KindEquation:
+		// The bookmark holds just the number, which is shown in brackets.
+		sb.WriteString(w.run("Equation ", p))
+		if name := w.bookmarks[x.Label]; name != "" {
+			w.field(sb, "REF "+name+` \h`, strconv.Itoa(x.Number), p)
+		} else {
+			sb.WriteString(w.run(strconv.Itoa(x.Number), p))
+		}
+		return
 	default:
 		q := p
 		q.b = true

@@ -9,16 +9,17 @@ import {
   customizeTemplate,
   editLink,
   importTemplate,
+  insertLoremIpsum,
   menu,
   openTemplatesFolder,
   setTemplate,
   showInFolder,
-  showRecent,
 } from "./actions";
 import {
   type BlockStyle,
   clearFormatting,
   insertBlock,
+  insertEquation,
   insertFootnote,
   setBlockStyle,
   toggleCodeBlock,
@@ -52,7 +53,13 @@ const style = (s: BlockStyle) => inEditor((v) => setBlockStyle(v, s));
 const fixed: Command[] = [
   { id: "new", group: "File", label: "New", shortcut: "⌘N", run: () => menu("new") },
   { id: "open", group: "File", label: "Open…", shortcut: "⌘O", run: () => menu("open") },
-  { id: "recent", group: "File", label: "Open Recent…", run: showRecent },
+  {
+    id: "recent",
+    group: "File",
+    label: "Open Recent…",
+    shortcut: "⇧⌘O",
+    run: () => menu("recent"),
+  },
   {
     id: "save",
     group: "File",
@@ -174,6 +181,7 @@ const fixed: Command[] = [
   },
   { id: "link", group: "Insert", label: "Link…", run: editLink },
   { id: "footnote", group: "Insert", label: "Footnote", run: inEditor(insertFootnote) },
+  { id: "equation", group: "Insert", label: "Equation", run: inEditor(insertEquation) },
   { id: "codeBlock", group: "Insert", label: "Code Block", run: inEditor(toggleCodeBlock) },
   { id: "divider", group: "Insert", label: "Divider", run: inEditor((v) => insertBlock(v, "---")) },
   {
@@ -194,6 +202,7 @@ const fixed: Command[] = [
     label: "Cross-reference…",
     run: () => (state.dialog = { kind: "crossref" }),
   },
+  { id: "lorem", group: "Insert", label: "Lorem Ipsum", run: insertLoremIpsum },
 
   { id: "customize", group: "Design", label: "Customize Template", run: customizeTemplate },
   {
@@ -218,6 +227,7 @@ const fixed: Command[] = [
     run: () => menu("markdown"),
   },
   { id: "outline", group: "View", label: "Toggle Outline", run: () => menu("outline") },
+  { id: "versions", group: "View", label: "Toggle Versions", run: () => menu("versions") },
   { id: "zoomIn", group: "View", label: "Zoom In", shortcut: "⌘=", run: () => menu("zoomIn") },
   { id: "zoomOut", group: "View", label: "Zoom Out", shortcut: "⌘-", run: () => menu("zoomOut") },
   {

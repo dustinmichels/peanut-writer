@@ -3,6 +3,7 @@ package doc
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,6 +130,76 @@ func TestEscapesAndEntities(t *testing.T) {
 	in := d.Blocks[0].Inlines
 	if len(in) != 2 || in[0].Text != "a *b* & © " || in[1].Text != "x &amp;" {
 		t.Errorf("inlines = %+v", in)
+	}
+}
+
+// mathIn is a paragraph's text with its math as "[tex]" ("$$tex$$" for
+// display math).
+func mathIn(xs []Inline) string {
+	var b strings.Builder
+	for _, x := range xs {
+		switch {
+		case x.Type == InlineMath && x.Display:
+			b.WriteString("$$" + x.Text + "$$")
+		case x.Type == InlineMath:
+			b.WriteString("[" + x.Text + "]")
+		default:
+			b.WriteString(x.Text)
+		}
+	}
+	return b.String()
+}
+
+func TestDollarsInText(t *testing.T) {
+	for src, want := range map[string]string{
+		"costs $5 or $10":             "costs $5 or $10",
+		"from $5–$10, $1,000 and $2":  "from $5–$10, $1,000 and $2",
+		"a $x^2$ b":                   "a [x^2] b",
+		"a $ x$ b":                    "a $ x$ b",
+		"a $x $ b":                    "a $x $ b",
+		"$x$5":                        "$x$5",
+		`\$x$ and \$5`:                "$x$ and $5",
+		`$a \$ b$`:                    `[a \$ b]`,
+		"$a*b*c$ and $x_1 * y_2$":     "[a*b*c] and [x_1 * y_2]",
+		"`$x$` stays code":            "$x$ stays code",
+		"over $a +\nb$ lines":         "over [a +\nb] lines",
+		"shown $$\\int f$$ in a line": "shown $$\\int f$$ in a line",
+	} {
+		d := Parse(src, "")
+		if got := mathIn(d.Blocks[0].Inlines); got != want {
+			t.Errorf("%q: %q, want %q", src, got, want)
+		}
+	}
+}
+
+func TestEquations(t *testing.T) {
+	src := "As @eq:sum and @eq:one show:\n$$\n\\sum_i x_i\n= 1\n$$ {#eq:sum}\n\n$$ E = mc^2 $$\n\n$$ x} $$ {#eq:bad}\n\n- $$ y $$ {#eq:one}\n\n```\n$$ z $$\n```\n"
+	d := Parse(src, "")
+	if len(d.Blocks) != 6 {
+		t.Fatalf("blocks = %+v", d.Blocks)
+	}
+	sum, plain, bad, one := d.Blocks[1], d.Blocks[2], d.Blocks[3], d.Blocks[4].Items[0][0]
+	if sum.Type != BlockEquation || sum.Text != "\\sum_i x_i\n= 1" || sum.Label != "eq:sum" || sum.Number != 1 {
+		t.Errorf("an equation can interrupt a paragraph and span lines: %+v", sum)
+	}
+	if plain.Type != BlockEquation || plain.Text != "E = mc^2" || plain.Number != 0 {
+		t.Errorf("an unlabelled equation isn't numbered: %+v", plain)
+	}
+	if bad.Error == "" || bad.Number != 0 {
+		t.Errorf("an unreadable equation isn't numbered: %+v", bad)
+	}
+	if one.Type != BlockEquation || one.Number != 2 {
+		t.Errorf("equations in lists are numbered: %+v", one)
+	}
+	if d.Blocks[5].Type != BlockCode {
+		t.Errorf("`$$` in a code block: %+v", d.Blocks[5])
+	}
+	refs := d.Blocks[0].Inlines
+	if refs[1].Kind != KindEquation || refs[1].Number != 1 || refs[3].Kind != KindEquation || refs[3].Number != 2 {
+		t.Errorf("refs = %+v", refs)
+	}
+	if len(d.Warnings) != 1 {
+		t.Errorf("warnings = %v", d.Warnings)
 	}
 }
 
