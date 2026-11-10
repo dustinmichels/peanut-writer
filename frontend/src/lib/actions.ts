@@ -37,6 +37,7 @@ export function loadDoc(info: DocInfo) {
   state.saved = info.content;
   state.content = info.content;
   state.dirty = false;
+  state.synced = null;
   state.pages = [];
   state.renderError = "";
   state.warnings = [];
@@ -65,7 +66,18 @@ let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
 
 function scheduleAutosave() {
   clearTimeout(autosaveTimer);
-  autosaveTimer = state.path && state.dirty ? setTimeout(save, autosaveDelay) : undefined;
+  autosaveTimer = state.path && state.dirty ? setTimeout(autosave, autosaveDelay) : undefined;
+}
+
+// How long the title bar says an autosave ran.
+const autosavedMs = 2500;
+let autosavedTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function autosave() {
+  if (!(await save())) return;
+  state.autosaved = true;
+  clearTimeout(autosavedTimer);
+  autosavedTimer = setTimeout(() => (state.autosaved = false), autosavedMs);
 }
 
 async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined> {
@@ -92,7 +104,7 @@ async function ensureSaved(): Promise<boolean> {
 export async function newDoc() {
   if (!(await ensureSaved())) return;
   const info = await run("New document", () => DocService.NewDocument());
-  if (info) loadDoc(info);
+  if (info && !info.canceled) loadDoc(info);
 }
 
 export async function openDoc() {
@@ -120,6 +132,8 @@ export async function openWelcome() {
 }
 
 function saved(info: DocInfo) {
+  // Copies synced beside another file don't count for this one.
+  if (info.path !== state.path) state.synced = null;
   state.path = info.path;
   state.name = info.name;
   state.saved = info.content;
@@ -168,12 +182,19 @@ export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(sta
 // syncFiles saves the document, then writes its PDF and Word copies beside it.
 export async function syncFiles() {
   if (!(await save())) return;
-  const paths = await run("Sync files", () => DocService.SyncFiles(state.content));
+  const content = state.content;
+  const paths = await run("Sync files", () => DocService.SyncFiles(content));
   if (!paths?.length) return;
+  state.synced = content;
   toast(`Synced ${paths.map((p) => p.split("/").pop()).join(" and ")}`, "success", {
     label: "Show in Finder",
     run: () => DocService.Reveal(paths[0]),
   });
+}
+
+// showInFolder opens the document's folder in Finder with the file selected.
+export function showInFolder() {
+  if (state.path) run("Show in Finder", () => DocService.Reveal(state.path));
 }
 
 // Closing the window asks again each time; one question at a time.

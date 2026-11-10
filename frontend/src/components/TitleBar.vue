@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { ChevronDown, FileDown, FileText, Redo2, RefreshCw, Save, Undo2 } from "lucide-vue-next";
-import { exportDocx, exportPdf, menu, save, syncFiles } from "../lib/actions";
-import { state } from "../lib/store";
+import {
+  ChevronDown,
+  FileDown,
+  FileText,
+  FolderOpen,
+  Redo2,
+  RefreshCw,
+  Save,
+  Undo2,
+} from "lucide-vue-next";
+import { exportDocx, exportPdf, menu, save, showInFolder, syncFiles } from "../lib/actions";
+import { canSave, canSync, state } from "../lib/store";
 
 const exportOpen = ref(false);
 function pick(f: () => unknown) {
@@ -14,7 +23,15 @@ function pick(f: () => unknown) {
 <template>
   <header class="titlebar">
     <div class="quick">
-      <button class="icon" title="Save (⌘S)" @click="save"><Save :size="15" /></button>
+      <button
+        class="icon"
+        :class="{ pending: state.dirty }"
+        :title="state.dirty ? 'Save unsaved changes (⌘S)' : 'Save (⌘S)'"
+        :disabled="!canSave"
+        @click="save"
+      >
+        <Save :size="15" />
+      </button>
       <button class="icon" title="Undo (⌘Z)" @click="menu('undo')"><Undo2 :size="15" /></button>
       <button class="icon" title="Redo (⇧⌘Z)" @click="menu('redo')"><Redo2 :size="15" /></button>
     </div>
@@ -22,12 +39,23 @@ function pick(f: () => unknown) {
       <img src="/peanut.svg" alt="" class="logo" />
       <span class="name">{{ state.name }}</span>
       <span v-if="state.dirty" class="edited">— Edited</span>
-      <span v-else-if="state.path" class="saved">— Saved</span>
+      <Transition name="flash" mode="out-in">
+        <span v-if="!state.dirty && state.autosaved" class="autosaved">— Auto-saved</span>
+        <span v-else-if="!state.dirty && state.path" class="saved">— Saved</span>
+      </Transition>
     </div>
     <div class="right">
+      <button class="icon" title="Show in Finder" :disabled="!state.path" @click="showInFolder">
+        <FolderOpen :size="15" />
+      </button>
       <button
         class="btn"
-        title="Save, then write PDF and Word copies beside the file (⇧⌘Y)"
+        :title="
+          canSync
+            ? 'Save, then write PDF and Word copies beside the file (⇧⌘Y)'
+            : 'The PDF and Word copies are up to date'
+        "
+        :disabled="!canSync"
         @click="syncFiles"
       >
         <RefreshCw :size="15" /> Sync files
@@ -82,6 +110,26 @@ button,
 .icon:hover {
   background: var(--hover);
 }
+.icon:disabled {
+  opacity: 0.4;
+  background: transparent;
+}
+/* Unsaved changes: the save button stands out, with a dot. */
+.icon.pending {
+  position: relative;
+  background: var(--active);
+  color: var(--accent);
+}
+.icon.pending::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .title {
   display: flex;
   align-items: center;
@@ -110,9 +158,24 @@ button,
   }
 }
 .edited,
-.saved {
+.saved,
+.autosaved {
   font-weight: 500;
   color: var(--muted);
+}
+.edited {
+  color: var(--accent-ink);
+}
+.autosaved {
+  color: var(--accent-ink);
+}
+.flash-enter-active,
+.flash-leave-active {
+  transition: opacity 0.25s;
+}
+.flash-enter-from,
+.flash-leave-to {
+  opacity: 0;
 }
 .right {
   display: flex;

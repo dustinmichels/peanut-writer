@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 
-defineProps<{ icon: Component; label?: string; big?: boolean; active?: boolean; title?: string }>();
+defineProps<{
+  icon: Component;
+  label?: string;
+  big?: boolean;
+  active?: boolean;
+  attention?: boolean; // stands out: there's something for it to do
+  title?: string;
+}>();
 </script>
 
 <template>
-  <button class="rb" :class="{ big, active }" :title="title ?? label" @mousedown.prevent>
+  <button class="rb" :class="{ big, active, attention }" :title="title ?? label" @mousedown.prevent>
     <component :is="icon" :size="big ? 24 : 16" :stroke-width="big ? 1.6 : 1.9" />
     <span v-if="label">{{ label }}</span>
   </button>
@@ -34,6 +41,18 @@ defineProps<{ icon: Component; label?: string; big?: boolean; active?: boolean; 
 .rb.active {
   background: var(--active);
   border-color: rgba(193, 105, 79, 0.25);
+}
+.rb.attention {
+  background: var(--active);
+  border-color: rgba(193, 105, 79, 0.35);
+}
+.rb.attention svg {
+  color: var(--accent);
+}
+.rb:disabled {
+  opacity: 0.4;
+  background: transparent;
+  border-color: transparent;
 }
 .rb.big {
   flex-direction: column;

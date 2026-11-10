@@ -99,7 +99,8 @@ export function ImageURL(ref: string): $CancellablePromise<string> {
 }
 
 /**
- * NewDocument starts a blank, unsaved document.
+ * NewDocument asks for a name and a place, and starts a blank document in a
+ * folder of that name there.
  */
 export function NewDocument(): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(1108794262);
@@ -171,8 +172,8 @@ export function Save(content: string): $CancellablePromise<$models.DocInfo> {
 }
 
 /**
- * SaveAs asks where to save the document and writes it there, bringing its
- * images along.
+ * SaveAs asks for a name and a place and saves the document in a folder of
+ * that name there, bringing its images along.
  */
 export function SaveAs(content: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(2321284714, content);

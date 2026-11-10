@@ -1,18 +1,19 @@
 // App state shared by the components: the open document, the preview, and
 // what the cursor is on (for the ribbon).
 
-import { reactive, shallowRef } from "vue";
+import { computed, reactive, shallowRef } from "vue";
 import type { EditorView } from "@codemirror/view";
 import { DocService } from "../../bindings/peanut-writer";
 import type { RecentFile } from "../../bindings/peanut-writer/models";
 import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
 import type { Heading } from "../../bindings/peanut-writer/internal/doc/models";
 import type { BlockStyle, Mark } from "./editor";
-import type { Item } from "./markdown";
+import type { Item, Table } from "./markdown";
 
 type Dialog =
   | { kind: "figure"; item: Item }
-  | { kind: "table"; item?: Item; cols?: number; rows?: number }
+  | { kind: "table"; item?: Item; cols?: number; rows?: number; table?: Table }
+  | { kind: "pasteTable" }
   | { kind: "crossref" }
   | { kind: "link"; text: string }
   | { kind: "properties" }
@@ -32,6 +33,8 @@ export const state = reactive({
   saved: "", // the content as last saved (or opened)
   content: "",
   dirty: false,
+  synced: null as string | null, // the content the PDF and Word copies were last synced from
+  autosaved: false, // an autosave just ran (shown briefly in the title bar)
 
   pages: [] as string[],
   renderError: "",
@@ -57,6 +60,11 @@ export const state = reactive({
   dialog: null as Dialog | null,
   toasts: [] as Toast[],
 });
+
+// Saving does something with unsaved changes, or for a document without a file.
+export const canSave = computed(() => state.dirty || !state.path);
+// Syncing does something unless the copies came from this very text.
+export const canSync = computed(() => state.synced !== state.content);
 
 export const editor = shallowRef<EditorView | null>(null);
 

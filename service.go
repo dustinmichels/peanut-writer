@@ -129,20 +129,83 @@ func (s *DocService) Startup() (StartupInfo, error) {
 			s.saveSettings()
 		}
 	} else {
-		info.Document, err = s.NewDocument()
+		info.Document, err = s.newUntitled()
 		info.Recent = s.RecentFiles()
 	}
 	return info, err
 }
 
-// NewDocument starts a blank, unsaved document.
-func (s *DocService) NewDocument() (DocInfo, error) {
+// newUntitled starts a blank document with no file yet.
+func (s *DocService) newUntitled() (DocInfo, error) {
 	dir, err := s.scratch()
 	if err != nil {
 		return DocInfo{}, err
 	}
 	s.setOpen("", dir)
 	return DocInfo{Name: "Untitled"}, nil
+}
+
+// NewDocument asks for a name and a place, and starts a blank document in a
+// folder of that name there.
+func (s *DocService) NewDocument() (DocInfo, error) {
+	p, err := s.chooseDocFolder("Untitled", "")
+	if err != nil || p == "" {
+		return DocInfo{Canceled: true}, err
+	}
+	if err := os.WriteFile(p, nil, 0o644); err != nil {
+		return DocInfo{}, err
+	}
+	s.setOpen(p, filepath.Dir(p))
+	s.remember(p)
+	return DocInfo{Path: p, Name: docName(p)}, nil
+}
+
+// chooseDocFolder asks for a document's name and where to put it, makes a
+// folder of that name there (it holds the document, its images and its
+// backups) and returns the path of the document's file inside it. "" means
+// the user canceled, or chose not to replace an existing document.
+func (s *DocService) chooseDocFolder(name, dir string) (string, error) {
+	d := s.app.Dialog.SaveFile().
+		SetMessage("The document gets a folder of this name, for it, its pictures and its backups.").
+		SetFilename(name).
+		CanCreateDirectories(true).
+		AttachToWindow(s.window)
+	if dir != "" {
+		d.SetDirectory(dir)
+	}
+	p, err := d.PromptForSingleSelection()
+	if err != nil || p == "" {
+		return "", err
+	}
+	base := filepath.Base(p)
+	if ext := strings.ToLower(filepath.Ext(base)); ext == ".md" || ext == ".markdown" {
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	name = safeFileName(base)
+	folder := filepath.Join(filepath.Dir(p), name)
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		return "", err
+	}
+	p = filepath.Join(folder, name+".md")
+	s.mu.Lock()
+	cur := s.path
+	s.mu.Unlock()
+	if _, err := os.Stat(p); err == nil && p != cur && !s.confirmReplace(name) {
+		return "", nil
+	}
+	return p, nil
+}
+
+// confirmReplace asks whether to replace the existing document name.
+func (s *DocService) confirmReplace(name string) bool {
+	choice := make(chan bool, 1)
+	d := s.app.Dialog.Question().
+		SetTitle(fmt.Sprintf("“%s” already exists. Do you want to replace it?", name)).
+		SetMessage("Its folder already holds a document of that name; replacing it overwrites that document.")
+	d.AddButton("Replace").OnClick(func() { choice <- true })
+	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
+	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
+	return <-choice
 }
 
 // OpenWelcome opens the welcome guide as an unsaved document.
@@ -219,29 +282,25 @@ func (s *DocService) Save(content string) (DocInfo, error) {
 	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
 }
 
-// SaveAs asks where to save the document and writes it there, bringing its
-// images along.
+// SaveAs asks for a name and a place and saves the document in a folder of
+// that name there, bringing its images along.
 func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	s.mu.Lock()
 	oldDir, oldPath := s.dir, s.path
 	s.mu.Unlock()
-	name := "Untitled.md"
+	name, dir := "Untitled", ""
 	if oldPath != "" {
-		name = filepath.Base(oldPath)
+		// Start beside the document's own folder, not inside it.
+		name, dir = docName(oldPath), filepath.Dir(oldPath)
+		if filepath.Base(dir) == name {
+			dir = filepath.Dir(dir)
+		}
 	} else if t := doc.Parse(content, "").Meta.Title; t != "" {
-		name = safeFileName(t) + ".md"
+		name = safeFileName(t)
 	}
-	p, err := s.app.Dialog.SaveFile().
-		SetFilename(name).
-		AddFilter("Markdown", "*.md").
-		CanCreateDirectories(true).
-		AttachToWindow(s.window).
-		PromptForSingleSelection()
+	p, err := s.chooseDocFolder(name, dir)
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
-	}
-	if filepath.Ext(p) == "" {
-		p += ".md"
 	}
 	if err := copyImages(content, oldDir, filepath.Dir(p)); err != nil {
 		return DocInfo{}, fmt.Errorf("copying images: %w", err)

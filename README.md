@@ -36,10 +36,15 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
   _Academic_ (a LaTeX article), _Report_ (a business report), _Minimal_ (quiet Swiss-style sans), _Manuscript_ (an
   APA-style double-spaced paper), _Elegant_ (a book page with small-caps headings) and _Peanut_. The choice is saved
   in the document.
+- **Documents are folders**: New (⌘N), Save As and the first save of an untitled document ask for a name and a
+  place, then make a folder of that name there holding `Name.md`, its `images/` and `backups/`, and synced copies.
+  Save As starts beside the current document's folder and brings its pictures along. Choosing a name whose folder
+  already holds that document asks before replacing it.
 - **Export**: the Export button (or ⌘E, ⇧⌘E). The PDF is exactly the preview. The Word file uses real Word styles
   (Title, Heading 1–6, Caption, Quote…), numbered captions and live cross-reference fields, so it stays editable.
 - **Sync files**: the Sync files button (or ⇧⌘Y, File → Sync Files) saves the document, then writes `Name.pdf` and
   `Name.docx` beside `Name.md`, replacing earlier copies, with no dialogs. An unsaved document asks where to save first.
+  The folder button beside it opens the document's folder in Finder.
 - **Auto-save**: a document with a file saves itself 2 seconds after you stop typing, and before opening another or
   quitting; nothing asks. An untitled document still needs ⌘S, and asks before its changes are lost.
 - **Backups**: a saved document is copied as `Name-2026-11-10T14-03-22.md` and `.docx` into a `backups` folder beside
