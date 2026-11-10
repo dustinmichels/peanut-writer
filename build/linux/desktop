@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=Peanut Writer
+Comment=A lightly peanut-themed text editor
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/peanut-writer %u
+Terminal=false
+Type=Application
+Icon=peanut-writer
+Categories=Utility;
+StartupWMClass=peanut-writer
+
+ 

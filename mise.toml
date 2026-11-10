@@ -1,0 +1,16 @@
+[tools]
+go = "1.27.3"
+bun = "1.4.4"
+"go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"
+
+[tasks.dev]
+description = "Run the app in dev mode (Vite HMR + Go rebuild on change)"
+run = "wails3 dev"
+
+[tasks.build]
+description = "Build the app binary into bin/"
+run = "wails3 build"
+
+[tasks.package]
+description = "Package a production build (.app on macOS)"
+run = "wails3 package"
