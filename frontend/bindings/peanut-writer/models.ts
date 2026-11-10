@@ -58,6 +58,47 @@ export interface RenderResult {
 }
 
 /**
+ * Settings are preferences, kept as JSON: the user's for every document
+ * (settings.json in the app's config folder), and a document's own (Name.settings.json
+ * beside its Name.md), which override the user's. nil means not set.
+ */
+export interface Settings {
+    /**
+     * saving tidies the Markdown with oxfmt
+     */
+    "autoFormat"?: boolean | null;
+
+    /**
+     * ...and puts headings in title case
+     */
+    "titleCase"?: boolean | null;
+
+    /**
+     * a new document's author (global only); nil means the computer user's full name
+     */
+    "author"?: string | null;
+
+    /**
+     * Peanut keeps you company beside the ribbon tabs; nil means on
+     */
+    "peanut"?: boolean | null;
+}
+
+/**
+ * SettingsInfo is both sets of settings, and the files they're kept in.
+ */
+export interface SettingsInfo {
+    "user": Settings;
+    "document": Settings;
+    "userFile": string;
+
+    /**
+     * "" until the document is saved
+     */
+    "documentFile": string;
+}
+
+/**
  * StartupInfo is what the editor needs when it opens.
  */
 export interface StartupInfo {

@@ -20,7 +20,8 @@ type Dialog =
   | { kind: "settings" }
   | { kind: "cheatsheet" }
   | { kind: "recent"; files: RecentFile[] }
-  | { kind: "templates" };
+  | { kind: "templates" }
+  | { kind: "commands" };
 
 interface Toast {
   id: number;
@@ -50,6 +51,8 @@ export const state = reactive({
 
   templates: [] as Template[],
   template: "classic", // the template the preview used
+  custom: null as Template | null, // the document's own template (Design → Customize), if it has one
+  customizing: false, // the editor pane shows the document's own template's fonts and colors
   items: [] as Item[],
   words: 0,
 
@@ -59,6 +62,7 @@ export const state = reactive({
   zoom: 0, // preview zoom as a fraction; 0 = fit the page to the pane
   // The editor shows the document's Markdown rather than hiding its marks.
   showMarkdown: localStorage.getItem("showMarkdown") === "1",
+  showPeanut: true, // Peanut beside the ribbon tabs (Settings)
   fitZoom: 1,
   dialog: null as Dialog | null,
   toasts: [] as Toast[],
@@ -68,6 +72,10 @@ export const state = reactive({
 export const canSave = computed(() => state.dirty || !state.path);
 // Syncing does something unless the copies came from this very text.
 export const canSync = computed(() => state.synced !== state.content);
+// The templates the document can use: its own first, if it has one.
+export const docTemplates = computed(() =>
+  state.custom ? [state.custom, ...state.templates] : state.templates,
+);
 
 export const editor = shallowRef<EditorView | null>(null);
 

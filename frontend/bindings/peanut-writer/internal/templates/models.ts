@@ -95,6 +95,42 @@ export interface DocxStyle {
 }
 
 /**
+ * Style is the fonts and colors a document's custom template changes in the
+ * template it's based on; "" and 0 keep the base's. Colors are RRGGBB.
+ * 
+ * It reaches Word through DocxStyle, and Typst as style.json beside the
+ * template, which the built-in templates read through style.typ.
+ */
+export interface Style {
+    "bodyFont"?: string;
+
+    /**
+     * headings and the title
+     */
+    "headingFont"?: string;
+
+    /**
+     * code
+     */
+    "monoFont"?: string;
+
+    /**
+     * body text, points
+     */
+    "fontSize"?: number;
+    "textColor"?: string;
+    "headingColor"?: string;
+    "titleColor"?: string;
+    "captionColor"?: string;
+
+    /**
+     * rules and table borders
+     */
+    "accentColor"?: string;
+    "tableHeaderFill"?: string;
+}
+
+/**
  * Template is one output template.
  */
 export interface Template {
@@ -103,4 +139,14 @@ export interface Template {
     "description": string;
     "builtin": boolean;
     "docx": DocxStyle;
+
+    /**
+     * a custom template's base template; "" for others
+     */
+    "base": string;
+
+    /**
+     * a custom template's changes to its base; empty for others
+     */
+    "style": Style;
 }

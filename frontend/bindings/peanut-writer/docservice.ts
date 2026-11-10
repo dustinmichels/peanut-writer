@@ -67,11 +67,20 @@ export function ConfirmDiscard(name: string): $CancellablePromise<string> {
 }
 
 /**
- * CustomizeTemplate copies a template into the user's templates folder,
- * shows it in Finder and returns the new template's id.
+ * CustomTemplate is the open document's own template; nil if it has none.
  */
-export function CustomizeTemplate(id: string): $CancellablePromise<string> {
-    return $Call.ByID(611863700, id);
+export function CustomTemplate(): $CancellablePromise<templates$0.Template | null> {
+    return $Call.ByID(2250715498);
+}
+
+/**
+ * CustomizeTemplate gives the open document its own template, based on the
+ * template base with nothing changed yet, unless it has one already, and
+ * returns it. It's kept beside the document (an untitled one's once it's
+ * saved).
+ */
+export function CustomizeTemplate(base: string): $CancellablePromise<templates$0.Template> {
+    return $Call.ByID(611863700, base);
 }
 
 /**
@@ -107,6 +116,21 @@ export function ExportPDF(content: string): $CancellablePromise<string> {
 }
 
 /**
+ * Fonts lists the fonts a document's own template can use: those Typst
+ * finds.
+ */
+export function Fonts(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(2635109963);
+}
+
+/**
+ * ForgetRecent takes p off the recent list.
+ */
+export function ForgetRecent(p: string): $CancellablePromise<void> {
+    return $Call.ByID(1520962329, p);
+}
+
+/**
  * Format tidies the document's Markdown with oxfmt and, if titleCase, puts
  * its headings in title case.
  */
@@ -133,7 +157,7 @@ export function ImportTemplate(): $CancellablePromise<string> {
 /**
  * NewDocument asks for a name and a place, and starts a document in a folder
  * of that name there, its properties titled with the name (in title case),
- * dated today and marked with the app's version.
+ * authored by the default author, dated today and marked with the app's version.
  */
 export function NewDocument(): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(1108794262);
@@ -183,6 +207,14 @@ export function RecentFiles(): $CancellablePromise<$models.RecentFile[] | null> 
 }
 
 /**
+ * RemoveCustomTemplate deletes the open document's own template and returns
+ * the id of the template it was based on.
+ */
+export function RemoveCustomTemplate(): $CancellablePromise<string> {
+    return $Call.ByID(3377224598);
+}
+
+/**
  * RenameTemplate sets one of the user's templates' name and description.
  */
 export function RenameTemplate(id: string, name: string, description: string): $CancellablePromise<void> {
@@ -227,6 +259,37 @@ export function SetDirty(dirty: boolean): $CancellablePromise<void> {
 }
 
 /**
+ * SetDocumentSettings sets the open document's settings; an untitled
+ * document's are written beside it when it's first saved.
+ */
+export function SetDocumentSettings($set: $models.Settings): $CancellablePromise<void> {
+    return $Call.ByID(1322207221, $set);
+}
+
+/**
+ * SetTemplateStyle sets the fonts and colors of the open document's own
+ * template and returns it.
+ */
+export function SetTemplateStyle(style: templates$0.Style): $CancellablePromise<templates$0.Template> {
+    return $Call.ByID(839137448, style);
+}
+
+/**
+ * SetUserSettings sets the user's settings.
+ */
+export function SetUserSettings($set: $models.Settings): $CancellablePromise<void> {
+    return $Call.ByID(3937766603, $set);
+}
+
+/**
+ * Settings reads the user's settings and the open document's. Both files
+ * are read afresh, so edits made to them by hand count.
+ */
+export function Settings(): $CancellablePromise<$models.SettingsInfo> {
+    return $Call.ByID(3079978238);
+}
+
+/**
  * ShareTemplate asks where to save one of the user's templates as a .zip
  * (for ImportTemplate on another computer), writes it and shows it in
  * Finder. It returns the file's path, or "" if canceled.
@@ -253,7 +316,8 @@ export function SyncFiles(content: string): $CancellablePromise<string[] | null>
 }
 
 /**
- * TemplatePreview is the welcome guide's first page in a template, as SVG.
+ * TemplatePreview is the welcome guide's first page in a template (the open
+ * document's own for templates.CustomID), as SVG.
  */
 export function TemplatePreview(id: string): $CancellablePromise<string> {
     return $Call.ByID(3553919739, id);

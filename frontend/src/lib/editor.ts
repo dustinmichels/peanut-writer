@@ -41,7 +41,6 @@ import {
   EditorView,
   highlightActiveLine,
   keymap,
-  placeholder,
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
@@ -83,6 +82,37 @@ const frontMatterEnd = StateField.define<number>({
   create: (s) => readFrontMatter(s.doc.toString()).to,
   update: (end, tr) => (tr.docChanged ? readFrontMatter(tr.state.doc.toString()).to : end),
 });
+
+// bodyHint shows "Begin typing…" where the text goes while there's none, under
+// the properties too (CodeMirror's placeholder only shows in an empty document).
+class BodyHint extends WidgetType {
+  eq() {
+    return true;
+  }
+  toDOM() {
+    const span = document.createElement("span");
+    span.className = "cm-placeholder";
+    span.setAttribute("aria-hidden", "true");
+    span.textContent = "Begin typing…";
+    return span;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const bodyHint = EditorView.decorations.compute(["doc", frontMatterEnd], (s) => {
+  const doc = s.doc;
+  const fmEnd = s.field(frontMatterEnd);
+  if (doc.lineAt(doc.length).from < fmEnd || doc.sliceString(fmEnd).trim()) return Decoration.none;
+  return Decoration.set(Decoration.widget({ widget: new BodyHint(), side: 1 }).range(doc.length));
+});
+
+// startSelection puts the cursor under the properties of a document with no
+// text yet, where its first words go.
+function startSelection(doc: string): { anchor: number } | undefined {
+  return doc.slice(readFrontMatter(doc).to).trim() ? undefined : { anchor: doc.length };
+}
 
 // --- Widgets -------------------------------------------------------------------
 
@@ -1686,7 +1716,7 @@ export function createEditor(
     search({ top: true }),
     EditorView.lineWrapping,
     EditorState.allowMultipleSelections.of(false),
-    placeholder("Start writing…"),
+    bodyHint,
     markdown({ base: markdownLanguage, addKeymap: false }),
     syntaxHighlighting(highlight),
     theme,
@@ -1722,6 +1752,7 @@ export function createEditor(
     parent,
     state: EditorState.create({
       doc,
+      selection: startSelection(doc),
       extensions: [extensions, showSlot.of(showMarkdown.of(show))],
     }),
   });
@@ -1736,7 +1767,9 @@ export function replaceDoc(view: EditorView, doc: string) {
   imageCache.clear(); // picture paths are relative to the document
   const { extensions, handlers } = editorSetup.get(view)!;
   const show = showSlot.of(showMarkdown.of(view.state.facet(showMarkdown)));
-  view.setState(EditorState.create({ doc, extensions: [extensions, show] }));
+  view.setState(
+    EditorState.create({ doc, selection: startSelection(doc), extensions: [extensions, show] }),
+  );
   handlers.changed(view.state, false); // setState skips update listeners
 }
 

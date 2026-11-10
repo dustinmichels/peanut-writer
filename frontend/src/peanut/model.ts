@@ -1,6 +1,7 @@
 // Peanut, the plush character from github.com/dustinmichels/peanut, trimmed
-// to what the writing buddy needs: body, face, legs, sitting, bouncing and
-// blinking. Accessories, material modes and jumps are left behind.
+// to what the writing buddy needs: body, face, legs, perching on a ledge,
+// walking, bouncing and blinking. Accessories, material modes and jumps are
+// left behind.
 
 import * as THREE from "three";
 import { fbm3D } from "./noise";
@@ -13,6 +14,9 @@ import {
 
 export interface PeanutModelHandle {
   group: THREE.Group;
+  // Rides along on the body at the centre of his smile, so the speech bubble
+  // can point at it through every pose.
+  mouth: THREE.Object3D;
   // Advance the pose. bounceProgress runs 0→1 during a bounce, else 0;
   // blinkProgress likewise during a blink.
   animate: (
@@ -21,14 +25,18 @@ export interface PeanutModelHandle {
     blinkProgress: number,
     deltaSeconds: number,
   ) => void;
+  // Perch on the ledge (y = 0) with legs dangling below it, or stand on it.
   setSitting: (sitting: boolean) => void;
-  setLegsCrossed: (crossed: boolean) => void;
+  // Walk in place facing screen-left (-1) or screen-right (1); 0 stops and
+  // turns back to the camera. Moving him across the screen is the caller's job.
+  walk: (direction: -1 | 0 | 1) => void;
   dispose: () => void;
 }
 
-// Standing & Sitting pose transform definitions
+// Standing & perched pose transform definitions. Perched, the bottom of the
+// body (local y 0.75, squashed to ~0.71) rests on the ledge.
 const STAND_BODY_POS = new THREE.Vector3(0, 0, 0);
-const SIT_BODY_POS = new THREE.Vector3(0, -0.68, -0.05);
+const PERCH_BODY_POS = new THREE.Vector3(0, -0.71, -0.08);
 
 // Hip joint anchor locations in bodyContainer local space (embedded in the lower body bulb)
 const HIP_RIGHT_LOCAL = new THREE.Vector3(0.2, 0.94, 0.04);
@@ -44,48 +52,36 @@ const STAND_LEFT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
   new THREE.Euler(-0.02, -0.04, 0.02),
 );
 
-// Seated leg transforms (legs stretch forward and slightly splayed, matching Jellycat reference)
-const SIT_RIGHT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(-1.34, 0.18, -0.2, "YXZ"),
+// Perched leg transforms: legs hang over the ledge, feet a little forward and
+// splayed, kicking gently out of step.
+const PERCH_RIGHT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(-0.45, 0.08, -0.07, "YXZ"),
 );
-const SIT_LEFT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(-1.34, -0.18, 0.2, "YXZ"),
+const PERCH_LEFT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(-0.45, -0.08, 0.07, "YXZ"),
 );
 
 const STAND_RIGHT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0));
 const STAND_LEFT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, 0));
 
-// Seated foot angles: soles tilt up and face forward/outward, showing off the ribbed corduroy soles
-const SIT_RIGHT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(0, 0.12, -0.08, "YXZ"),
+// Perched feet droop, toes pointing a little down.
+const PERCH_RIGHT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(0.7, 0.1, 0, "YXZ"),
 );
-const SIT_LEFT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(0, -0.12, 0.08, "YXZ"),
-);
-
-// Cross legs pose transform definitions (seated cross-legged in front of the body)
-const CROSS_RIGHT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(-1.36, -0.48, 0.38, "YXZ"),
-);
-const CROSS_LEFT_LEG_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(-1.36, 0.48, -0.38, "YXZ"),
+const PERCH_LEFT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
+  new THREE.Euler(0.7, -0.1, 0, "YXZ"),
 );
 
-const CROSS_RIGHT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(0, -0.28, 0.12, "YXZ"),
-);
-const CROSS_LEFT_FOOT_QUAT = new THREE.Quaternion().setFromEuler(
-  new THREE.Euler(0, 0.28, -0.12, "YXZ"),
-);
+// Facing while walking: the camera sits at yaw ~0.37 rad, so ±π/2 from there
+// is profile; pulled 0.35 rad back toward the camera to keep his face in view.
+const CAMERA_YAW = 0.37;
+const WALK_HEADING = Math.PI / 2 - 0.35;
+const STEP_HZ = 1.6; // full gait cycles per second
 
 const tempTargetHipR = new THREE.Vector3();
 const tempTargetHipL = new THREE.Vector3();
 const tempLegVecR = new THREE.Vector3();
 const tempLegVecL = new THREE.Vector3();
-const tempSitRightLegQuat = new THREE.Quaternion();
-const tempSitLeftLegQuat = new THREE.Quaternion();
-const tempSitRightFootQuat = new THREE.Quaternion();
-const tempSitLeftFootQuat = new THREE.Quaternion();
 function smoothstep(min: number, max: number, value: number): number {
   const x = Math.max(0, Math.min(1, (value - min) / (max - min)));
   return x * x * (3 - 2 * x);
@@ -570,6 +566,9 @@ export function createPeanutModel(): PeanutModelHandle {
     metalness: 0.05,
   });
   bodyContainer.add(createSmileMesh(mouthThreadMaterial));
+  const mouth = new THREE.Object3D();
+  mouth.position.set(0, 2.28, 0.835);
+  bodyContainer.add(mouth);
 
   // 4. Corduroy Legs & Booties
   const { legGroup: leftLeg, footGroup: leftFoot } = createCorduroyLeg(false, corduroyTextures);
@@ -590,19 +589,19 @@ export function createPeanutModel(): PeanutModelHandle {
   shadowMesh.position.set(0, 0.002, 0.02);
   rootGroup.add(shadowMesh);
 
-  // Sitting & legs-crossed state with smooth progress
+  // Perched/standing and walking state, each eased in and out
   let isSitting = false;
   let sitProgress = 0.0;
-  let isLegsCrossed = false;
-  let crossProgress = 0.0;
+  let walkDir: -1 | 0 | 1 = 0;
+  let walkAmount = 0.0;
+  let walkPhase = 0.0;
 
   function setSitting(sitting: boolean) {
     isSitting = sitting;
-    if (!sitting) isLegsCrossed = false;
   }
 
-  function setLegsCrossed(crossed: boolean) {
-    isLegsCrossed = crossed;
+  function walk(direction: -1 | 0 | 1) {
+    walkDir = direction;
   }
 
   function animate(
@@ -612,21 +611,20 @@ export function createPeanutModel(): PeanutModelHandle {
     deltaSeconds: number,
   ) {
     const sitSpeed = 2.0; // ~0.5s transition
-    const crossSpeed = 2.4; // ~0.4s transition
     if (isSitting && sitProgress < 1.0) {
       sitProgress = Math.min(1.0, sitProgress + deltaSeconds * sitSpeed);
     } else if (!isSitting && sitProgress > 0.0) {
       sitProgress = Math.max(0.0, sitProgress - deltaSeconds * sitSpeed);
     }
-    if (isSitting && sitProgress > 0.6) {
-      if (isLegsCrossed && crossProgress < 1.0) {
-        crossProgress = Math.min(1.0, crossProgress + deltaSeconds * crossSpeed);
-      } else if (!isLegsCrossed && crossProgress > 0.0) {
-        crossProgress = Math.max(0.0, crossProgress - deltaSeconds * crossSpeed);
-      }
-    } else {
-      crossProgress = 0.0;
-    }
+    const walkStep = deltaSeconds * 4; // ~0.25s to start or stop striding
+    walkAmount =
+      walkDir === 0 ? Math.max(0, walkAmount - walkStep) : Math.min(1, walkAmount + walkStep);
+    walkPhase += deltaSeconds * Math.PI * 2 * STEP_HZ * walkAmount;
+    const w = walkAmount * walkAmount * (3 - 2 * walkAmount); // smoothstep
+
+    // Turn toward the walking direction, or back to the camera's three-quarter view
+    const heading = walkDir === 0 ? 0 : CAMERA_YAW + walkDir * WALK_HEADING;
+    rootGroup.rotation.y += (heading - rootGroup.rotation.y) * Math.min(1, deltaSeconds * 8);
 
     // Blink: squeeze the bead eyes flat and back open
     const eyeScaleY = 1.0 - 0.9 * Math.sin(blinkProgress * Math.PI);
@@ -635,40 +633,39 @@ export function createPeanutModel(): PeanutModelHandle {
 
     const s = sitProgress * sitProgress * (3 - 2 * sitProgress); // smoothstep
 
-    // Gentle breathing and sway
+    // Gentle breathing and sway, plus a waddle and bob while walking
     const breathPhase = Math.sin(time * 1.8);
     const breatheScaleY = 1.0 + breathPhase * 0.018;
     const breatheScaleXZ = 1.0 - breathPhase * 0.012;
-    const swayTiltZ = Math.sin(time * 0.9) * 0.022;
+    const swayTiltZ = Math.sin(time * 0.9) * 0.022 + Math.sin(walkPhase) * 0.07 * w;
     const swayTiltX = Math.cos(time * 0.9) * 0.012;
+    const walkBob = -Math.abs(Math.sin(walkPhase)) * 0.05 * w;
 
-    // Body sitting position, rotation & squash
-    const seatPosY = THREE.MathUtils.lerp(STAND_BODY_POS.y, SIT_BODY_POS.y, s);
-    const seatPosZ = THREE.MathUtils.lerp(STAND_BODY_POS.z, SIT_BODY_POS.z, s);
+    // Body perching position, rotation & squash
+    const seatPosY = THREE.MathUtils.lerp(STAND_BODY_POS.y, PERCH_BODY_POS.y, s) + walkBob;
+    const seatPosZ = THREE.MathUtils.lerp(STAND_BODY_POS.z, PERCH_BODY_POS.z, s);
     const seatTiltX = THREE.MathUtils.lerp(0, -0.05, s);
     const seatSquashY = THREE.MathUtils.lerp(1.0, 0.95, s);
     const seatSquashXZ = THREE.MathUtils.lerp(1.0, 1.03, s);
 
-    // Contact shadow expansion when seated
+    // Contact shadow on the floor while standing; perched there's no floor below
     shadowMesh.position.y = 0.002;
-    shadowMesh.position.z = THREE.MathUtils.lerp(0.02, -0.02, s);
-    const shadowScale = THREE.MathUtils.lerp(1.0, 1.28, s);
-    shadowMesh.scale.set(shadowScale, shadowScale, shadowScale);
-    shadowMat.opacity = THREE.MathUtils.lerp(0.85, 0.92, s);
+    shadowMat.opacity = THREE.MathUtils.lerp(0.85, 0, s);
 
-    // Leg & foot rotations interpolated between standing and seated/crossed
-    const c = crossProgress * crossProgress * (3 - 2 * crossProgress); // smoothstep
-    tempSitRightLegQuat.copy(SIT_RIGHT_LEG_QUAT).slerp(CROSS_RIGHT_LEG_QUAT, c);
-    tempSitLeftLegQuat.copy(SIT_LEFT_LEG_QUAT).slerp(CROSS_LEFT_LEG_QUAT, c);
-    tempSitRightFootQuat.copy(SIT_RIGHT_FOOT_QUAT).slerp(CROSS_RIGHT_FOOT_QUAT, c);
-    tempSitLeftFootQuat.copy(SIT_LEFT_FOOT_QUAT).slerp(CROSS_LEFT_FOOT_QUAT, c);
-
-    // Swing legs forward in sync with body descent
+    // Legs swing from standing to dangling in sync with the body's descent
     const rotS = Math.min(1.0, Math.pow(s, 0.75));
-    rightLeg.quaternion.copy(STAND_RIGHT_LEG_QUAT).slerp(tempSitRightLegQuat, rotS);
-    leftLeg.quaternion.copy(STAND_LEFT_LEG_QUAT).slerp(tempSitLeftLegQuat, rotS);
-    rightFoot.quaternion.copy(STAND_RIGHT_FOOT_QUAT).slerp(tempSitRightFootQuat, rotS);
-    leftFoot.quaternion.copy(STAND_LEFT_FOOT_QUAT).slerp(tempSitLeftFootQuat, rotS);
+    rightLeg.quaternion.copy(STAND_RIGHT_LEG_QUAT).slerp(PERCH_RIGHT_LEG_QUAT, rotS);
+    leftLeg.quaternion.copy(STAND_LEFT_LEG_QUAT).slerp(PERCH_LEFT_LEG_QUAT, rotS);
+    rightFoot.quaternion.copy(STAND_RIGHT_FOOT_QUAT).slerp(PERCH_RIGHT_FOOT_QUAT, rotS);
+    leftFoot.quaternion.copy(STAND_LEFT_FOOT_QUAT).slerp(PERCH_LEFT_FOOT_QUAT, rotS);
+
+    // Dangling feet kick out of step; walking legs stride out of step
+    const kick = Math.sin(time * 2.4) * 0.16 * s;
+    const stride = Math.sin(walkPhase) * 0.5 * w;
+    tempBounceQuat.setFromEuler(tempBounceEuler.set(kick + stride, 0, 0));
+    rightLeg.quaternion.multiply(tempBounceQuat);
+    tempBounceQuat.setFromEuler(tempBounceEuler.set(-kick - stride, 0, 0));
+    leftLeg.quaternion.multiply(tempBounceQuat);
 
     let squashY = 1.0;
     let squashXZ = 1.0;
@@ -710,7 +707,8 @@ export function createPeanutModel(): PeanutModelHandle {
     tempLegVecL.copy(LEG_HIP_OFFSET).applyQuaternion(leftLeg.quaternion);
     leftLeg.position.copy(tempTargetHipL).sub(tempLegVecL);
 
-    if (bounceProgress <= 0) {
+    // Standing feet stay on the floor; perched they hang below it
+    if (bounceProgress <= 0 && s === 0) {
       if (rightLeg.position.y < 0.002) rightLeg.position.y = 0.002;
       if (leftLeg.position.y < 0.002) leftLeg.position.y = 0.002;
     }
@@ -738,5 +736,5 @@ export function createPeanutModel(): PeanutModelHandle {
     }
   }
 
-  return { group: rootGroup, animate, setSitting, setLegsCrossed, dispose };
+  return { group: rootGroup, mouth, animate, setSitting, walk, dispose };
 }

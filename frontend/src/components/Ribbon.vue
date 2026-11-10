@@ -48,6 +48,7 @@ import {
   choosePicture,
   choosePictureGrid,
   customizeTemplate,
+  editLink,
   exportDocx,
   exportPdf,
   menu,
@@ -111,13 +112,6 @@ const styles: { id: BlockStyle; label: string; cls: string }[] = [
   { id: "quote", label: "Quote", cls: "s-quote" },
 ];
 
-function link() {
-  const v = editor.value;
-  if (!v) return;
-  const { from, to } = v.state.selection.main;
-  state.dialog = { kind: "link", text: v.state.sliceDoc(from, to) };
-}
-
 function pickTable(cols: number, rows: number) {
   tablePicker.value = false;
   state.dialog = { kind: "table", cols, rows };
@@ -143,7 +137,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
       >
         {{ t.label }}
       </button>
-      <PeanutBuddy />
+      <PeanutBuddy v-if="state.showPeanut" />
     </div>
 
     <div v-show="!collapsed" class="panel">
@@ -261,7 +255,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               />
             </div>
             <div class="row">
-              <RibbonButton :icon="Link" title="Link" @click="link" />
+              <RibbonButton :icon="Link" title="Link" @click="editLink" />
               <RibbonButton
                 :icon="RemoveFormatting"
                 title="Clear formatting"
@@ -375,7 +369,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Link" label="Link" @click="link" />
+            <RibbonButton big :icon="Link" label="Link" @click="editLink" />
             <RibbonButton
               big
               :icon="Footprints"
@@ -464,14 +458,15 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               big
               :icon="SlidersHorizontal"
               label="Settings"
-              title="Document settings: auto format, title case (⌘,)"
+              title="Settings, global and for this document: auto format, title case (⌘,)"
               @click="state.dialog = { kind: 'settings' }"
             />
             <RibbonButton
               big
               :icon="Palette"
               label="Customize"
-              title="Make an editable copy of this template"
+              title="Change this document's fonts and colors"
+              :active="state.customizing"
               @click="customizeTemplate"
             />
             <RibbonButton

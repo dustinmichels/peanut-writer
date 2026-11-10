@@ -2,12 +2,14 @@
 import { ref } from "vue";
 import {
   ChevronDown,
+  Command,
   FileDown,
   FileText,
   FolderOpen,
   Redo2,
   RefreshCw,
   Save,
+  SlidersHorizontal,
   Undo2,
 } from "lucide-vue-next";
 import { exportDocx, exportPdf, menu, save, showInFolder, syncFiles } from "../lib/actions";
@@ -45,8 +47,14 @@ function pick(f: () => unknown) {
       </Transition>
     </div>
     <div class="right">
+      <button class="icon" title="Commands (⇧⌘P)" @click="menu('commands')">
+        <Command :size="15" />
+      </button>
       <button class="icon" title="Show in Finder" :disabled="!state.path" @click="showInFolder">
         <FolderOpen :size="15" />
+      </button>
+      <button class="icon" title="Settings (⌘,)" @click="menu('settings')">
+        <SlidersHorizontal :size="15" />
       </button>
       <button
         class="btn"

@@ -1,31 +1,37 @@
 <script setup lang="ts">
 import { onMounted, reactive, watch } from "vue";
 import { DocService } from "../../bindings/peanut-writer";
+import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
 import { setTemplate } from "../lib/actions";
-import { state } from "../lib/store";
+import { docTemplates, state } from "../lib/store";
 
+// Previews by key: a template's id, and for the document's own one its
+// changes too, so a changed one is drawn again.
 const previews = reactive<Record<string, string>>({});
+const key = (t: Template) => (t.base ? `${t.id}:${t.base}:${JSON.stringify(t.style)}` : t.id);
 
 async function load() {
-  for (const t of state.templates) {
-    if (previews[t.id]) continue;
+  for (const t of docTemplates.value) {
+    const k = key(t);
+    if (k in previews) continue;
+    previews[k] = "";
     try {
       const svg = await DocService.TemplatePreview(t.id);
       // An <img> keeps each SVG's ids to itself.
-      previews[t.id] = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      previews[k] = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     } catch {
-      previews[t.id] = "";
+      // Shown as loading.
     }
   }
 }
 onMounted(load);
-watch(() => state.templates.length, load);
+watch(() => docTemplates.value.map(key).join("\n"), load);
 </script>
 
 <template>
   <div class="gallery">
     <button
-      v-for="t in state.templates"
+      v-for="t in docTemplates"
       :key="t.id"
       class="card"
       :class="{ active: state.template === t.id }"
@@ -34,7 +40,7 @@ watch(() => state.templates.length, load);
       @click="setTemplate(t.id)"
     >
       <div class="thumb">
-        <img v-if="previews[t.id]" :src="previews[t.id]" alt="" />
+        <img v-if="previews[key(t)]" :src="previews[key(t)]" alt="" />
         <div v-else class="loading" />
       </div>
       <span>{{ t.name }}</span>

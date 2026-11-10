@@ -25,6 +25,9 @@ import (
 //go:embed peanut.typ
 var renderer []byte
 
+//go:embed style.typ
+var styleTyp []byte
+
 const timeout = 60 * time.Second
 
 // main.typ: the template's show rule over the rendered body.
@@ -136,8 +139,26 @@ func (t *Typst) PNG(ctx context.Context, path string, widthPt float64) ([]byte, 
 	return os.ReadFile(filepath.Join(dir, "out.png"))
 }
 
-// workspace writes main.typ, the renderer, the template and doc.json to a
-// new temporary folder.
+// Fonts lists the font families Typst can use, by name.
+func (t *Typst) Fonts(ctx context.Context) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, t.Bin, "fonts").Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing fonts: %w", err)
+	}
+	var fonts []string
+	for _, l := range strings.Split(string(out), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			fonts = append(fonts, l)
+		}
+	}
+	return fonts, nil
+}
+
+// workspace writes main.typ, the renderer, the template, its style (a custom
+// template's changes, read by style.typ) and doc.json to a new temporary
+// folder.
 func (t *Typst) workspace(d *doc.Document, tpl templates.Template) (string, error) {
 	src, err := tpl.Source()
 	if err != nil {
@@ -147,11 +168,19 @@ func (t *Typst) workspace(d *doc.Document, tpl templates.Template) (string, erro
 	if err != nil {
 		return "", err
 	}
+	style, err := json.Marshal(tpl.Style)
+	if err != nil {
+		return "", err
+	}
 	dir, err := os.MkdirTemp("", "peanut-render-*")
 	if err != nil {
 		return "", err
 	}
-	for name, b := range map[string][]byte{"main.typ": []byte(mainTyp), "peanut.typ": renderer, "template.typ": src, "doc.json": data} {
+	files := map[string][]byte{
+		"main.typ": []byte(mainTyp), "peanut.typ": renderer, "template.typ": src,
+		"style.typ": styleTyp, "style.json": style, "doc.json": data,
+	}
+	for name, b := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
 			os.RemoveAll(dir)
 			return "", err

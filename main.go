@@ -109,7 +109,7 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	file.Add("Export as Word…").SetAccelerator("CmdOrCtrl+Shift+E").OnClick(send("exportDocx"))
 	file.Add("Sync Files").SetAccelerator("CmdOrCtrl+Shift+Y").OnClick(send("syncFiles"))
 	file.AddSeparator()
-	file.Add("Document Settings…").SetAccelerator("CmdOrCtrl+,").OnClick(send("settings"))
+	file.Add("Settings…").SetAccelerator("CmdOrCtrl+,").OnClick(send("settings"))
 
 	edit := m.AddSubmenu("Edit")
 	edit.Add("Undo").SetAccelerator("CmdOrCtrl+Z").OnClick(send("undo"))
@@ -129,6 +129,8 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	view.AddSeparator()
 	view.Add("Show Markdown").SetAccelerator("CmdOrCtrl+/").OnClick(send("markdown"))
 	view.Add("Outline").OnClick(send("outline"))
+	view.AddSeparator()
+	view.Add("Command Palette…").SetAccelerator("CmdOrCtrl+Shift+P").OnClick(send("commands"))
 
 	m.AddRole(application.WindowMenu)
 	help := m.AddSubmenu("Help")

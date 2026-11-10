@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { state } from "../lib/store";
-import { createPeanutStage, type PeanutStage } from "../peanut/stage";
+import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "../peanut/stage";
 
-// Peanut keeps you company from beside the ribbon tabs: he breathes, blinks,
-// sits down and stands up now and then, and cheers you on while you write.
+// Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
+// the edge of the tab row with his legs dangling over the ribbon; now and
+// then he stands up, or strolls along the open stretch of the title bar and
+// sits down somewhere new. He breathes, blinks, and cheers you on while you
+// write; click him for a word of encouragement.
 
 const CHEERS = [
   "You can do it!",
@@ -23,9 +26,32 @@ const CHEERS = [
 ];
 const MILESTONE = 250; // words
 const SAY_MS = 6000;
+const WALK_PX_PER_S = 28;
+const MIN_STROLL_PX = 40;
+const GAP = 10; // kept clear around the title, title bar buttons and tabs
+const STAGE_W = 52; // his stage, and the strip of ledge he occupies
+const STAGE_ABOVE = 65; // stage height above the ledge
+const BUBBLE_GAP = 6; // between his stage and the bubble, crossed by its tail
+const BUBBLE_BOTTOM = 2; // bubble's lift off the ledge
+const widthPx = `${STAGE_W}px`;
+const abovePx = `${STAGE_ABOVE}px`;
+const dropPx = `${LEDGE_DROP_PX}px`;
+const bubbleGapPx = `${BUBBLE_GAP}px`;
+const bubbleBottomPx = `${BUBBLE_BOTTOM}px`;
 
+const homeEl = ref<HTMLElement>();
+const walkerEl = ref<HTMLElement>();
 const stageEl = ref<HTMLElement>();
+const speechEl = ref<HTMLElement>();
+const tailBackEl = ref<SVGPathElement>();
+const tailFrontEl = ref<SVGPathElement>();
 const message = ref("");
+const bubbleSide = ref<"left" | "right">("left");
+const bubbleMax = ref(300);
+// Offset from his home spot (px, negative is left) and how long the current
+// stroll there takes; 0 moves him at once.
+const x = ref(0);
+const walkMs = ref(0);
 let stage: PeanutStage | undefined;
 const timers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -38,15 +64,68 @@ function later(ms: number, f: () => void) {
   }, ms);
   timers.add(t);
 }
+const pause = (ms: number) => new Promise<void>((resolve) => later(ms, resolve));
+
+// The bubble goes on whichever side has more open room in the tab row: left
+// up to the last tab, right up to the window edge. One line stays below both
+// the centred title and the title bar buttons.
+function placeBubble() {
+  const me = walkerEl.value!.getBoundingClientRect();
+  const tabsEnd = homeEl.value!.previousElementSibling?.getBoundingClientRect().right ?? 0;
+  const left = me.left - tabsEnd - GAP - BUBBLE_GAP;
+  const right = window.innerWidth - me.right - GAP - BUBBLE_GAP;
+  bubbleSide.value = left >= right ? "left" : "right";
+  bubbleMax.value = Math.min(300, Math.max(left, right));
+}
+
+// His mouth, in px from the walker's left edge and up from the ledge; the
+// stage reports it every frame as he sits, stands, bounces and turns.
+let mouthX = STAGE_W / 2;
+let mouthUp = STAGE_ABOVE / 2;
+function onMouth(x: number, y: number) {
+  mouthX = x;
+  mouthUp = STAGE_ABOVE - y;
+  if (message.value) drawTail();
+}
+
+// The tail curls from inside the bubble's inner edge to just short of his
+// mouth. It passes under the stage, so his body hides whatever would cross
+// his face. Drawn twice: an outlined copy below the bubble and a fill-only
+// copy above it that erases the bubble's border where the two join.
+function drawTail() {
+  if (!speechEl.value) return;
+  const dir = bubbleSide.value === "left" ? -1 : 1; // from him toward the bubble
+  const edge = dir < 0 ? -BUBBLE_GAP : STAGE_W + BUBBLE_GAP;
+  const baseX = edge + dir * 10;
+  const baseLo = BUBBLE_BOTTOM + 6;
+  const baseHi = BUBBLE_BOTTOM + 22;
+  const tipX = mouthX + dir * 3;
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  // Both sides bow toward the bubble's middle height, so the tail stays plump
+  // where it leaves the bubble and narrows quickly to the tip.
+  const midX = lerp(edge, tipX, 0.55);
+  const midUp = (baseLo + baseHi) / 2;
+  const d =
+    `M${baseX},${-baseHi} Q${midX},${-lerp(lerp(baseHi, midUp, 0.4), mouthUp, 0.35)} ` +
+    `${tipX},${-mouthUp} Q${midX},${-lerp(lerp(baseLo, midUp, 0.4), mouthUp, 0.35)} ` +
+    `${baseX},${-baseLo}Z`;
+  tailBackEl.value!.setAttribute("d", d);
+  tailFrontEl.value!.setAttribute("d", d);
+  // Pop in and out of his mouth.
+  speechEl.value.style.transformOrigin = `${tipX}px ${-mouthUp}px`;
+}
 
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
 let lastSaidAt = 0;
-function say(text: string) {
+async function say(text: string) {
+  placeBubble();
   message.value = text;
   lastSaidAt = Date.now();
   stage?.bounce();
   clearTimeout(hideTimer);
   hideTimer = setTimeout(() => (message.value = ""), SAY_MS);
+  await nextTick();
+  drawTail();
 }
 
 let lastCheer = "";
@@ -64,16 +143,57 @@ function blinkLoop() {
   });
 }
 
-type Pose = "stand" | "sit" | "cross";
-let pose: Pose = "stand";
-function poseLoop() {
-  later(rand(25_000, 60_000), () => {
-    const next = (["stand", "sit", "cross"] as Pose[]).filter((p) => p !== pose);
-    pose = next[Math.floor(Math.random() * next.length)];
-    stage?.setSitting(pose !== "stand");
-    stage?.setLegsCrossed(pose === "cross");
-    poseLoop();
+// Where he may stroll, as offsets from home: standing, his head pokes into
+// the title bar, so he keeps between the centred title and the buttons.
+function strollRange(): [number, number] {
+  const home = homeEl.value!.getBoundingClientRect();
+  const title = document.querySelector(".titlebar .title")?.getBoundingClientRect();
+  const buttons = document
+    .querySelector(".titlebar .right > :first-child")
+    ?.getBoundingClientRect();
+  const max = Math.min(0, buttons ? buttons.left - GAP - home.right : 0);
+  const min = title ? title.right + GAP - home.left : max;
+  return [Math.min(min, max), max];
+}
+
+let perched = true;
+function perch(sit: boolean) {
+  perched = sit;
+  stage?.setSitting(sit);
+}
+
+async function stroll() {
+  const [min, max] = strollRange();
+  const target = rand(min, max);
+  const distance = Math.abs(target - x.value);
+  if (distance < MIN_STROLL_PX) return;
+  if (perched) {
+    perch(false);
+    await pause(700);
+  }
+  stage?.walk(target < x.value ? -1 : 1);
+  walkMs.value = (distance / WALK_PX_PER_S) * 1000;
+  x.value = target;
+  await pause(walkMs.value);
+  stage?.walk(0);
+  await pause(600);
+  perch(true);
+}
+
+// Every so often: stand up or sit back down, or stroll somewhere new and sit.
+function activityLoop() {
+  later(rand(20_000, 50_000), async () => {
+    if (Math.random() < 0.5) await stroll();
+    else perch(!perched);
+    activityLoop();
   });
+}
+
+// A narrower window can leave him over the title or the buttons; step aside.
+function onResize() {
+  const [min, max] = strollRange();
+  walkMs.value = 0;
+  x.value = Math.min(max, Math.max(min, x.value));
 }
 
 // While you're writing, a cheer every few minutes; nothing while you're away.
@@ -102,16 +222,19 @@ function onPointerDown(e: PointerEvent) {
 }
 
 onMounted(() => {
-  stage = createPeanutStage(stageEl.value!);
+  stage = createPeanutStage(stageEl.value!, onMouth);
+  perch(true);
   window.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("resize", onResize);
   later(1200, () => say("Hi, I'm Peanut! You can do it!"));
   blinkLoop();
-  poseLoop();
+  activityLoop();
   cheerLoop();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("pointerdown", onPointerDown);
+  window.removeEventListener("resize", onResize);
   timers.forEach(clearTimeout);
   clearTimeout(hideTimer);
   stage?.dispose();
@@ -119,60 +242,121 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="buddy">
-    <Transition name="bubble">
-      <div v-if="message" class="bubble" aria-live="polite">{{ message }}</div>
-    </Transition>
-    <div ref="stageEl" class="stage" role="img" aria-label="Peanut, your writing buddy" />
+  <div ref="homeEl" class="buddy">
+    <div
+      ref="walkerEl"
+      class="walker"
+      :style="{ transform: `translateX(${x}px)`, transitionDuration: `${walkMs}ms` }"
+    >
+      <Transition name="speech">
+        <div v-if="message" ref="speechEl" class="speech" :class="bubbleSide">
+          <svg class="tail back" aria-hidden="true"><path ref="tailBackEl" /></svg>
+          <div class="bubble" :style="{ maxWidth: `${bubbleMax}px` }" aria-live="polite">
+            {{ message }}
+          </div>
+          <svg class="tail front" aria-hidden="true"><path ref="tailFrontEl" /></svg>
+        </div>
+      </Transition>
+      <div ref="stageEl" class="stage" role="img" aria-label="Peanut, your writing buddy" />
+    </div>
   </div>
 </template>
 
 <style scoped>
-/* Clicks pass through to the page; Peanut hit-tests them himself. He stands
-   on the ribbon panel at the right end of the tab row, his head poking up
-   into the title bar just left of the Export button. */
+/* Clicks pass through to the page; Peanut hit-tests them himself. His home is
+   the bottom edge of the tab row (the line above the ribbon panel), just left
+   of the Show in Finder, Sync files and Export buttons in the title bar. */
 .buddy {
   position: relative;
   z-index: 90;
-  width: 52px;
-  margin: 0 120px 0 auto; /* clear of the Export button above */
+  width: v-bind(widthPx);
+  margin: 0 290px 0 auto; /* clear of the title bar buttons above */
   pointer-events: none;
 }
-.stage {
+/* Strolls slide him along the ledge at walking pace. */
+.walker {
   position: absolute;
   left: 0;
   bottom: 0;
-  width: 52px;
-  height: 65px;
+  width: v-bind(widthPx);
+  transition-property: transform;
+  transition-timing-function: linear;
 }
-/* Speaks to his left, into the empty stretch between the document title and
-   Export and the tab row below it. Narrow enough at the minimum window width
-   (960px) to stay clear of the centred title. */
+/* Room above the ledge for him, plus the strip below it for dangling legs. */
+.stage {
+  position: absolute;
+  left: 0;
+  bottom: calc(-1 * v-bind(dropPx));
+  width: v-bind(widthPx);
+  height: calc(v-bind(abovePx) + v-bind(dropPx));
+}
+/* A zero-height box on the ledge: the bubble and its tail hang off it in px
+   from his left edge and up from the ledge, matching drawTail's coordinates. */
+.speech {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: v-bind(widthPx);
+  height: 0;
+}
+.tail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+}
+.tail path {
+  fill: var(--surface);
+}
+.tail.back {
+  filter: drop-shadow(0 2px 2px rgba(120, 70, 20, 0.12));
+}
+.tail.back path {
+  stroke: var(--shell);
+  stroke-width: 3px; /* half shows outside the fill, matching the bubble border */
+  stroke-linejoin: round;
+}
+/* Sits on the ledge beside him, low enough that one line stays below the
+   centred title and the title bar buttons; placeBubble picks the side. */
 .bubble {
   position: absolute;
-  right: calc(100% + 2px);
-  bottom: 2px;
+  bottom: v-bind(bubbleBottomPx);
   width: max-content;
-  max-width: min(300px, calc(50vw - 280px));
-  padding: 8px 13px;
-  border-radius: 14px 14px 4px 14px;
+  padding: 6px 13px;
   background: var(--surface);
-  border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow);
+  border: 1.5px solid var(--shell);
+  border-radius: 16px;
+  box-shadow:
+    0 6px 14px -6px rgba(120, 70, 20, 0.3),
+    0 1px 2px rgba(120, 70, 20, 0.08);
   font-family: var(--rounded);
   font-size: 13px;
   font-weight: 600;
   color: var(--roast);
   line-height: 1.35;
 }
-.bubble-enter-active,
-.bubble-leave-active {
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transform-origin: bottom right;
+.speech.left .bubble {
+  right: calc(100% + v-bind(bubbleGapPx));
 }
-.bubble-enter-from,
-.bubble-leave-to {
+.speech.right .bubble {
+  left: calc(100% + v-bind(bubbleGapPx));
+}
+/* drawTail sets transform-origin to the tail's tip, so it grows from his mouth. */
+.speech-enter-active {
+  transition:
+    opacity 0.18s ease-out,
+    transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.speech-leave-active {
+  transition:
+    opacity 0.2s ease-in,
+    transform 0.2s ease-in;
+}
+.speech-enter-from,
+.speech-leave-to {
   opacity: 0;
-  transform: translateX(6px) scale(0.9);
+  transform: scale(0.4);
 }
 </style>

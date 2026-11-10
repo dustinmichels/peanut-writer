@@ -15,7 +15,7 @@ import { state } from "../../lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 
-// The user's own templates: customized copies and imported ones.
+// The user's own templates: imported ones, and folders added by hand.
 const mine = computed(() => state.templates.filter((t) => !t.builtin));
 
 // The template being renamed ("" for none), with its new name and description.
@@ -106,8 +106,9 @@ async function remove(id: string) {
       </li>
     </ul>
     <p v-else class="empty">
-      No templates of your own yet. <b>Customize</b> in the Design tab makes an editable copy of the
-      document's template, or import one someone shared with you.
+      No templates of your own yet. Import one someone shared with you, or add a template folder to
+      your templates folder. (<b>Customize</b> in the Design tab changes one document's fonts and
+      colors.)
     </p>
     <template #footer>
       <button

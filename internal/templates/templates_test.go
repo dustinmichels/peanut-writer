@@ -41,7 +41,8 @@ func writeZip(t *testing.T, files map[string]string) string {
 
 func TestShareAndImport(t *testing.T) {
 	userHome(t)
-	dir, err := Customize("academic")
+	src, _ := Get("academic").Source()
+	dir, err := create("academic-copy", src, Get("academic"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,5 +133,61 @@ func TestBuiltinsAreNotManaged(t *testing.T) {
 	}
 	if err := Delete("classic"); err == nil {
 		t.Error("deleted a built-in template")
+	}
+}
+
+func TestCustomTemplateChangesOnlyWhatItSets(t *testing.T) {
+	userHome(t)
+	p := filepath.Join(t.TempDir(), "Doc.template.json")
+	if err := WriteCustom(p, &Custom{Base: "elegant", Style: Style{BodyFont: " Georgia ", HeadingColor: "#aa0000"}}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := ReadCustom(p)
+	if err != nil || c == nil {
+		t.Fatal(c, err)
+	}
+	got, base := c.Template(), Get("elegant")
+	if got.ID != CustomID || got.Base != "elegant" {
+		t.Errorf("id %q, base %q", got.ID, got.Base)
+	}
+	if got.Docx.BodyFont != "Georgia" || got.Docx.HeadingColor != "AA0000" {
+		t.Errorf("changes not applied: %q, %q", got.Docx.BodyFont, got.Docx.HeadingColor)
+	}
+	if got.Docx.HeadingFont != base.Docx.HeadingFont || got.Docx.TitleColor != base.Docx.TitleColor {
+		t.Error("unchanged styles differ from the base's")
+	}
+	want, _ := base.Source()
+	if src, err := got.Source(); err != nil || !bytes.Equal(src, want) {
+		t.Errorf("source isn't the base's: %v", err)
+	}
+
+	if gone, _ := (Custom{Base: "deleted"}).Template().Source(); !bytes.Equal(gone, mustSource(t, Default)) {
+		t.Error("a missing base isn't the default template")
+	}
+	if err := WriteCustom(p, &Custom{Base: "classic", Style: Style{TextColor: "red"}}); err == nil {
+		t.Error("wrote a color that isn't RRGGBB")
+	}
+	if c, err := ReadCustom(filepath.Join(t.TempDir(), "none.json")); c != nil || err != nil {
+		t.Errorf("no file: %v, %v", c, err)
+	}
+}
+
+func mustSource(t *testing.T, id string) []byte {
+	t.Helper()
+	b, err := Get(id).Source()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func TestImportAvoidsTheCustomID(t *testing.T) {
+	userHome(t)
+	dir, err := Import(writeZip(t, map[string]string{"custom/template.typ": "x", "custom/template.json": "{}"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(dir) != "custom-2" {
+		t.Errorf("imported as %s; want custom-2", filepath.Base(dir))
 	}
 }

@@ -5,6 +5,7 @@ import { DocService } from "../bindings/peanut-writer";
 import TitleBar from "./components/TitleBar.vue";
 import Ribbon from "./components/Ribbon.vue";
 import EditorPane from "./components/EditorPane.vue";
+import CustomizePane from "./components/CustomizePane.vue";
 import OutlinePane from "./components/OutlinePane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
 import StatusBar from "./components/StatusBar.vue";
@@ -89,7 +90,9 @@ onUnmounted(() => {
     <Ribbon />
     <main ref="main" class="main" :style="{ gridTemplateColumns: columns }">
       <OutlinePane v-if="state.outlineOpen" @jump="jump" />
-      <EditorPane />
+      <!-- The editor stays mounted (hidden) while the template is customized. -->
+      <EditorPane v-show="!state.customizing" />
+      <CustomizePane v-if="state.customizing" />
       <div class="splitter" @pointerdown="startResize"><span /></div>
       <PreviewPane ref="preview" />
     </main>

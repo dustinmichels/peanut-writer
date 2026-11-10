@@ -10,5 +10,7 @@ export type {
     DocInfo,
     RecentFile,
     RenderResult,
+    Settings,
+    SettingsInfo,
     StartupInfo
 } from "./models.js";

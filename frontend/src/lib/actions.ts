@@ -5,14 +5,14 @@ import { diff } from "@codemirror/merge";
 import { openSearchPanel } from "@codemirror/search";
 import { type ChangeSpec, Transaction } from "@codemirror/state";
 import { DocService } from "../../bindings/peanut-writer";
-import type { DocInfo } from "../../bindings/peanut-writer/models";
+import type { DocInfo, SettingsInfo } from "../../bindings/peanut-writer/models";
+import type { Style } from "../../bindings/peanut-writer/internal/templates/models";
 import { insertBlock, itemsField, replaceDoc, setShowMarkdown } from "./editor";
 import {
   captionMarkdown,
   type FigureSpec,
   figureMarkdown,
   figureSpec,
-  isOn,
   type Item,
   type Meta,
   readFrontMatter,
@@ -43,9 +43,29 @@ export function loadDoc(info: DocInfo) {
   state.pages = [];
   state.renderError = "";
   state.warnings = [];
+  state.customizing = false;
+  state.custom = null;
   if (editor.value) replaceDoc(editor.value, info.content);
   contentChanged(info.content);
   scheduleRender(0);
+  loadCustom();
+  loadSettings();
+}
+
+// loadSettings applies the settings that show straight away (Peanut) for
+// the open document, unless another document is opened meanwhile.
+export async function loadSettings() {
+  const path = state.path;
+  const info = await run("Settings", () => DocService.Settings());
+  if (info && state.path === path) state.showPeanut = effectiveSettings(info).peanut;
+}
+
+// loadCustom fetches the document's own template, if it has one, unless
+// another document is opened meanwhile.
+async function loadCustom() {
+  const path = state.path;
+  const t = await run("Document template", () => DocService.CustomTemplate());
+  if (t !== undefined && state.path === path) state.custom = t;
 }
 
 // contentChanged updates what's derived from the text after an edit.
@@ -106,7 +126,9 @@ async function ensureSaved(): Promise<boolean> {
 export async function newDoc() {
   if (!(await ensureSaved())) return;
   const info = await run("New document", () => DocService.NewDocument());
-  if (info && !info.canceled) loadDoc(info);
+  if (!info || info.canceled) return;
+  loadDoc(info);
+  editor.value?.focus();
 }
 
 export async function openDoc() {
@@ -125,6 +147,11 @@ export async function openRecent(path: string) {
 export async function showRecent() {
   const files = await run("Recent documents", () => DocService.RecentFiles());
   if (files) state.dialog = { kind: "recent", files };
+}
+
+// forgetRecent takes a document off the recent list.
+export async function forgetRecent(path: string) {
+  await run("Recent documents", () => DocService.ForgetRecent(path));
 }
 
 export async function openWelcome() {
@@ -170,17 +197,29 @@ export async function save(): Promise<boolean> {
   return queueSave();
 }
 
-// autoFormat formats the Markdown with oxfmt when the document's settings
-// turn Auto Format on, as one undoable edit that keeps the cursor among the
-// text it was in. If the text changes meanwhile, or formatting fails, it's
-// left as it is.
+// effectiveSettings is what the settings come to: the document's where it
+// has them, else the user's, else off.
+export function effectiveSettings(s: SettingsInfo) {
+  return {
+    autoFormat: s.document.autoFormat ?? s.user.autoFormat ?? false,
+    titleCase: s.document.titleCase ?? s.user.titleCase ?? false,
+    peanut: s.document.peanut ?? s.user.peanut ?? true,
+  };
+}
+
+// autoFormat formats the Markdown with oxfmt when the settings turn Auto
+// Format on, as one undoable edit that keeps the cursor among the text it
+// was in. If the text changes meanwhile, or formatting fails, it's left as
+// it is.
 export async function autoFormat() {
   const v = editor.value;
   if (!v) return;
+  const info = await run("Settings", () => DocService.Settings());
+  if (!info) return;
+  const { autoFormat: on, titleCase } = effectiveSettings(info);
+  if (!on) return;
   const before = v.state.doc.toString();
-  const { meta } = readFrontMatter(before);
-  if (!isOn(meta.autoformat)) return;
-  const after = await run("Auto format", () => DocService.Format(before, isOn(meta.titlecase)));
+  const after = await run("Auto format", () => DocService.Format(before, titleCase));
   if (after === undefined || after === before || v.state.doc.toString() !== before) return;
   const changes = diff(before, after).map((c) => ({
     from: c.fromA,
@@ -194,7 +233,8 @@ export async function autoFormat() {
 // about to be saved, outside the undo history.
 function stampVersion() {
   if (!editor.value || !state.version) return;
-  if (readFrontMatter(editor.value.state.doc.toString()).meta["peanut-version"] === state.version) return;
+  if (readFrontMatter(editor.value.state.doc.toString()).meta["peanut-version"] === state.version)
+    return;
   setMeta({ "peanut-version": state.version }, false);
 }
 
@@ -285,6 +325,9 @@ export function menu(action: string) {
       return;
     case "settings":
       state.dialog = { kind: "settings" };
+      return;
+    case "commands":
+      state.dialog = state.dialog?.kind === "commands" ? null : { kind: "commands" };
       return;
     case "undo":
       if (!fieldEdit("undo") && v && !state.dialog) undo(v);
@@ -516,19 +559,60 @@ export function setTemplate(id: string) {
 
 export async function refreshTemplates() {
   state.templates = (await DocService.Templates()) ?? [];
+  await loadCustom(); // its base may have been renamed or deleted
 }
 
-// customizeTemplate makes an editable copy of the document's template and
-// uses it.
+// customizeTemplate gives the document its own template, based on the one it
+// uses (unless it has one already), uses it, and shows its fonts and colors
+// in place of the editor. Again, it goes back to the editor.
 export async function customizeTemplate() {
-  const id = await run("Customize template", () => DocService.CustomizeTemplate(state.template));
-  if (id === undefined) return;
-  await refreshTemplates();
-  toast(
-    "Copied the template to your templates folder. Edit it there; changes show up as you work.",
-    "success",
-  );
-  setTemplate(id);
+  if (state.customizing) {
+    state.customizing = false;
+    return;
+  }
+  const t = await run("Customize template", () => DocService.CustomizeTemplate(state.template));
+  if (!t) return;
+  state.custom = t;
+  if (state.template !== t.id) setTemplate(t.id);
+  state.customizing = true;
+}
+
+// Style changes are saved one at a time, in order.
+let styling: Promise<unknown> = Promise.resolve();
+
+// setTemplateStyle sets the fonts and colors of the document's own template.
+export function setTemplateStyle(style: Style) {
+  styling = styling.then(async () => {
+    const t = await run("Customize template", () => DocService.SetTemplateStyle(style));
+    if (!t) return;
+    state.custom = t;
+    scheduleRender(0);
+  });
+}
+
+// removeCustomTemplate deletes the document's own template and goes back to
+// the one it was based on.
+export async function removeCustomTemplate() {
+  const old = state.custom;
+  const base = await run("Remove customization", () => DocService.RemoveCustomTemplate());
+  if (base === undefined) return;
+  state.custom = null;
+  state.customizing = false;
+  setTemplate(base);
+  if (!old) return;
+  const name = state.templates.find((t) => t.id === old.base)?.name ?? old.base;
+  const path = state.path;
+  toast(`Removed this document's changes to ${name}.`, "info", {
+    label: "Undo",
+    run: async () => {
+      if (state.path !== path) return;
+      if (!(await run("Undo", () => DocService.CustomizeTemplate(old.base)))) return;
+      const t = await run("Undo", () => DocService.SetTemplateStyle(old.style));
+      if (!t) return;
+      state.custom = t;
+      setTemplate(t.id);
+    },
+  });
 }
 
 // renameTemplate reports whether the template was renamed.
@@ -589,4 +673,14 @@ export function toggleMarkdown() {
 export function toggleOutline() {
   state.outlineOpen = !state.outlineOpen;
   localStorage.setItem("outline", state.outlineOpen ? "1" : "0");
+}
+
+// --- Text -----------------------------------------------------------------------------
+
+// editLink asks for a link for the selected text.
+export function editLink() {
+  const v = editor.value;
+  if (!v) return;
+  const { from, to } = v.state.selection.main;
+  state.dialog = { kind: "link", text: v.state.sliceDoc(from, to) };
 }

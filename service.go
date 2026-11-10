@@ -14,6 +14,7 @@ import (
 	"mime"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -49,11 +50,14 @@ type DocService struct {
 	quitting  bool // the user chose to quit, so closing mustn't ask again
 	cancel    context.CancelFunc
 	previews  map[string]string // template previews by id and source hash
+	fonts     []string          // the fonts Typst can use, listed on first use
 	typst     *render.Typst
 	typstErr  error
 	oxfmt     *mdfmt.Oxfmt // found on first use
-	settings  settings
-	scratches []string // scratch folders, removed on quit
+	state     appState
+	untitled  Settings          // the open document's settings while it has no file
+	untitledT *templates.Custom // ...and its own template
+	scratches []string          // scratch folders, removed on quit
 
 	backupMu   sync.Mutex // one backup at a time
 	backupOnce sync.Once  // starts the periodic backups
@@ -85,7 +89,7 @@ type StartupInfo struct {
 	Document   DocInfo              `json:"document"`
 	Templates  []templates.Template `json:"templates"`
 	TypstError string               `json:"typstError"`
-	Recent     []RecentFile         `json:"recent"` // offered on opening; none on the first run
+	Recent     []RecentFile         `json:"recent"`  // offered on opening; none on the first run
 	Version    string               `json:"version"` // the app's, recorded in documents' front matter on saving
 }
 
@@ -99,15 +103,35 @@ type RecentFile struct {
 // maxRecent is how many documents the recent list keeps.
 const maxRecent = 10
 
-type settings struct {
+// appState is what the app remembers between runs (state.json in its config
+// folder).
+type appState struct {
 	Welcomed bool     `json:"welcomed"`
 	Recent   []string `json:"recent"` // newest first
+}
+
+// Settings are preferences, kept as JSON: the user's for every document
+// (settings.json in the app's config folder), and a document's own (Name.settings.json
+// beside its Name.md), which override the user's. nil means not set.
+type Settings struct {
+	AutoFormat *bool   `json:"autoFormat,omitempty"` // saving tidies the Markdown with oxfmt
+	TitleCase  *bool   `json:"titleCase,omitempty"`  // ...and puts headings in title case
+	Author     *string `json:"author,omitempty"`     // a new document's author (global only); nil means the computer user's full name
+	Peanut     *bool   `json:"peanut,omitempty"`     // Peanut keeps you company beside the ribbon tabs; nil means on
+}
+
+// SettingsInfo is both sets of settings, and the files they're kept in.
+type SettingsInfo struct {
+	User         Settings `json:"user"`
+	Document     Settings `json:"document"`
+	UserFile     string   `json:"userFile"`
+	DocumentFile string   `json:"documentFile"` // "" until the document is saved
 }
 
 func newDocService() *DocService {
 	s := &DocService{previews: map[string]string{}}
 	s.typst, s.typstErr = render.Find()
-	s.loadSettings()
+	s.loadState()
 	return s
 }
 
@@ -122,15 +146,15 @@ func (s *DocService) Startup() (StartupInfo, error) {
 		info.TypstError = s.typstErr.Error()
 	}
 	s.mu.Lock()
-	welcomed := s.settings.Welcomed
+	welcomed := s.state.Welcomed
 	s.mu.Unlock()
 	var err error
 	if !welcomed {
 		if info.Document, err = s.OpenWelcome(); err == nil {
 			s.mu.Lock()
-			s.settings.Welcomed = true
+			s.state.Welcomed = true
 			s.mu.Unlock()
-			s.saveSettings()
+			s.saveState()
 		}
 	} else {
 		info.Document, err = s.newUntitled()
@@ -151,19 +175,24 @@ func (s *DocService) newUntitled() (DocInfo, error) {
 
 // NewDocument asks for a name and a place, and starts a document in a folder
 // of that name there, its properties titled with the name (in title case),
-// dated today and marked with the app's version.
+// authored by the default author, dated today and marked with the app's version.
 func (s *DocService) NewDocument() (DocInfo, error) {
 	p, err := s.chooseDocFolder("Untitled", "")
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
 	name := docName(p)
-	content := "---\ntitle: " + frontMatterValue(mdfmt.TitleCase(name)) +
-		"\ndate: " + time.Now().Format("January 2, 2006") +
+	content := "---\ntitle: " + frontMatterValue(mdfmt.TitleCase(name))
+	if author := defaultAuthor(); author != "" {
+		content += "\nauthor: " + frontMatterValue(author)
+	}
+	content += "\ndate: " + time.Now().Format("January 2, 2006") +
 		"\npeanut-version: " + frontMatterValue(appVersion) + "\n---\n\n"
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
+	os.Remove(documentSettingsPath(p)) // a replaced document's
+	os.Remove(customTemplatePath(p))
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
 	return DocInfo{Path: p, Name: name, Content: content}, nil
@@ -275,7 +304,7 @@ func (s *DocService) OpenDocument() (DocInfo, error) {
 func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	b, err := os.ReadFile(p)
 	if errors.Is(err, fs.ErrNotExist) {
-		s.forgetRecent(p)
+		s.ForgetRecent(p)
 		return DocInfo{}, fmt.Errorf("%s isn't there anymore", filepath.Base(p))
 	}
 	if err != nil {
@@ -327,6 +356,12 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	}
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
+	}
+	if err := s.carrySettings(oldPath, p); err != nil {
+		return DocInfo{}, fmt.Errorf("copying settings: %w", err)
+	}
+	if err := s.carryTemplate(oldPath, p); err != nil {
+		return DocInfo{}, fmt.Errorf("copying the document's template: %w", err)
 	}
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
@@ -390,6 +425,9 @@ func (s *DocService) setOpen(p, dir string) {
 	s.mu.Lock()
 	old := s.path
 	s.path, s.dir = p, dir
+	if p == "" {
+		s.untitled, s.untitledT = Settings{}, nil
+	}
 	s.mu.Unlock()
 	s.SetDirty(false)
 	if old != "" && old != p {
@@ -430,7 +468,12 @@ func (s *DocService) backup(p string) {
 		return
 	}
 	d := doc.Parse(content, filepath.Dir(p))
-	word, wordErr := s.docxBytes(d, templates.Get(d.Meta.Template))
+	tpl, err := s.templateFor(p, d.Meta.Template)
+	if err != nil {
+		s.backupFailed(err)
+		return
+	}
+	word, wordErr := s.docxBytes(d, tpl)
 	if wordErr != nil {
 		word = nil
 	}
@@ -676,7 +719,7 @@ func (s *DocService) Render(content string) RenderResult {
 		s.cancel()
 	}
 	s.cancel = cancel
-	dir := s.dir
+	dir, cur := s.dir, s.path
 	s.mu.Unlock()
 	defer cancel()
 
@@ -684,7 +727,10 @@ func (s *DocService) Render(content string) RenderResult {
 	if s.typstErr != nil {
 		return RenderResult{Outline: d.Outline(), Error: s.typstErr.Error()}
 	}
-	tpl := templates.Get(d.Meta.Template)
+	tpl, err := s.templateFor(cur, d.Meta.Template)
+	if err != nil {
+		return RenderResult{Outline: d.Outline(), Error: err.Error(), Template: templates.CustomID}
+	}
 	pages, warnings, err := s.typst.Preview(ctx, d, tpl)
 	res := RenderResult{Pages: pages, Outline: d.Outline(), Warnings: append(d.Warnings, warnings...), Template: tpl.ID}
 	if err != nil {
@@ -742,7 +788,10 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 		return nil, errors.New("save the document first")
 	}
 	d := doc.Parse(content, dir)
-	tpl := templates.Get(d.Meta.Template)
+	tpl, err := s.templateFor(cur, d.Meta.Template)
+	if err != nil {
+		return nil, err
+	}
 	pdf, err := s.typst.PDF(context.Background(), d, tpl)
 	if err != nil {
 		return nil, fmt.Errorf("PDF: %w", err)
@@ -780,7 +829,10 @@ func (s *DocService) exportTarget(content, ext, kind, pattern string) (*doc.Docu
 	dir, cur := s.dir, s.path
 	s.mu.Unlock()
 	d := doc.Parse(content, dir)
-	tpl := templates.Get(d.Meta.Template)
+	tpl, err := s.templateFor(cur, d.Meta.Template)
+	if err != nil {
+		return nil, tpl, "", err
+	}
 	name := "Untitled"
 	if cur != "" {
 		name = docName(cur)
@@ -857,17 +909,28 @@ func (s *DocService) Format(content string, titleCase bool) (string, error) {
 // Templates lists the output templates.
 func (s *DocService) Templates() []templates.Template { return templates.List() }
 
-// TemplatePreview is the welcome guide's first page in a template, as SVG.
+// TemplatePreview is the welcome guide's first page in a template (the open
+// document's own for templates.CustomID), as SVG.
 func (s *DocService) TemplatePreview(id string) (string, error) {
 	if s.typstErr != nil {
 		return "", s.typstErr
 	}
-	tpl := templates.Get(id)
+	s.mu.Lock()
+	cur := s.path
+	s.mu.Unlock()
+	tpl, err := s.templateFor(cur, id)
+	if err != nil {
+		return "", err
+	}
 	src, err := tpl.Source()
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(src)
+	style, err := json.Marshal(tpl.Style)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(append(src, style...))
 	key := tpl.ID + ":" + hex.EncodeToString(sum[:8])
 	s.mu.Lock()
 	cached, ok := s.previews[key]
@@ -897,17 +960,164 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 	return pages[0], nil
 }
 
-// CustomizeTemplate copies a template into the user's templates folder,
-// shows it in Finder and returns the new template's id.
-func (s *DocService) CustomizeTemplate(id string) (string, error) {
-	dir, err := templates.Customize(id)
+// customTemplatePath is where the document at p keeps its own template
+// (Design → Customize): Name.template.json beside Name.md.
+func customTemplatePath(p string) string {
+	return strings.TrimSuffix(p, filepath.Ext(p)) + ".template.json"
+}
+
+// readCustom reads the own template of the document at p (the untitled
+// one's if ""); nil if it has none.
+func (s *DocService) readCustom(p string) (*templates.Custom, error) {
+	if p != "" {
+		return templates.ReadCustom(customTemplatePath(p))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.untitledT == nil {
+		return nil, nil
+	}
+	c := *s.untitledT
+	return &c, nil
+}
+
+// writeCustom keeps c as the own template of the document at p (the
+// untitled one's if "").
+func (s *DocService) writeCustom(p string, c *templates.Custom) error {
+	if p != "" {
+		return templates.WriteCustom(customTemplatePath(p), c)
+	}
+	if err := c.Style.Check(); err != nil {
+		return err
+	}
+	cp := *c
+	s.mu.Lock()
+	s.untitledT = &cp
+	s.mu.Unlock()
+	return nil
+}
+
+// templateFor is the template the document at p (the untitled one if "")
+// names by id: its own one for templates.CustomID, if it has one.
+func (s *DocService) templateFor(p, id string) (templates.Template, error) {
+	if id != templates.CustomID {
+		return templates.Get(id), nil
+	}
+	c, err := s.readCustom(p)
+	if err != nil || c == nil {
+		return templates.Get(id), err
+	}
+	return c.Template(), nil
+}
+
+// carryTemplate gives the document saved as the own template of the one it
+// was saved from (from, or the untitled document's if ""), if it has one.
+func (s *DocService) carryTemplate(from, to string) error {
+	if from == to {
+		return nil
+	}
+	if err := os.Remove(customTemplatePath(to)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err // a replaced document's
+	}
+	c, err := s.readCustom(from)
+	if err != nil || c == nil {
+		return err
+	}
+	return templates.WriteCustom(customTemplatePath(to), c)
+}
+
+// openPath is the open document's file; "" while it's untitled.
+func (s *DocService) openPath() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.path
+}
+
+// CustomTemplate is the open document's own template; nil if it has none.
+func (s *DocService) CustomTemplate() (*templates.Template, error) {
+	c, err := s.readCustom(s.openPath())
+	if err != nil || c == nil {
+		return nil, err
+	}
+	t := c.Template()
+	return &t, nil
+}
+
+// CustomizeTemplate gives the open document its own template, based on the
+// template base with nothing changed yet, unless it has one already, and
+// returns it. It's kept beside the document (an untitled one's once it's
+// saved).
+func (s *DocService) CustomizeTemplate(base string) (templates.Template, error) {
+	p := s.openPath()
+	c, err := s.readCustom(p)
 	if err != nil {
+		return templates.Template{}, err
+	}
+	if c == nil {
+		c = &templates.Custom{Base: templates.Get(base).ID}
+		if err := s.writeCustom(p, c); err != nil {
+			return templates.Template{}, err
+		}
+	}
+	return c.Template(), nil
+}
+
+// SetTemplateStyle sets the fonts and colors of the open document's own
+// template and returns it.
+func (s *DocService) SetTemplateStyle(style templates.Style) (templates.Template, error) {
+	p := s.openPath()
+	c, err := s.readCustom(p)
+	if err != nil {
+		return templates.Template{}, err
+	}
+	if c == nil {
+		return templates.Template{}, errors.New("this document has no template of its own: use Customize first")
+	}
+	c.Style = style
+	if err := s.writeCustom(p, c); err != nil {
+		return templates.Template{}, err
+	}
+	return c.Template(), nil
+}
+
+// RemoveCustomTemplate deletes the open document's own template and returns
+// the id of the template it was based on.
+func (s *DocService) RemoveCustomTemplate() (string, error) {
+	p := s.openPath()
+	c, err := s.readCustom(p)
+	if err != nil || c == nil {
+		return templates.Default, err
+	}
+	if p == "" {
+		s.mu.Lock()
+		s.untitledT = nil
+		s.mu.Unlock()
+	} else if err := os.Remove(customTemplatePath(p)); err != nil {
 		return "", err
 	}
-	if err := s.Reveal(filepath.Join(dir, "template.typ")); err != nil {
-		return "", err
+	return templates.Get(c.Base).ID, nil
+}
+
+// Fonts lists the fonts a document's own template can use: those Typst
+// finds.
+func (s *DocService) Fonts() ([]string, error) {
+	if s.typstErr != nil {
+		return nil, s.typstErr
 	}
-	return filepath.Base(dir), nil
+	s.mu.Lock()
+	fonts := s.fonts
+	s.mu.Unlock()
+	if fonts != nil {
+		return fonts, nil
+	}
+	fonts, err := s.typst.Fonts(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	s.fonts = fonts
+	s.mu.Unlock()
+	return fonts, nil
 }
 
 // OpenTemplatesFolder shows the user's templates folder, creating it first.
@@ -1013,7 +1223,7 @@ func (s *DocService) ImportTemplate() (string, error) {
 // RecentFiles lists the recent documents that are still there, newest first.
 func (s *DocService) RecentFiles() []RecentFile {
 	s.mu.Lock()
-	paths := slices.Clone(s.settings.Recent)
+	paths := slices.Clone(s.state.Recent)
 	s.mu.Unlock()
 	home, _ := os.UserHomeDir()
 	files := []RecentFile{}
@@ -1033,7 +1243,7 @@ func (s *DocService) RecentFiles() []RecentFile {
 // ClearRecent empties the recent list.
 func (s *DocService) ClearRecent() {
 	s.mu.Lock()
-	s.settings.Recent = nil
+	s.state.Recent = nil
 	s.mu.Unlock()
 	s.recentChanged()
 }
@@ -1041,23 +1251,23 @@ func (s *DocService) ClearRecent() {
 // remember puts p at the top of the recent list.
 func (s *DocService) remember(p string) {
 	s.mu.Lock()
-	r := slices.DeleteFunc(slices.Clone(s.settings.Recent), func(q string) bool { return q == p })
+	r := slices.DeleteFunc(slices.Clone(s.state.Recent), func(q string) bool { return q == p })
 	r = slices.Insert(r, 0, p)
-	s.settings.Recent = r[:min(len(r), maxRecent)]
+	s.state.Recent = r[:min(len(r), maxRecent)]
 	s.mu.Unlock()
 	s.recentChanged()
 }
 
-// forgetRecent takes p off the recent list.
-func (s *DocService) forgetRecent(p string) {
+// ForgetRecent takes p off the recent list.
+func (s *DocService) ForgetRecent(p string) {
 	s.mu.Lock()
-	s.settings.Recent = slices.DeleteFunc(slices.Clone(s.settings.Recent), func(q string) bool { return q == p })
+	s.state.Recent = slices.DeleteFunc(slices.Clone(s.state.Recent), func(q string) bool { return q == p })
 	s.mu.Unlock()
 	s.recentChanged()
 }
 
 func (s *DocService) recentChanged() {
-	s.saveSettings()
+	s.saveState()
 	s.fillRecentMenu()
 }
 
@@ -1096,31 +1306,210 @@ func (s *DocService) fillRecentMenu() {
 
 // --- Settings ----------------------------------------------------------------
 
-func settingsPath() (string, error) {
+// configPath is the path of the named file in the app's config folder.
+func configPath(name string) (string, error) {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "Peanut Writer", "settings.json"), nil
+	return filepath.Join(dir, "Peanut Writer", name), nil
 }
 
-func (s *DocService) loadSettings() {
-	p, err := settingsPath()
+// documentSettingsPath is where the document at p keeps its settings:
+// Name.settings.json beside Name.md.
+func documentSettingsPath(p string) string {
+	return strings.TrimSuffix(p, filepath.Ext(p)) + ".settings.json"
+}
+
+// Settings reads the user's settings and the open document's. Both files
+// are read afresh, so edits made to them by hand count.
+func (s *DocService) Settings() (SettingsInfo, error) {
+	userFile, err := configPath("settings.json")
+	if err != nil {
+		return SettingsInfo{}, err
+	}
+	info := SettingsInfo{UserFile: userFile}
+	if info.User, err = readSettings(userFile); err != nil {
+		return info, err
+	}
+	if info.User.Author == nil {
+		name := computerUserName()
+		info.User.Author = &name
+	}
+	if info.User.Peanut == nil {
+		on := true
+		info.User.Peanut = &on
+	}
+	s.mu.Lock()
+	p := s.path
+	info.Document = s.untitled
+	s.mu.Unlock()
+	if p != "" {
+		info.DocumentFile = documentSettingsPath(p)
+		info.Document, err = readSettings(info.DocumentFile)
+	}
+	return info, err
+}
+
+// SetUserSettings sets the user's settings.
+func (s *DocService) SetUserSettings(set Settings) error {
+	p, err := configPath("settings.json")
+	if err != nil {
+		return err
+	}
+	return writeSettings(p, set)
+}
+
+// SetDocumentSettings sets the open document's settings; an untitled
+// document's are written beside it when it's first saved.
+func (s *DocService) SetDocumentSettings(set Settings) error {
+	s.mu.Lock()
+	p := s.path
+	if p == "" {
+		s.untitled = set
+	}
+	s.mu.Unlock()
+	if p == "" {
+		return nil
+	}
+	return writeSettings(documentSettingsPath(p), set)
+}
+
+// carrySettings gives the document saved as to the settings of the one it
+// was saved from (from, or the untitled document's if "").
+func (s *DocService) carrySettings(from, to string) error {
+	if from == to {
+		return nil
+	}
+	dst := documentSettingsPath(to)
+	if err := os.Remove(dst); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err // a replaced document's
+	}
+	if from == "" {
+		s.mu.Lock()
+		set := s.untitled
+		s.mu.Unlock()
+		return writeSettings(dst, set)
+	}
+	b, err := os.ReadFile(documentSettingsPath(from))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o644)
+}
+
+// readSettings reads a settings file; one that isn't there sets nothing.
+func readSettings(p string) (Settings, error) {
+	var set Settings
+	b, err := os.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return set, nil
+	}
+	if err == nil {
+		err = json.Unmarshal(b, &set)
+	}
+	if err != nil {
+		return set, fmt.Errorf("%s: %w", p, err)
+	}
+	return set, nil
+}
+
+// writeSettings writes set to a settings file, keeping any other keys it
+// has. A file left empty is removed.
+func writeSettings(p string, set Settings) error {
+	m := map[string]json.RawMessage{}
+	if b, err := os.ReadFile(p); err == nil {
+		if err := json.Unmarshal(b, &m); err != nil {
+			return fmt.Errorf("%s: %w", p, err)
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	on, none := true, ""
+	all, _ := json.Marshal(Settings{AutoFormat: &on, TitleCase: &on, Author: &none, Peanut: &on})
+	var keys map[string]json.RawMessage
+	json.Unmarshal(all, &keys)
+	for k := range keys {
+		delete(m, k)
+	}
+	b, _ := json.Marshal(set)
+	json.Unmarshal(b, &m) // adds set's keys to m
+	if len(m) == 0 {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	b, _ = json.MarshalIndent(m, "", "  ")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(p, append(b, '\n'), 0o644)
+}
+
+// defaultAuthor is the author a new document gets: the user's setting, or
+// until there is one, the computer user's full name. "" means none.
+func defaultAuthor() string {
+	if p, err := configPath("settings.json"); err == nil {
+		if set, err := readSettings(p); err == nil && set.Author != nil {
+			return strings.TrimSpace(*set.Author)
+		}
+	}
+	return computerUserName()
+}
+
+// computerUserName is the computer user's full name, or "" if the system has
+// none (common on Windows and Linux; never a login name, which isn't one).
+func computerUserName() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(u.Name)
+}
+
+// loadState reads what the app remembers. Before state.json it was kept in
+// settings.json; that's moved over, leaving settings.json to the user's
+// settings.
+func (s *DocService) loadState() {
+	p, err := configPath("state.json")
 	if err != nil {
 		return
 	}
 	if b, err := os.ReadFile(p); err == nil {
-		json.Unmarshal(b, &s.settings)
+		json.Unmarshal(b, &s.state)
+		return
+	}
+	old, err := configPath("settings.json")
+	if err != nil {
+		return
+	}
+	b, err := os.ReadFile(old)
+	if err != nil || json.Unmarshal(b, &s.state) != nil {
+		return
+	}
+	s.saveState()
+	m := map[string]json.RawMessage{}
+	json.Unmarshal(b, &m)
+	delete(m, "welcomed")
+	delete(m, "recent")
+	if len(m) == 0 {
+		os.Remove(old)
+	} else if b, err := json.MarshalIndent(m, "", "  "); err == nil {
+		os.WriteFile(old, append(b, '\n'), 0o644)
 	}
 }
 
-func (s *DocService) saveSettings() {
-	p, err := settingsPath()
+func (s *DocService) saveState() {
+	p, err := configPath("state.json")
 	if err != nil {
 		return
 	}
 	s.mu.Lock()
-	b, _ := json.MarshalIndent(s.settings, "", "  ")
+	b, _ := json.MarshalIndent(s.state, "", "  ")
 	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err == nil {
 		os.WriteFile(p, b, 0o644)

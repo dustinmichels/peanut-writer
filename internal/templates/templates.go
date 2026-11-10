@@ -33,8 +33,15 @@ var builtin embed.FS
 // doesn't exist.
 const Default = "classic"
 
+// CustomID is what a document's front matter names its own template (see
+// Custom) by. No other template can have it.
+const CustomID = "custom"
+
 // Order of the built-in templates in the gallery.
 var builtinOrder = []string{"classic", "academic", "report", "minimal", "manuscript", "elegant", "peanut"}
+
+// reserved reports whether a user template folder can't be named id.
+func reserved(id string) bool { return id == CustomID || slices.Contains(builtinOrder, id) }
 
 // Template is one output template.
 type Template struct {
@@ -43,8 +50,109 @@ type Template struct {
 	Description string    `json:"description"`
 	Builtin     bool      `json:"builtin"`
 	Docx        DocxStyle `json:"docx"`
+	Base        string    `json:"base"`  // a custom template's base template; "" for others
+	Style       Style     `json:"style"` // a custom template's changes to its base; empty for others
 
 	dir string // the user template's folder; "" for a built-in one
+}
+
+// Style is the fonts and colors a document's custom template changes in the
+// template it's based on; "" and 0 keep the base's. Colors are RRGGBB.
+//
+// It reaches Word through DocxStyle, and Typst as style.json beside the
+// template, which the built-in templates read through style.typ.
+type Style struct {
+	BodyFont        string  `json:"bodyFont,omitempty"`
+	HeadingFont     string  `json:"headingFont,omitempty"` // headings and the title
+	MonoFont        string  `json:"monoFont,omitempty"`    // code
+	FontSize        float64 `json:"fontSize,omitempty"`    // body text, points
+	TextColor       string  `json:"textColor,omitempty"`
+	HeadingColor    string  `json:"headingColor,omitempty"`
+	TitleColor      string  `json:"titleColor,omitempty"`
+	CaptionColor    string  `json:"captionColor,omitempty"`
+	AccentColor     string  `json:"accentColor,omitempty"` // rules and table borders
+	TableHeaderFill string  `json:"tableHeaderFill,omitempty"`
+}
+
+// Custom is a document's own template: the template it's based on, with
+// some fonts and colors changed. It's kept beside the document (see
+// ReadCustom) and named in its front matter by CustomID.
+type Custom struct {
+	Base  string `json:"base"`
+	Style Style  `json:"style"`
+}
+
+// Template is the custom template: its base, under CustomID, with its Style
+// applied to the Word styles. A base that's gone is Default.
+func (c Custom) Template() Template {
+	t := Get(c.Base)
+	t.Description = "This document's own version of " + t.Name + "."
+	t.Base, t.ID, t.Style = t.ID, CustomID, c.Style
+	t.Name += " (custom)"
+	s, d := c.Style, &t.Docx
+	d.BodyFont = cmp.Or(s.BodyFont, d.BodyFont)
+	d.HeadingFont = cmp.Or(s.HeadingFont, d.HeadingFont)
+	d.MonoFont = cmp.Or(s.MonoFont, d.MonoFont)
+	d.FontSize = cmp.Or(s.FontSize, d.FontSize)
+	d.TextColor = cmp.Or(s.TextColor, d.TextColor)
+	d.HeadingColor = cmp.Or(s.HeadingColor, d.HeadingColor)
+	d.TitleColor = cmp.Or(s.TitleColor, d.TitleColor)
+	d.CaptionColor = cmp.Or(s.CaptionColor, d.CaptionColor)
+	d.AccentColor = cmp.Or(s.AccentColor, d.AccentColor)
+	d.TableHeaderFill = cmp.Or(s.TableHeaderFill, d.TableHeaderFill)
+	return t
+}
+
+var hexColor = regexp.MustCompile(`^[0-9A-F]{6}$`)
+
+// Check tidies s (colors upper case, without "#"; fonts trimmed) and reports
+// what's wrong with it.
+func (s *Style) Check() error {
+	for _, f := range []*string{&s.BodyFont, &s.HeadingFont, &s.MonoFont} {
+		*f = strings.TrimSpace(*f)
+	}
+	if s.FontSize != 0 && (s.FontSize < 6 || s.FontSize > 72) {
+		return fmt.Errorf("a font size of %gpt is out of range (6–72)", s.FontSize)
+	}
+	for _, c := range []*string{&s.TextColor, &s.HeadingColor, &s.TitleColor, &s.CaptionColor, &s.AccentColor, &s.TableHeaderFill} {
+		*c = strings.ToUpper(strings.TrimPrefix(strings.TrimSpace(*c), "#"))
+		if *c != "" && !hexColor.MatchString(*c) {
+			return fmt.Errorf("%q isn't a color: use RRGGBB", *c)
+		}
+	}
+	return nil
+}
+
+// ReadCustom reads the custom template kept in the file at p; nil if there's
+// none.
+func ReadCustom(p string) (*Custom, error) {
+	b, err := os.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	var c Custom
+	if err == nil {
+		err = json.Unmarshal(b, &c)
+	}
+	if err == nil {
+		err = c.Style.Check()
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Base(p), err)
+	}
+	return &c, nil
+}
+
+// WriteCustom tidies c and keeps it in the file at p.
+func WriteCustom(p string, c *Custom) error {
+	if err := c.Style.Check(); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, append(b, '\n'), 0o644)
 }
 
 // DocxStyle is how a template looks in Word. Colors are RRGGBB.
@@ -103,7 +211,7 @@ func List() []Template {
 	}
 	var user []Template
 	for _, e := range entries {
-		if !e.IsDir() || slices.Contains(builtinOrder, e.Name()) {
+		if !e.IsDir() || reserved(e.Name()) {
 			continue
 		}
 		if t, err := loadUser(filepath.Join(dir, e.Name())); err == nil {
@@ -130,10 +238,10 @@ func Get(id string) Template {
 	return t
 }
 
-// Source is the template's Typst file.
+// Source is the template's Typst file (a custom template's base's).
 func (t Template) Source() ([]byte, error) {
 	if t.Builtin {
-		return builtin.ReadFile("builtin/" + t.ID + "/template.typ")
+		return builtin.ReadFile("builtin/" + cmp.Or(t.Base, t.ID) + "/template.typ")
 	}
 	return os.ReadFile(filepath.Join(t.dir, "template.typ"))
 }
@@ -197,19 +305,6 @@ func User(id string) (Template, error) {
 
 // Dir is the user template's folder; "" for a built-in one.
 func (t Template) Dir() string { return t.dir }
-
-// Customize copies a template into the user's templates folder as a new
-// template named "<name> (custom)", and returns its folder.
-func Customize(id string) (string, error) {
-	t := Get(id)
-	src, err := t.Source()
-	if err != nil {
-		return "", err
-	}
-	t.Description = "A copy of " + t.Name + ". Edit template.typ (PDF) and template.json (Word)."
-	t.Name += " (custom)"
-	return create(slug(t.ID)+"-custom", src, t)
-}
 
 // Rename sets a user template's name and description.
 func Rename(id, name, description string) error {
@@ -333,8 +428,8 @@ func create(base string, src []byte, t Template) (string, error) {
 	base = cmp.Or(base, "template")
 	id := base
 	for i := 2; ; i++ {
-		// List skips user folders named like a built-in template.
-		if !slices.Contains(builtinOrder, id) {
+		// List skips user folders with reserved names.
+		if !reserved(id) {
 			dir := filepath.Join(root, id)
 			err := os.Mkdir(dir, 0o755)
 			if err == nil {

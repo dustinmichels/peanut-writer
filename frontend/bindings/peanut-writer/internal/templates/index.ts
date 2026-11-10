@@ -3,5 +3,6 @@
 
 export type {
     DocxStyle,
+    Style,
     Template
 } from "./models.js";

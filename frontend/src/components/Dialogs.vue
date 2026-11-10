@@ -9,6 +9,7 @@ import SettingsDialog from "./dialogs/SettingsDialog.vue";
 import CheatSheet from "./dialogs/CheatSheet.vue";
 import RecentDialog from "./dialogs/RecentDialog.vue";
 import TemplatesDialog from "./dialogs/TemplatesDialog.vue";
+import CommandPalette from "./dialogs/CommandPalette.vue";
 import { editor, state } from "../lib/store";
 
 function close() {
@@ -47,5 +48,6 @@ function close() {
       @close="close"
     />
     <TemplatesDialog v-else-if="state.dialog.kind === 'templates'" @close="close" />
+    <CommandPalette v-else-if="state.dialog.kind === 'commands'" @close="close" />
   </template>
 </template>

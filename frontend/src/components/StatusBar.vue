@@ -2,11 +2,11 @@
 import { computed, ref } from "vue";
 import { AlertTriangle, Minus, Plus, TableOfContents } from "lucide-vue-next";
 import { menu, toggleOutline } from "../lib/actions";
-import { state } from "../lib/store";
+import { docTemplates, state } from "../lib/store";
 
 const showWarnings = ref(false);
 const templateName = computed(
-  () => state.templates.find((t) => t.id === state.template)?.name ?? state.template,
+  () => docTemplates.value.find((t) => t.id === state.template)?.name ?? state.template,
 );
 const zoomPct = computed(() => Math.round((state.zoom || state.fitZoom) * 100));
 const pages = computed(() => state.pages.length);

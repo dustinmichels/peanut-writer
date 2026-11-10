@@ -10,10 +10,6 @@ export interface Meta {
   date: string;
   abstract: string;
   template: string;
-  // Document settings, for the editor only (the renderer ignores them):
-  // "true" when on, "" when off.
-  autoformat: string; // saving tidies the Markdown with oxfmt
-  titlecase: string; // ...and puts headings in title case
   "peanut-version": string; // the app's version that last saved it
 }
 
@@ -24,8 +20,6 @@ const metaKeys: (keyof Meta)[] = [
   "date",
   "abstract",
   "template",
-  "autoformat",
-  "titlecase",
   "peanut-version",
 ];
 
@@ -46,14 +40,9 @@ function emptyMeta(): Meta {
     date: "",
     abstract: "",
     template: "",
-    autoformat: "",
-    titlecase: "",
     "peanut-version": "",
   };
 }
-
-// isOn reads a document setting's value, ignoring a trailing # comment.
-export const isOn = (v: string) => v.replace(/\s+#.*$/, "").trim().toLowerCase() === "true";
 
 export function readFrontMatter(text: string): FrontMatter {
   const meta = emptyMeta();

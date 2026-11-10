@@ -7,25 +7,48 @@ import { createPeanutModel } from "./model";
 const BOUNCE_MS = 750;
 const BLINK_MS = 150;
 const FRAME_MS = 1000 / 30;
+// The bottom LEDGE_DROP_PX of the container hang below the ledge Peanut stands
+// or perches on, so his dangling legs (up to ~17px below it) have room; the
+// rest frames him as before.
+export const LEDGE_DROP_PX = 20;
 
 export interface PeanutStage {
   bounce: () => void;
   blink: () => void;
   setSitting: (sitting: boolean) => void;
-  setLegsCrossed: (crossed: boolean) => void;
+  walk: (direction: -1 | 0 | 1) => void;
   hits: (clientX: number, clientY: number) => boolean;
   dispose: () => void;
 }
 
-export function createPeanutStage(container: HTMLElement): PeanutStage {
+// onMouth hears where his mouth is after every rendered frame, in CSS px from
+// the container's top-left corner.
+export function createPeanutStage(
+  container: HTMLElement,
+  onMouth: (x: number, y: number) => void,
+): PeanutStage {
   const width = container.clientWidth;
   const height = container.clientHeight;
 
   const scene = new THREE.Scene();
-  // Three-quarter view from Peanut's left, so he faces into the window.
-  const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 50);
+  // Three-quarter view from Peanut's left, so he faces into the window. The
+  // camera frames the part above the ledge (height - LEDGE_DROP_PX tall); a
+  // view offset into a taller virtual frame adds the strip below it.
+  const above = height - LEDGE_DROP_PX;
+  const full = above + 2 * LEDGE_DROP_PX;
+  const fov = THREE.MathUtils.radToDeg(
+    2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(15)) * (full / above)),
+  );
+  const camera = new THREE.PerspectiveCamera(fov, width / full, 0.1, 50);
   camera.position.set(3.0, 2.4, 7.6);
   camera.lookAt(0, 1.75, 0);
+  camera.setViewOffset(width, full, 0, LEDGE_DROP_PX, width, height);
+  // The camera looks down on him, so the world ledge (y = 0 under his feet)
+  // lands above the frame's ledge row. Slide the view so the two coincide and
+  // he stands and sits exactly on the container's ledge line.
+  camera.updateMatrixWorld();
+  const ledgeRow = ((1 - new THREE.Vector3(0, 0, 0).project(camera).y) / 2) * height;
+  camera.setViewOffset(width, full, 0, LEDGE_DROP_PX + ledgeRow - above, width, height);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setClearColor(0x000000, 0);
@@ -68,6 +91,7 @@ export function createPeanutStage(container: HTMLElement): PeanutStage {
   const start = performance.now();
   let last = start;
   let frame = 0;
+  const mouth = new THREE.Vector3();
 
   function loop(now: number) {
     frame = requestAnimationFrame(loop);
@@ -87,6 +111,8 @@ export function createPeanutStage(container: HTMLElement): PeanutStage {
     }
     peanut.animate((now - start) / 1000, bounceProgress, blinkProgress, delta);
     renderer.render(scene, camera);
+    peanut.mouth.getWorldPosition(mouth).project(camera);
+    onMouth(((mouth.x + 1) / 2) * width, ((1 - mouth.y) / 2) * height);
   }
   frame = requestAnimationFrame(loop);
 
@@ -97,7 +123,7 @@ export function createPeanutStage(container: HTMLElement): PeanutStage {
     bounce: () => (bounceStart = performance.now()),
     blink: () => (blinkStart = performance.now()),
     setSitting: peanut.setSitting,
-    setLegsCrossed: peanut.setLegsCrossed,
+    walk: peanut.walk,
     hits(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
       if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {
