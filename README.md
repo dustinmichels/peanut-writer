@@ -72,7 +72,7 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
   beside it when opened, every 10 minutes, and when closed or replaced, each time only if it changed since its last
   backup. The newest 10 of each document are kept. Pictures aren't copied: the Word file embeds them, but the Markdown
   one's picture paths are relative to the document's folder, so they don't resolve from `backups/`.
-- **Versions**: File → Versions (or View → Versions) opens a pane to save the document under a name, or load an
+- **Versions**: View → Versions opens a pane to save the document under a name, or load an
   earlier version. Each is a `versions/<name>/` folder beside the document holding `Name.md`, its `Name.template.json`
   and `Name.settings.json` if it has them, and `Name.docx` and `Name.pdf` copies. Loading one asks first, backs up the
   current text, and replaces the document's text, template and settings.

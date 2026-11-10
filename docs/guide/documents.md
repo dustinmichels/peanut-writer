@@ -43,7 +43,7 @@ embeds them, but the Markdown backup's picture paths point at the document's own
 
 ## Versions
 
-**File → Versions** (or **View → Versions**) opens the Versions pane beside the editor. Type a name and choose **Save
+**View → Versions** opens the Versions pane beside the editor. Type a name and choose **Save
 Version** to keep the document as it is now, in `versions/<name>/`:
 
 ```text

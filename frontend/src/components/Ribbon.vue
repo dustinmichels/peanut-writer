@@ -174,14 +174,6 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               title="Save As (⇧⌘S)"
               @click="saveAs"
             />
-            <RibbonButton
-              big
-              :icon="FileClock"
-              label="Versions"
-              title="Save a named version of the document, or load an earlier one"
-              :active="state.versionsOpen"
-              @click="toggleVersions"
-            />
           </div>
           <label>Document</label>
         </div>
@@ -519,6 +511,14 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               title="Show the headings beside the editor, to jump to a section"
               :active="state.outlineOpen"
               @click="toggleOutline"
+            />
+            <RibbonButton
+              big
+              :icon="FileClock"
+              label="Versions"
+              title="Save a named version of the document, or load an earlier one"
+              :active="state.versionsOpen"
+              @click="toggleVersions"
             />
           </div>
           <label>Show</label>
