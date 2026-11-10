@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: Peanut Writer
-  text: Write like it's Word. Keep it like it's Markdown.
+  text: An elegant editor for a more civilized age.
   tagline: A friendly word processor that saves plain text, lays out your pages like a typesetter, and exports to PDF or Word.
   image:
     src: /peanut.svg
