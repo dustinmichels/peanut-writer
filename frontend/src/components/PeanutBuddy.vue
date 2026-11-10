@@ -6,8 +6,8 @@ import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "../peanut/st
 
 // Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
 // the edge of the tab row with his legs dangling over the ribbon; now and
-// then he stands up, strolls along the open stretch of the title bar and
-// sits down somewhere new, or puts on a cowboy or party hat. He breathes,
+// then he stands up, strolls a little way left or right and comes back to
+// his spot, or puts on a cowboy or party hat. He breathes,
 // blinks, and cheers you on while you write; click him for a word of
 // encouragement. What he says fades away slowly.
 
@@ -34,6 +34,7 @@ const MILESTONE = 250; // words
 const SAY_MS = 4000; // from popping out of his mouth to faded away
 const WALK_PX_PER_S = 28;
 const MIN_STROLL_PX = 40;
+const REST_INSET = 0.2; // share of the open stretch at each end he only strolls through
 const GAP = 10; // kept clear around the title, title bar buttons and tabs
 const STAGE_W = 52; // his stage, and the strip of ledge he occupies
 const STAGE_ABOVE = 65; // stage height above the ledge
@@ -55,8 +56,8 @@ const tailFrontEl = ref<SVGPathElement>();
 const message = ref("");
 const bubbleSide = ref<"left" | "right">("left");
 const bubbleMax = ref(300);
-// Offset from his home spot (px, negative is left) and how long the current
-// stroll there takes; 0 moves him at once.
+// Offset from where his box sits (px, negative is left) and how long the
+// current walk there takes; 0 moves him at once.
 const x = ref(0);
 const walkMs = ref(0);
 let stage: PeanutStage | undefined;
@@ -153,7 +154,7 @@ function blinkLoop() {
   });
 }
 
-// Where he may stroll, as offsets from home: standing, his head pokes into
+// Where he may walk, as offsets from his box: standing, his head pokes into
 // the title bar, so he keeps between the centred title and the buttons.
 function strollRange(): [number, number] {
   const home = homeEl.value!.getBoundingClientRect();
@@ -172,20 +173,39 @@ function perch(sit: boolean) {
   stage?.setSitting(sit);
 }
 
+// Where he settles: the middle stretch of that open title bar, leaving the
+// ends near the title and the buttons for strolls.
+function restRange(): [number, number] {
+  const [min, max] = strollRange();
+  const inset = (max - min) * REST_INSET;
+  return [min + inset, max - inset];
+}
+const restX = () => rand(...restRange());
+
+async function walkTo(target: number) {
+  stage?.walk(target < x.value ? -1 : 1);
+  walkMs.value = (Math.abs(target - x.value) / WALK_PX_PER_S) * 1000;
+  x.value = target;
+  await pause(walkMs.value);
+  stage?.walk(0);
+}
+
+// Out to somewhere left or right, a look around, then back to settle
+// somewhere in his resting stretch.
+let strolling = false;
 async function stroll() {
   const [min, max] = strollRange();
   const target = rand(min, max);
-  const distance = Math.abs(target - x.value);
-  if (distance < MIN_STROLL_PX) return;
+  if (Math.abs(target - x.value) < MIN_STROLL_PX) return;
+  strolling = true;
   if (perched) {
     perch(false);
     await pause(700);
   }
-  stage?.walk(target < x.value ? -1 : 1);
-  walkMs.value = (distance / WALK_PX_PER_S) * 1000;
-  x.value = target;
-  await pause(walkMs.value);
-  stage?.walk(0);
+  await walkTo(target);
+  await pause(rand(1500, 4000));
+  await walkTo(restX());
+  strolling = false;
   await pause(600);
   perch(true);
 }
@@ -203,8 +223,8 @@ function changeHat() {
   say(lines[Math.floor(Math.random() * lines.length)]);
 }
 
-// Every so often: stand up or sit back down, stroll somewhere new and sit,
-// or put on a hat (or take it off).
+// Every so often: stand up or sit back down, stroll out and back, or put on
+// a hat (or take it off).
 function activityLoop() {
   later(rand(20_000, 50_000), async () => {
     const roll = Math.random();
@@ -215,9 +235,10 @@ function activityLoop() {
   });
 }
 
-// A narrower window can leave him over the title or the buttons; step aside.
+// A resized window moves the open stretch: keep him inside it mid-stroll, and
+// inside his resting stretch otherwise.
 function onResize() {
-  const [min, max] = strollRange();
+  const [min, max] = strolling ? strollRange() : restRange();
   walkMs.value = 0;
   x.value = Math.min(max, Math.max(min, x.value));
 }
@@ -249,6 +270,7 @@ function onPointerDown(e: PointerEvent) {
 
 onMounted(() => {
   stage = createPeanutStage(stageEl.value!, onMouth);
+  x.value = restX();
   perch(true);
   window.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("resize", onResize);
@@ -289,9 +311,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Clicks pass through to the page; Peanut hit-tests them himself. His home is
-   the bottom edge of the tab row (the line above the ribbon panel), just left
-   of the Show in Finder, Sync files and Export buttons in the title bar. */
+/* Clicks pass through to the page; Peanut hit-tests them himself. His box sits
+   on the bottom edge of the tab row (the line above the ribbon panel), just
+   left of the Show in Finder, Sync files and Export buttons in the title bar;
+   he rests in the middle of the gap between there and the centred title. */
 .buddy {
   position: relative;
   z-index: 70; /* over menus (60), under modal scrims (80) */
