@@ -22,9 +22,11 @@
     "@wailsio/runtime": "3.1.0",
     "codemirror": "^6.0.2",
     "lucide-vue-next": "^1.0.0",
+    "three": "^0.186.1",
     "vue": "^3.2.45"
   },
   "devDependencies": {
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-vue": "^6.0.0",
     "typescript": "~5.9.3",
     "vite": "^8.2.4",
