@@ -5,7 +5,7 @@ import { openSearchPanel } from "@codemirror/search";
 import type { ChangeSpec } from "@codemirror/state";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocInfo } from "../../bindings/peanut-writer/models";
-import { insertBlock, itemsField, replaceDoc } from "./editor";
+import { insertBlock, itemsField, replaceDoc, setMarkdownDetails } from "./editor";
 import {
   captionMarkdown,
   type FigureSpec,
@@ -39,6 +39,7 @@ export function loadDoc(info: DocInfo) {
   state.dirty = false;
   state.pages = [];
   state.renderError = "";
+  state.warnings = [];
   if (editor.value) replaceDoc(editor.value, info.content);
   contentChanged(info.content);
   scheduleRender(0);
@@ -68,7 +69,7 @@ async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined>
 
 // ensureSaved deals with unsaved changes before they'd be lost; false means
 // the user canceled.
-export async function ensureSaved(): Promise<boolean> {
+async function ensureSaved(): Promise<boolean> {
   if (!state.dirty) return true;
   const choice = await DocService.ConfirmDiscard(state.name);
   if (choice === "cancel") return false;
@@ -86,6 +87,18 @@ export async function openDoc() {
   if (!(await ensureSaved())) return;
   const info = await run("Open", () => DocService.OpenDocument());
   if (info && !info.canceled) loadDoc(info);
+}
+
+export async function openRecent(path: string) {
+  if (!(await ensureSaved())) return;
+  const info = await run("Open", () => DocService.OpenPath(path));
+  if (info) loadDoc(info);
+}
+
+// showRecent offers the recent documents.
+export async function showRecent() {
+  const files = await run("Recent documents", () => DocService.RecentFiles());
+  if (files) state.dialog = { kind: "recent", files };
 }
 
 export async function openWelcome() {
@@ -129,8 +142,25 @@ async function exported(kind: string, f: () => Promise<string>) {
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
 
-export async function quit() {
-  if (await ensureSaved()) DocService.Quit();
+// Closing the window asks again each time; one question at a time.
+let quitting = false;
+async function quit() {
+  if (quitting) return;
+  quitting = true;
+  try {
+    if (await ensureSaved()) DocService.Quit();
+  } finally {
+    quitting = false;
+  }
+}
+
+// A text field in a dialog has its own undo history; the menu's Undo and
+// Redo act on it rather than on the document behind the dialog.
+function fieldEdit(command: "undo" | "redo"): boolean {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return false;
+  document.execCommand(command);
+  return true;
 }
 
 export function menu(action: string) {
@@ -156,10 +186,10 @@ export function menu(action: string) {
       state.dialog = { kind: "cheatsheet" };
       return;
     case "undo":
-      if (v) undo(v);
+      if (!fieldEdit("undo") && v && !state.dialog) undo(v);
       return;
     case "redo":
-      if (v) redo(v);
+      if (!fieldEdit("redo") && v && !state.dialog) redo(v);
       return;
     case "find":
       if (v) openSearchPanel(v);
@@ -173,6 +203,8 @@ export function menu(action: string) {
     case "zoomReset":
       state.zoom = 0;
       return;
+    case "outline":
+      return toggleOutline();
   }
 }
 
@@ -193,13 +225,21 @@ function pastedName(file: File): string {
   return `pasted-image.${ext}`;
 }
 
-// addFigure inserts a figure for an image already in the document's folder,
-// then opens it for a caption.
-function addFigure(src: string, at?: number) {
+// addFigure inserts a figure for images already in the document's folder
+// (a grid for two or more), then opens it for a caption.
+function addFigure(srcs: string[], at?: number) {
   const v = view();
+  const grid = srcs.length > 1;
   const start = insertBlock(
     v,
-    figureMarkdown({ src, caption: "", label: "", width: 70, position: "" }),
+    figureMarkdown({
+      pictures: srcs.map((src) => ({ src, alt: "" })),
+      caption: "",
+      label: "",
+      width: grid ? 0 : 70,
+      position: "",
+      columns: Math.min(srcs.length, 3),
+    }),
     { at },
   );
   const item = v.state.field(itemsField).find((x) => x.kind === "figure" && x.from === start);
@@ -212,7 +252,7 @@ export async function insertImages(files: File[], pos: number) {
       DocService.AddImage(pastedName(file), await base64(file)),
     );
     if (src) {
-      addFigure(src, pos);
+      addFigure([src], pos);
       pos = view().state.selection.main.head;
     }
   }
@@ -225,7 +265,7 @@ export async function insertImageFiles(paths: string[], pos: number) {
       DocService.AddImageFile(path),
     );
     if (src) {
-      addFigure(src, pos);
+      addFigure([src], pos);
       pos = view().state.selection.main.head;
     }
   }
@@ -233,11 +273,21 @@ export async function insertImageFiles(paths: string[], pos: number) {
 
 export async function choosePicture() {
   const src = await run("Insert picture", () => DocService.ChooseImage());
-  if (src) addFigure(src);
+  if (src) addFigure([src]);
+}
+
+// choosePictureGrid inserts a grid of the pictures chosen.
+export async function choosePictureGrid() {
+  const srcs = await run("Insert pictures", () => DocService.ChooseImages());
+  if (srcs?.length) addFigure(srcs);
 }
 
 export async function replacePicture(): Promise<string> {
   return (await run("Replace picture", () => DocService.ChooseImage())) ?? "";
+}
+
+export async function addPictures(): Promise<string[]> {
+  return (await run("Add pictures", () => DocService.ChooseImages())) ?? [];
 }
 
 // relabelChanges points every reference to one label at another.
@@ -331,13 +381,9 @@ export function insertCrossRef(item: Item) {
   const before = v.state.sliceDoc(from - 1, from);
   const text = (before && !/[\s(\[]/.test(before) ? " " : "") + "@" + label;
   changes.push({ from, to, insert: text });
-  v.dispatch({ changes, userEvent: "input" });
-  // The cursor goes after the reference, wherever the changes moved it.
-  const at =
-    v.state.doc.toString().lastIndexOf("@" + label, v.state.selection.main.head + text.length) +
-    label.length +
-    1;
-  v.dispatch({ selection: { anchor: Math.min(at, v.state.doc.length) } });
+  const set = v.state.changes(changes);
+  // The cursor goes after the reference, wherever the other changes put it.
+  v.dispatch({ changes: set, selection: { anchor: set.mapPos(to, 1) }, userEvent: "input" });
   v.focus();
 }
 
@@ -357,4 +403,17 @@ export function setMeta(patch: Partial<Meta>) {
 export function setTemplate(id: string) {
   setMeta({ template: id === "classic" ? "" : id });
   state.template = id;
+}
+
+// --- View -----------------------------------------------------------------------------
+
+export function toggleMarkdownDetails() {
+  state.markdownDetails = !state.markdownDetails;
+  localStorage.setItem("markdownDetails", state.markdownDetails ? "1" : "0");
+  if (editor.value) setMarkdownDetails(editor.value, state.markdownDetails);
+}
+
+export function toggleOutline() {
+  state.outlineOpen = !state.outlineOpen;
+  localStorage.setItem("outline", state.outlineOpen ? "1" : "0");
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { AlertTriangle, Minus, Plus } from "lucide-vue-next";
-import { menu } from "../lib/actions";
+import { AlertTriangle, Minus, Plus, TableOfContents } from "lucide-vue-next";
+import { menu, toggleOutline } from "../lib/actions";
 import { state } from "../lib/store";
 
 const showWarnings = ref(false);
@@ -36,6 +36,13 @@ const pages = computed(() => state.pages.length);
       }}
     </span>
     <span class="zoom">
+      <button
+        :class="{ on: state.outlineOpen }"
+        :title="state.outlineOpen ? 'Hide outline' : 'Show outline'"
+        @click="toggleOutline"
+      >
+        <TableOfContents :size="12" />
+      </button>
       <button title="Zoom out (⌘−)" @click="menu('zoomOut')"><Minus :size="12" /></button>
       <button class="pct" title="Fit to width (⌘0)" @click="menu('zoomReset')">
         {{ state.zoom ? `${zoomPct}%` : "Fit" }}
@@ -124,6 +131,9 @@ b {
 }
 .zoom button:hover {
   background: var(--hover);
+}
+.zoom button.on {
+  background: var(--active);
 }
 .zoom .pct {
   min-width: 42px;

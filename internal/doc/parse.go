@@ -1,7 +1,9 @@
 package doc
 
 import (
+	"bytes"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +16,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
 var markdown = goldmark.New(goldmark.WithExtensions(
@@ -41,7 +44,9 @@ func Parse(source, baseDir string) *Document {
 	src := []byte(body)
 	root := markdown.Parser().Parse(text.NewReader(src))
 
-	p := &parser{src: src, baseDir: baseDir, notes: map[int]ast.Node{}}
+	// Lines are counted in the whole source: the front matter comes first.
+	lineBase := strings.Count(source, "\n") - strings.Count(body, "\n")
+	p := &parser{src: src, baseDir: baseDir, lineBase: lineBase, notes: map[int]ast.Node{}}
 	ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if fn, ok := n.(*extast.Footnote); ok && entering {
 			p.notes[fn.Index] = fn
@@ -61,6 +66,7 @@ func Parse(source, baseDir string) *Document {
 type parser struct {
 	src      []byte
 	baseDir  string
+	lineBase int              // source lines before src (the front matter)
 	notes    map[int]ast.Node // footnote content by index
 	labels   map[string]Inline
 	warnings []string
@@ -158,7 +164,7 @@ func (p *parser) blocks(parent ast.Node) []Block {
 			}
 			out = append(out, p.paragraph(n))
 		case *ast.Heading:
-			out = append(out, Block{Type: BlockHeading, Level: n.Level, Inlines: p.inlines(n)})
+			out = append(out, Block{Type: BlockHeading, Level: n.Level, Line: p.line(n), Inlines: p.inlines(n)})
 		case *ast.List:
 			b := Block{Type: BlockList, Ordered: n.IsOrdered(), Tight: n.IsTight}
 			if n.IsOrdered() {
@@ -189,6 +195,14 @@ func (p *parser) raw(n ast.Node) string {
 	return strings.TrimSpace(p.lines(n))
 }
 
+// line is the 1-based source line n's text starts on; 0 when it has none.
+func (p *parser) line(n ast.Node) int {
+	if n.Lines().Len() == 0 {
+		return 0
+	}
+	return p.lineBase + bytes.Count(p.src[:n.Lines().At(0).Start], []byte("\n")) + 1
+}
+
 func (p *parser) lines(n ast.Node) string {
 	var b strings.Builder
 	lines := n.Lines()
@@ -200,9 +214,10 @@ func (p *parser) lines(n ast.Node) string {
 }
 
 var (
-	attrBlock      = regexp.MustCompile(`^\{([^{}]*)\}$`)
-	trailingAttrs  = regexp.MustCompile(`\s*\{([^{}]*)\}\s*$`)
-	tableCaptionRe = regexp.MustCompile(`(?i)^(table:|:\s)`)
+	attrBlock       = regexp.MustCompile(`^\{([^{}]*)\}$`)
+	trailingAttrs   = regexp.MustCompile(`\s*\{([^{}]*)\}\s*$`)
+	tableCaptionRe  = regexp.MustCompile(`(?i)^(table:|:\s)`)
+	figureCaptionRe = regexp.MustCompile(`(?i)^figure:`)
 )
 
 func isTableCaption(raw string) bool { return tableCaptionRe.MatchString(raw) }
@@ -216,6 +231,9 @@ func (p *parser) paragraph(n ast.Node) Block {
 	}
 	if fig, ok := p.figure(n); ok {
 		return fig
+	}
+	if grid, ok := p.grid(n); ok {
+		return grid
 	}
 	return Block{Type: BlockParagraph, Inlines: p.inlines(n)}
 }
@@ -250,13 +268,57 @@ func (p *parser) figure(n ast.Node) (Block, bool) {
 	}
 	b := Block{Type: BlockFigure, Caption: p.inlines(img), Label: id}
 	b.Src, b.Missing = p.image(string(img.Destination))
+	figureLayout(&b, kv)
+	return b, true
+}
+
+// grid reads a paragraph of two or more images ending in a `Figure:`
+// caption (and an optional attribute block): pictures sharing one caption.
+func (p *parser) grid(n ast.Node) (Block, bool) {
+	var imgs []*ast.Image
+	c := n.FirstChild()
+	for ; c != nil; c = c.NextSibling() {
+		if img, ok := c.(*ast.Image); ok {
+			imgs = append(imgs, img)
+		} else if t, ok := c.(*ast.Text); !ok || strings.TrimSpace(string(t.Segment.Value(p.src))) != "" {
+			break
+		}
+	}
+	if len(imgs) < 2 || c == nil {
+		return Block{}, false
+	}
+	var caption []Inline
+	for ; c != nil; c = c.NextSibling() {
+		caption = p.inline(caption, c)
+	}
+	caption = splitRefs(mergeText(caption))
+	if len(caption) == 0 || caption[0].Type != InlineText || !figureCaptionRe.MatchString(caption[0].Text) {
+		return Block{}, false
+	}
+	b := Block{Type: BlockFigure}
+	var kv map[string]string
+	b.Caption, b.Label, kv = stripCaption(caption, figureCaptionRe)
+	for _, img := range imgs {
+		pic := Picture{Alt: p.inlines(img)}
+		pic.Src, pic.Missing = p.image(string(img.Destination))
+		b.Pictures = append(b.Pictures, pic)
+	}
+	b.Columns = min(len(imgs), 3)
+	if cols, err := strconv.Atoi(strings.TrimSpace(kv["columns"])); err == nil && cols > 0 {
+		b.Columns = min(cols, len(imgs))
+	}
+	figureLayout(&b, kv)
+	return b, true
+}
+
+// figureLayout reads a figure's width and position from its attributes.
+func figureLayout(b *Block, kv map[string]string) {
 	if w, ok := kv["width"]; ok {
 		b.Width = parseWidth(w)
 	}
 	if a := strings.ToLower(kv["align"]); a == "left" || a == "right" {
 		b.Position = a
 	}
-	return b, true
 }
 
 // parseAttrs reads `#id key=value key="quoted value" .class`.
@@ -312,32 +374,51 @@ func parseWidth(v string) float64 {
 	return min(f, 100)
 }
 
-// image resolves an image reference against the document's folder: its
-// absolute path, or "" and what's missing.
+// image resolves an image reference: its absolute path, or "" and what's
+// missing.
 func (p *parser) image(dest string) (src, missing string) {
-	if dest == "" {
+	switch {
+	case dest == "":
 		return "", "no image"
-	}
-	if strings.Contains(dest, "://") {
+	case strings.Contains(dest, "://"):
 		p.warn("online images aren't supported: %s", dest)
 		return "", dest
 	}
-	path := dest
-	if !filepath.IsAbs(path) {
-		if p.baseDir == "" {
-			p.warn("image not found: %s", dest)
-			return "", dest
-		}
-		path = filepath.Join(p.baseDir, filepath.FromSlash(dest))
-		if abs, err := filepath.Abs(path); err == nil {
-			path = abs // typst runs elsewhere
-		}
-	}
-	if fi, err := os.Stat(path); err != nil || fi.IsDir() {
+	if src = ImagePath(p.baseDir, dest); src == "" {
 		p.warn("image not found: %s", dest)
 		return "", dest
 	}
-	return path, ""
+	return src, ""
+}
+
+// ImagePath finds the file an image reference names, relative to baseDir
+// (the document's folder) unless absolute: its absolute path, or "" if
+// there's none. Percent-encoded references (`my%20picture.png`) are tried
+// decoded too.
+func ImagePath(baseDir, ref string) string {
+	if ref == "" || strings.Contains(ref, "://") {
+		return ""
+	}
+	refs := []string{ref}
+	if u, err := url.PathUnescape(ref); err == nil && u != ref {
+		refs = append(refs, u)
+	}
+	for _, r := range refs {
+		p := filepath.FromSlash(r)
+		if !filepath.IsAbs(p) {
+			if baseDir == "" {
+				return ""
+			}
+			p = filepath.Join(baseDir, p)
+		}
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs // typst runs elsewhere
+		}
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return p
+		}
+	}
+	return ""
 }
 
 func (p *parser) table(t *extast.Table) Block {
@@ -371,32 +452,34 @@ func (p *parser) table(t *extast.Table) Block {
 		}
 	}
 	if next := t.NextSibling(); next != nil && (next.Kind() == ast.KindParagraph || next.Kind() == ast.KindTextBlock) && isTableCaption(p.raw(next)) {
-		b.Caption, b.Label = tableCaption(p.inlines(next))
+		b.Caption, b.Label, _ = stripCaption(p.inlines(next), tableCaptionRe)
 	}
 	return b
 }
 
-// tableCaption strips `Table:` from the front of a caption paragraph and an
-// attribute block from its end.
-func tableCaption(in []Inline) ([]Inline, string) {
+// stripCaption strips prefix (`Table:`, `Figure:`) from the front of a
+// caption and an attribute block from its end, returning the caption, the
+// block's id and its other attributes.
+func stripCaption(in []Inline, prefix *regexp.Regexp) ([]Inline, string, map[string]string) {
 	if len(in) > 0 && in[0].Type == InlineText {
-		t := tableCaptionRe.ReplaceAllString(in[0].Text, "")
+		t := prefix.ReplaceAllString(in[0].Text, "")
 		in[0].Text = strings.TrimLeft(t, " ")
 		if in[0].Text == "" {
 			in = in[1:]
 		}
 	}
 	id := ""
+	var kv map[string]string
 	if n := len(in); n > 0 && in[n-1].Type == InlineText {
 		if m := trailingAttrs.FindStringSubmatchIndex(in[n-1].Text); m != nil {
-			id, _ = parseAttrs(in[n-1].Text[m[2]:m[3]])
+			id, kv = parseAttrs(in[n-1].Text[m[2]:m[3]])
 			in[n-1].Text = in[n-1].Text[:m[0]]
 			if in[n-1].Text == "" {
 				in = in[:n-1]
 			}
 		}
 	}
-	return in, id
+	return in, id, kv
 }
 
 // --- Inlines ----------------------------------------------------------------
@@ -412,7 +495,12 @@ func (p *parser) inlines(parent ast.Node) []Inline {
 func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 	switch n := n.(type) {
 	case *ast.Text:
-		out = append(out, Inline{Type: InlineText, Text: string(n.Segment.Value(p.src))})
+		v := n.Segment.Value(p.src)
+		if !n.IsRaw() {
+			// `\*` is a star and `&amp;` an ampersand, as in HTML output.
+			v = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
+		}
+		out = append(out, Inline{Type: InlineText, Text: string(v)})
 		if n.HardLineBreak() {
 			out = append(out, Inline{Type: InlineLineBreak})
 		} else if n.SoftLineBreak() {

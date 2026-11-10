@@ -26,11 +26,16 @@ abstract: Short.
 
 Text with **bold**, *emph*, ~~strike~~, ` + "`code`" + `, a [link](https://example.com),
 a hard  
-break, an inline ![x](images/p.svg) image and a note.[^n] See @fig:a, @tbl:b and @fig:nope.
+break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b and @fig:nope.
 
 ![Caption *here*](images/p.svg){#fig:a width=30% align=right}
 
 ![Missing](images/gone.png)
+
+![Left](images/p.svg)
+![Right](images/p.svg)
+![](images/gone.png)
+Figure: A grid of *three* {#fig:grid columns=2 width=70% align=left}
 
 | A | B |
 |:--|--:|
@@ -51,9 +56,11 @@ Table: Numbers {#tbl:b}
 
 \pagebreak
 
-## Two
+## Two[^h]
 
 [^n]: The *note*.
+[^h]: A heading's note.
+[^e]:
 `
 
 func TestEveryTemplateRendersEverything(t *testing.T) {

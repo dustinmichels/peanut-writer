@@ -13,6 +13,10 @@ const rows: [string, string][] = [
     "![Caption](images/a.png){#fig:a width=60% align=left}",
     "A figure with a caption, a name, a size and a position (left or right; centered by default)",
   ],
+  [
+    "![](images/a.png)\n![](images/b.png)\nFigure: Caption {#fig:c columns=2}",
+    "A picture grid: pictures side by side, one per line, sharing the caption on the last line",
+  ],
   ["Table: Caption {#tbl:b}", "A table's caption, on the line after the table"],
   ["@fig:a   @tbl:b", "Cross-references: become “Figure 1”, “Table 1”"],
   ["Text[^1]   [^1]: The note.", "A footnote"],
@@ -60,5 +64,6 @@ code {
   padding: 2px 6px;
   border-radius: 5px;
   user-select: text;
+  white-space: pre-wrap;
 }
 </style>

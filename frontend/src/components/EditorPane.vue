@@ -22,18 +22,23 @@ function filesDropped(e: { data: { paths: string[]; x?: number; y?: number } }) 
 let offDrop: (() => void) | undefined;
 
 onMounted(() => {
-  editor.value = createEditor(host.value!, state.content, {
-    editFigure: (item) => (state.dialog = { kind: "figure", item }),
-    editTable: (item) => (state.dialog = { kind: "table", item }),
-    editProperties: () => (state.dialog = { kind: "properties" }),
-    pasteImages: insertImages,
-    imageURL: (src) => DocService.ImageURL(src),
-    changed(s, docChanged) {
-      if (docChanged) contentChanged(s.doc.toString());
-      state.marks = activeMarks(s);
-      state.block = blockStyleAt(s);
+  editor.value = createEditor(
+    host.value!,
+    state.content,
+    {
+      editFigure: (item) => (state.dialog = { kind: "figure", item }),
+      editTable: (item) => (state.dialog = { kind: "table", item }),
+      editProperties: () => (state.dialog = { kind: "properties" }),
+      pasteImages: insertImages,
+      imageURL: (src) => DocService.ImageURL(src),
+      changed(s, docChanged) {
+        if (docChanged) contentChanged(s.doc.toString());
+        state.marks = activeMarks(s);
+        state.block = blockStyleAt(s);
+      },
     },
-  });
+    state.markdownDetails,
+  );
   editor.value.focus();
   offDrop = Events.On("filesDropped", filesDropped);
 });

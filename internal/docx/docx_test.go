@@ -38,7 +38,7 @@ abstract: A short abstract & summary.
 
 As @fig:plot and @tbl:sales show (and @fig:vector, unlike @fig:nowhere), text can be **bold *and italic* or ~~struck~~**, ` + "`code`" + `,
 a [link](https://example.com/a?b=1&c=2), mail <ada@example.com>, a line  
-break, an inline ![](dot.png) image, ![](gone.png) a missing one, and a note.[^note]
+break, an inline ![](dot.png) image, an unsized ![](blank.svg) one, ![](gone.png) a missing one, and a note.[^note]
 
 [^note]: The note, with [a link](https://example.org) and an image ![](dot.png).
 
@@ -77,6 +77,14 @@ func main() {
 ![Not there](nope.png){#fig:gone}
 
 ![](dot.png)
+
+![Dots](dot.png) ![](drawing.svg)
+![](nope.png)
+Figure: A grid of pictures {#fig:grid columns=2 width=80% align=right}
+
+![](dot.png)
+![](dot.png)
+Figure:
 
 | Year | Sales | Note |
 |:-----|------:|:----:|
@@ -121,6 +129,10 @@ func writeFixtures(t *testing.T, dir string) []byte {
 	}
 	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100"><circle cx="50" cy="50" r="40"/></svg>`
 	if err := os.WriteFile(filepath.Join(dir, "drawing.svg"), []byte(svg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// No size, so an inline one is drawn at a guessed width, then again.
+	if err := os.WriteFile(filepath.Join(dir, "blank.svg"), []byte(`<svg xmlns="http://www.w3.org/2000/svg"/>`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
@@ -248,7 +260,9 @@ func checkPackage(t *testing.T, id string, data []byte, wantNotes int) {
 		t.Errorf("%s: no REF fields", id)
 	}
 
-	// Relationship ids exist, and internal targets are in the package.
+	// Relationship ids exist, internal targets are in the package, and
+	// every media file is a target.
+	targets := map[string]bool{}
 	for _, part := range []string{"word/document.xml", "word/footnotes.xml", "word/footer1.xml"} {
 		if _, ok := files[part]; !ok {
 			continue
@@ -269,6 +283,7 @@ func checkPackage(t *testing.T, id string, data []byte, wantNotes int) {
 			for _, rel := range r.Rels {
 				rels[rel.ID] = rel.Target
 				if rel.Mode != "External" {
+					targets["word/"+rel.Target] = true
 					if _, ok := files["word/"+rel.Target]; !ok {
 						t.Errorf("%s: %s points at missing %s", id, relsName, rel.Target)
 					}
@@ -279,6 +294,11 @@ func checkPackage(t *testing.T, id string, data []byte, wantNotes int) {
 			if _, ok := rels[rid]; !ok {
 				t.Errorf("%s: %s uses %s, not in %s", id, part, rid, relsName)
 			}
+		}
+	}
+	for name := range files {
+		if strings.HasPrefix(name, "word/media/") && !targets[name] {
+			t.Errorf("%s: %s is not used", id, name)
 		}
 	}
 

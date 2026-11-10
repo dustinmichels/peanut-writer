@@ -7,11 +7,18 @@
 //     author, date, abstract, template.
 //   - Figures: a paragraph holding only an image, optionally followed by an
 //     attribute block: `![Caption](images/a.png){#fig:a width=60% align=left}`.
+//   - Picture grids: a paragraph of two or more images (one per line, or
+//     several to a line) whose last line is a shared caption starting
+//     `Figure:`, with an optional attribute block:
+//     `Figure: Two peanuts {#fig:p columns=2 width=80%}`. Each image's own
+//     text is its description (alt text).
 //   - Table captions: a paragraph right after a table, starting `Table:`, with
 //     an optional attribute block: `Table: Sales by year {#tbl:sales}`.
 //   - Cross-references: `@fig:a`, `@tbl:sales`. Numbers follow document order.
 //   - `[TOC]` (table of contents) and `\pagebreak` on a line of their own.
 package doc
+
+import "strings"
 
 // Document is a parsed document.
 type Document struct {
@@ -54,8 +61,10 @@ type Block struct {
 	Inlines []Inline `json:"inlines,omitempty"`
 	Caption []Inline `json:"caption,omitempty"`
 
-	// heading: 1–6.
+	// heading: 1–6, and the 1-based source line its text starts on (0 for an
+	// empty heading).
 	Level int `json:"level,omitempty"`
+	Line  int `json:"line,omitempty"`
 
 	// list.
 	Ordered bool      `json:"ordered,omitempty"`
@@ -72,12 +81,18 @@ type Block struct {
 
 	// figure: the image's absolute path, "" when it can't be shown (then
 	// Missing names what was asked for). Width is a percentage of the text
-	// width; 0 means the image's natural size, shrunk to fit. Position is
-	// "left" or "right"; "" means centered.
+	// width; 0 means the image's natural size, shrunk to fit (a grid: the
+	// full text width). Position is "left" or "right"; "" means centered.
 	Src      string  `json:"src,omitempty"`
 	Missing  string  `json:"missing,omitempty"`
 	Width    float64 `json:"width,omitempty"`
 	Position string  `json:"position,omitempty"`
+
+	// figure with two or more pictures (a grid sharing the caption): the
+	// pictures in reading order, Columns to a row; Src and Missing are
+	// unused.
+	Pictures []Picture `json:"pictures,omitempty"`
+	Columns  int       `json:"columns,omitempty"`
 
 	// table: Align per column ("left", "center", "right" or ""), the header
 	// row and the body rows; each cell is a run of inlines.
@@ -89,6 +104,16 @@ type Block struct {
 	// number, counted separately for figures and tables in document order.
 	Label  string `json:"label,omitempty"`
 	Number int    `json:"number,omitempty"`
+}
+
+// Picture is one picture in a grid.
+type Picture struct {
+	// The absolute path, "" when it can't be shown (then Missing names what
+	// was asked for).
+	Src     string `json:"src,omitempty"`
+	Missing string `json:"missing,omitempty"`
+	// The image's own text, a description for screen readers.
+	Alt []Inline `json:"alt,omitempty"`
 }
 
 // Inline types.
@@ -134,3 +159,54 @@ const (
 	KindFigure = "figure"
 	KindTable  = "table"
 )
+
+// Heading is an entry in the document's outline.
+type Heading struct {
+	Level int    `json:"level"`
+	Text  string `json:"text"`
+	Line  int    `json:"line"` // 1-based source line
+}
+
+// Outline lists the headings with text in document order, including those
+// in lists and quotes.
+func (d *Document) Outline() []Heading {
+	out := []Heading{}
+	var walk func([]Block)
+	walk = func(bs []Block) {
+		for _, b := range bs {
+			switch b.Type {
+			case BlockHeading:
+				if t := strings.TrimSpace(PlainText(b.Inlines)); t != "" && b.Line > 0 {
+					out = append(out, Heading{Level: b.Level, Text: t, Line: b.Line})
+				}
+			case BlockList:
+				for _, item := range b.Items {
+					walk(item)
+				}
+			case BlockQuote:
+				walk(b.Children)
+			}
+		}
+	}
+	walk(d.Blocks)
+	return out
+}
+
+// PlainText is inlines' text, without formatting.
+func PlainText(xs []Inline) string {
+	var b strings.Builder
+	var walk func([]Inline)
+	walk = func(xs []Inline) {
+		for _, x := range xs {
+			switch x.Type {
+			case InlineText, InlineCode:
+				b.WriteString(x.Text)
+			case InlineLineBreak:
+				b.WriteString(" ")
+			}
+			walk(x.Children)
+		}
+	}
+	walk(xs)
+	return b.String()
+}

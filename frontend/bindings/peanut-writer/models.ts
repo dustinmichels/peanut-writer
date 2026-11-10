@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as doc$0 from "./internal/doc/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as templates$0 from "./internal/templates/models.js";
 
 /**
@@ -27,10 +30,24 @@ export interface DocInfo {
 }
 
 /**
- * RenderResult is a preview: one SVG per page.
+ * RecentFile is a recently opened or saved document.
+ */
+export interface RecentFile {
+    "path": string;
+    "name": string;
+
+    /**
+     * its folder, with ~ for the home folder
+     */
+    "folder": string;
+}
+
+/**
+ * RenderResult is a preview: one SVG per page, and the document's headings.
  */
 export interface RenderResult {
     "pages": string[] | null;
+    "outline": doc$0.Heading[] | null;
     "warnings": string[] | null;
     "error": string;
 
@@ -47,4 +64,9 @@ export interface StartupInfo {
     "document": DocInfo;
     "templates": templates$0.Template[] | null;
     "typstError": string;
+
+    /**
+     * offered on opening; none on the first run
+     */
+    "recent": RecentFile[] | null;
 }

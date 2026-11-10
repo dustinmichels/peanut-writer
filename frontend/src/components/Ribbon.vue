@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, defineAsyncComponent, ref } from "vue";
 import { indentLess, indentMore } from "@codemirror/commands";
 import {
   Bold,
@@ -7,11 +7,14 @@ import {
   Code,
   CodeXml,
   FilePlus2,
+  FileCode,
   FileText,
   FileDown,
   FolderOpen,
   Footprints,
+  History,
   Image,
+  Images,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -28,6 +31,7 @@ import {
   Settings2,
   Strikethrough,
   Table,
+  TableOfContents,
   TextQuote,
   Link2,
   FolderCog,
@@ -40,15 +44,19 @@ import TemplateGallery from "./TemplateGallery.vue";
 import { DocService } from "../../bindings/peanut-writer";
 import {
   choosePicture,
+  choosePictureGrid,
   exportDocx,
   exportPdf,
   menu,
   newDoc,
   openDoc,
   openWelcome,
+  showRecent,
   save,
   saveAs,
   setTemplate,
+  toggleMarkdownDetails,
+  toggleOutline,
 } from "../lib/actions";
 import {
   type BlockStyle,
@@ -63,14 +71,21 @@ import {
 } from "../lib/editor";
 import { editor, errorText, state, toast } from "../lib/store";
 
-type Tab = "file" | "home" | "insert" | "references" | "design";
+type Tab = "file" | "home" | "insert" | "references" | "design" | "view";
 const tab = ref<Tab>("home");
+const collapsed = ref(false);
+
+function selectTab(id: Tab) {
+  collapsed.value = tab.value === id ? !collapsed.value : false;
+  tab.value = id;
+}
 const tabs: { id: Tab; label: string }[] = [
   { id: "file", label: "File" },
   { id: "home", label: "Home" },
   { id: "insert", label: "Insert" },
   { id: "references", label: "References" },
   { id: "design", label: "Design" },
+  { id: "view", label: "View" },
 ];
 const tablePicker = ref(false);
 
@@ -105,10 +120,14 @@ function pickTable(cols: number, rows: number) {
   state.dialog = { kind: "table", cols, rows };
 }
 
+async function refreshTemplates() {
+  state.templates = (await DocService.Templates()) ?? [];
+}
+
 async function customize() {
   try {
     const id = await DocService.CustomizeTemplate(state.template);
-    state.templates = (await DocService.Templates()) ?? [];
+    await refreshTemplates();
     toast(
       "Copied the template to your templates folder. Edit it there; changes show up as you work.",
       "success",
@@ -119,12 +138,20 @@ async function customize() {
   }
 }
 
-async function refreshTemplates() {
-  state.templates = (await DocService.Templates()) ?? [];
+async function openTemplatesFolder() {
+  try {
+    await DocService.OpenTemplatesFolder();
+    await refreshTemplates();
+  } catch (e) {
+    toast(`Templates folder: ${errorText(e)}`, "error");
+  }
 }
 
 const figures = computed(() => state.items.filter((x) => x.kind === "figure").length);
 const tables = computed(() => state.items.filter((x) => x.kind === "table").length);
+
+// three.js is big; load Peanut in his own chunk so the editor opens first.
+const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
 </script>
 
 <template>
@@ -134,20 +161,29 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
         v-for="t in tabs"
         :key="t.id"
         class="tab"
-        :class="{ on: tab === t.id, file: t.id === 'file' }"
-        @click="tab = t.id"
+        :class="{ on: !collapsed && tab === t.id, file: t.id === 'file' }"
+        :aria-expanded="tab === t.id && !collapsed"
+        @click="selectTab(t.id)"
       >
         {{ t.label }}
       </button>
+      <PeanutBuddy />
     </div>
 
-    <div class="panel">
+    <div v-show="!collapsed" class="panel">
       <!-- File -->
       <template v-if="tab === 'file'">
         <div class="group">
           <div class="row">
             <RibbonButton big :icon="FilePlus2" label="New" title="New (⌘N)" @click="newDoc" />
             <RibbonButton big :icon="FolderOpen" label="Open" title="Open (⌘O)" @click="openDoc" />
+            <RibbonButton
+              big
+              :icon="History"
+              label="Recent"
+              title="Open a recent document"
+              @click="showRecent"
+            />
             <RibbonButton big :icon="Save" label="Save" title="Save (⌘S)" @click="save" />
             <RibbonButton
               big
@@ -285,7 +321,7 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
           </div>
           <label>Paragraph</label>
         </div>
-        <div class="group grow">
+        <div class="group">
           <div class="styles">
             <button
               v-for="s in styles"
@@ -319,6 +355,13 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
               label="Picture"
               title="Insert a picture (or drag one in)"
               @click="choosePicture"
+            />
+            <RibbonButton
+              big
+              :icon="Images"
+              label="Picture Grid"
+              title="Insert several pictures side by side, sharing one caption"
+              @click="choosePictureGrid"
             />
             <div class="pop" @mouseleave="tablePicker = false">
               <RibbonButton big :icon="Table" label="Table" @click="tablePicker = !tablePicker" />
@@ -390,7 +433,7 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
           </div>
           <label>Notes &amp; Contents</label>
         </div>
-        <div class="group info">
+        <div class="group">
           <div class="facts">
             <span><b>{{ figures }}</b> {{ figures === 1 ? "figure" : "figures" }}</span>
             <span><b>{{ tables }}</b> {{ tables === 1 ? "table" : "tables" }}</span>
@@ -402,7 +445,7 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
 
       <!-- Design -->
       <template v-if="tab === 'design'">
-        <div class="group grow">
+        <div class="group">
           <TemplateGallery />
           <label>Templates</label>
         </div>
@@ -426,10 +469,35 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
               :icon="FolderCog"
               label="Templates"
               title="Open your templates folder"
-              @click="DocService.OpenTemplatesFolder().then(refreshTemplates)"
+              @click="openTemplatesFolder"
             />
           </div>
           <label>Look</label>
+        </div>
+      </template>
+
+      <!-- View -->
+      <template v-if="tab === 'view'">
+        <div class="group">
+          <div class="row">
+            <RibbonButton
+              big
+              :icon="FileCode"
+              label="Markdown Details"
+              title="Show more Markdown details: the Markdown behind each figure"
+              :active="state.markdownDetails"
+              @click="toggleMarkdownDetails"
+            />
+            <RibbonButton
+              big
+              :icon="TableOfContents"
+              label="Outline"
+              title="Show the headings beside the editor, to jump to a section"
+              :active="state.outlineOpen"
+              @click="toggleOutline"
+            />
+          </div>
+          <label>Show</label>
         </div>
       </template>
     </div>

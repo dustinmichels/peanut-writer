@@ -12,16 +12,9 @@ export interface Meta {
   template: string;
 }
 
-export const metaKeys: (keyof Meta)[] = [
-  "title",
-  "subtitle",
-  "author",
-  "date",
-  "abstract",
-  "template",
-];
+const metaKeys: (keyof Meta)[] = ["title", "subtitle", "author", "date", "abstract", "template"];
 
-export interface FrontMatter {
+interface FrontMatter {
   meta: Meta;
   // Character offsets of the whole block (both fences); 0,0 when absent.
   from: number;
@@ -30,7 +23,7 @@ export interface FrontMatter {
   extra: string[];
 }
 
-export function emptyMeta(): Meta {
+function emptyMeta(): Meta {
   return { title: "", subtitle: "", author: "", date: "", abstract: "", template: "" };
 }
 
@@ -50,7 +43,7 @@ export function readFrontMatter(text: string): FrontMatter {
   if (end < 0) return none;
   const extra: string[] = [];
   for (const line of lines.slice(1, end)) {
-    const m = /^([A-Za-z_-]+)\s*:\s*(.*)$/.exec(line.replace(/\r$/, ""));
+    const m = /^\s*([A-Za-z_-]+)\s*:\s*(.*)$/.exec(line.replace(/\r$/, ""));
     const key = m?.[1].toLowerCase() as keyof Meta | undefined;
     if (m && key && metaKeys.includes(key)) meta[key] = unquote(m[2].trim());
     else if (line.trim()) extra.push(line);
@@ -89,21 +82,28 @@ export function writeFrontMatter(meta: Meta, extra: string[] = []): string {
 
 // --- Figures and tables ---------------------------------------------------
 
-export type Kind = "figure" | "table";
+type Kind = "figure" | "table";
+
+export interface Picture {
+  src: string;
+  alt: string; // a grid picture's own description; "" for a single picture
+}
 
 export interface Item {
   kind: Kind;
   number: number;
   label: string; // "" when it has none
   caption: string; // as written (Markdown)
-  // Figure: the image line. Table: from the header row through the caption
-  // line (or the last row when there's no caption).
+  // Figure: the image line, or a grid's lines through its `Figure:` caption.
+  // Table: from the header row through the caption line (or the last row
+  // when there's no caption).
   from: number;
   to: number;
   line: number; // 1-based line of `from`
-  // figure
-  src?: string;
-  width?: number; // percent; 0 = natural
+  // figure: one picture, or two or more in a grid
+  pictures?: Picture[];
+  columns?: number; // grid: pictures to a row
+  width?: number; // percent; 0 = natural (a grid: the full width)
   position?: Position;
   // table
   tableFrom?: number;
@@ -112,21 +112,27 @@ export interface Item {
   captionTo?: number;
 }
 
-export const figureLine =
-  /^!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)\s*(\{[^{}]*\})?\s*$/;
-const delimiterRow = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
-export const captionLine = /^(?:Table:|:\s)\s*(.*?)\s*(\{[^{}]*\})?\s*$/i;
+const image = String.raw`!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)`;
+const figureLine = new RegExp(String.raw`^${image}\s*(\{[^{}]*\})?\s*$`);
+const imageRe = new RegExp(image, "g");
+const figureCaptionLine = /^Figure:\s*(.*?)\s*(\{[^{}]*\})?\s*$/i;
+
+const delimiterRow = /^\s{0,3}\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+// A row of dashes alone underlines a heading instead.
+const setextUnderline = /^\s*-+\s*$/;
+const captionLine = /^(?:Table:|:\s)\s*(.*?)\s*(\{[^{}]*\})?\s*$/i;
 const fence = /^\s{0,3}(```|~~~)/;
 
 // Where a figure sits across the text width; "" is centered.
 export type Position = "" | "left" | "right";
 
-export function parseAttrs(block: string | undefined): {
+function parseAttrs(block: string | undefined): {
   id: string;
   width: number;
   position: Position;
+  columns: number;
 } {
-  const out = { id: "", width: 0, position: "" as Position };
+  const out = { id: "", width: 0, position: "" as Position, columns: 0 };
   if (!block) return out;
   for (const f of block.slice(1, -1).trim().split(/\s+/)) {
     if (f.startsWith("#")) out.id = f.slice(1);
@@ -136,12 +142,26 @@ export function parseAttrs(block: string | undefined): {
     } else if (/^align=/i.test(f)) {
       const a = f.slice(6).replace(/["']/g, "").toLowerCase();
       if (a === "left" || a === "right") out.position = a;
+    } else if (/^columns=/i.test(f)) {
+      const n = parseInt(f.slice(8).replace(/["']/g, ""), 10);
+      if (n > 0) out.columns = n;
     }
   }
   return out;
 }
 
-// scan finds the document's figures and tables, numbered in order.
+// gridPictures is the pictures on a line holding only images, or null.
+function gridPictures(line: string): Picture[] | null {
+  if (!/^\s{0,3}!\[/.test(line) || line.replace(imageRe, "").trim() !== "") return null;
+  return [...line.matchAll(imageRe)].map((m) => ({
+    src: m[2],
+    alt: m[1].replace(/\\([\]\\[])/g, "$1"),
+  }));
+}
+
+// scan finds the document's figures and tables, numbered in order the way
+// internal/doc numbers them. It only sees top-level blocks: ones inside
+// lists or quotes, which the Go side also counts, are missed.
 export function scan(text: string): Item[] {
   const lines = text.split("\n");
   const starts: number[] = [];
@@ -173,7 +193,7 @@ export function scan(text: string): Item[] {
       continue;
     }
     const prevBoundary = blank(i - 1) || /^\s{0,3}#/.test(lines[i - 1]);
-    const fig = figureLine.exec(line.trim());
+    const fig = /^\s{0,3}!/.test(line) ? figureLine.exec(line.trim()) : null;
     if (fig && prevBoundary && blank(i + 1)) {
       const a = parseAttrs(fig[3]);
       items.push({
@@ -184,17 +204,45 @@ export function scan(text: string): Item[] {
         from: starts[i],
         to: end(i),
         line: i + 1,
-        src: fig[2],
+        pictures: [{ src: fig[2], alt: "" }],
         width: a.width,
         position: a.position,
       });
       continue;
     }
+    // A grid: lines of images, then a `Figure:` caption line.
+    if (prevBoundary) {
+      const pictures: Picture[] = [];
+      let j = i;
+      for (let p; j < lines.length && (p = gridPictures(lines[j])); j++) pictures.push(...p);
+      const cap = j < lines.length && j > i ? figureCaptionLine.exec(lines[j].trim()) : null;
+      if (cap && pictures.length >= 2 && blank(j + 1)) {
+        const a = parseAttrs(cap[2]);
+        items.push({
+          kind: "figure",
+          number: ++figs,
+          label: a.id,
+          caption: cap[1],
+          from: starts[i],
+          to: end(j),
+          line: i + 1,
+          pictures,
+          columns: Math.min(a.columns || 3, pictures.length),
+          width: a.width,
+          position: a.position,
+        });
+        i = j;
+        continue;
+      }
+    }
+    // A table may follow text directly (the text stays a paragraph), but its
+    // header must have as many cells as the delimiter row.
     if (
       line.includes("|") &&
       i + 1 < lines.length &&
       delimiterRow.test(lines[i + 1]) &&
-      prevBoundary
+      !setextUnderline.test(lines[i + 1]) &&
+      splitRow(line).length === splitRow(lines[i + 1]).length
     ) {
       let j = i + 2;
       while (j < lines.length && !blank(j)) j++;
@@ -212,7 +260,7 @@ export function scan(text: string): Item[] {
       };
       let k = j;
       while (k < lines.length && blank(k)) k++;
-      const cap = k < lines.length ? captionLine.exec(lines[k]) : null;
+      const cap = k < lines.length ? captionLine.exec(lines[k].trim()) : null;
       if (cap && blank(k + 1)) {
         item.caption = cap[1];
         item.label = parseAttrs(cap[2]).id;
@@ -229,7 +277,7 @@ export function scan(text: string): Item[] {
   return items;
 }
 
-export function slug(s: string): string {
+function slug(s: string): string {
   return (
     s
       .toLowerCase()
@@ -258,35 +306,48 @@ export function uniqueLabel(
   return label;
 }
 
-export function escapeCaption(s: string): string {
+function escapeCaption(s: string): string {
   return s.replace(/([\][\\])/g, "\\$1").replace(/\s*\n\s*/g, " ");
 }
 
 export interface FigureSpec {
-  src: string;
+  pictures: Picture[]; // one, or two or more for a grid
   caption: string;
   label: string;
-  width: number; // percent; 0 = natural
+  width: number; // percent; 0 = natural (a grid: the full width)
   position: Position;
+  columns: number; // grid: pictures to a row
 }
 
+// figureMarkdown writes one picture as `![caption](src){attrs}`, and a grid
+// as its pictures one to a line, then `Figure: caption {attrs}`.
 export function figureMarkdown(f: FigureSpec): string {
+  const grid = f.pictures.length > 1;
   const attrs = [
     f.label ? `#${f.label}` : "",
+    grid ? `columns=${Math.min(Math.max(1, Math.round(f.columns)), f.pictures.length)}` : "",
     f.width > 0 ? `width=${Math.round(f.width)}%` : "",
     f.position ? `align=${f.position}` : "",
   ].filter(Boolean);
-  return `![${escapeCaption(f.caption)}](${f.src})${attrs.length ? `{${attrs.join(" ")}}` : ""}`;
+  const block = attrs.length ? `{${attrs.join(" ")}}` : "";
+  if (!grid) return `![${escapeCaption(f.caption)}](${f.pictures[0]?.src ?? ""})${block}`;
+  const caption = f.caption.replace(/\s*\n\s*/g, " ").trim();
+  return [
+    ...f.pictures.map((p) => `![${escapeCaption(p.alt)}](${p.src})`),
+    ["Figure:", caption, block].filter(Boolean).join(" "),
+  ].join("\n");
 }
 
 // figureSpec is what figureMarkdown writes for item.
 export function figureSpec(item: Item): FigureSpec {
+  const pictures = item.pictures ?? [];
   return {
-    src: item.src ?? "",
+    pictures,
     caption: item.caption,
     label: item.label,
     width: item.width ?? 0,
     position: item.position ?? "",
+    columns: item.columns ?? Math.min(pictures.length, 3),
   };
 }
 

@@ -8,6 +8,7 @@ export {
 
 export type {
     DocInfo,
+    RecentFile,
     RenderResult,
     StartupInfo
 } from "./models.js";

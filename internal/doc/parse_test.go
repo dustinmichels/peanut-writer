@@ -123,3 +123,64 @@ func TestFrontMatterNeedsClosingFence(t *testing.T) {
 		t.Errorf("unterminated front matter read as meta: %+v", d.Meta)
 	}
 }
+
+func TestEscapesAndEntities(t *testing.T) {
+	d := Parse("a \\*b\\* &amp; &#169; `x &amp;`", "")
+	in := d.Blocks[0].Inlines
+	if len(in) != 2 || in[0].Text != "a *b* & © " || in[1].Text != "x &amp;" {
+		t.Errorf("inlines = %+v", in)
+	}
+}
+
+func TestPercentEncodedImagePath(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "my pic.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := Parse("![A](my%20pic.png)", dir)
+	if got := d.Blocks[0].Src; got != filepath.Join(dir, "my pic.png") {
+		t.Errorf("src = %q, warnings = %v", got, d.Warnings)
+	}
+}
+
+func TestPictureGrid(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := "![One](a.png) ![Two](a.png)\n![](gone.png)\nFigure: Three *peanuts* {#fig:g columns=5 width=80% align=left}\n\n" +
+		"![](a.png)\n![](a.png)\nFigure:\n\n" +
+		"![](a.png)\n![](a.png)\n\n" +
+		"![](a.png)\nFigure: one picture is a paragraph\n\n" +
+		"See @fig:g.\n"
+	d := Parse(src, dir)
+	if len(d.Blocks) != 5 {
+		t.Fatalf("got %d blocks: %+v", len(d.Blocks), d.Blocks)
+	}
+	g := d.Blocks[0]
+	if g.Type != BlockFigure || g.Number != 1 || g.Label != "fig:g" || g.Width != 80 || g.Position != "left" || len(g.Pictures) != 3 {
+		t.Fatalf("grid = %+v", g)
+	}
+	if g.Columns != 3 {
+		t.Errorf("columns = %d, want 3 (no more than there are pictures)", g.Columns)
+	}
+	if len(g.Caption) != 2 || g.Caption[0].Text != "Three " || g.Caption[1].Type != InlineEmph {
+		t.Errorf("caption = %+v", g.Caption)
+	}
+	if g.Pictures[0].Src != filepath.Join(dir, "a.png") || g.Pictures[0].Alt[0].Text != "One" {
+		t.Errorf("first picture = %+v", g.Pictures[0])
+	}
+	if g.Pictures[2].Src != "" || g.Pictures[2].Missing != "gone.png" {
+		t.Errorf("missing picture = %+v", g.Pictures[2])
+	}
+	bare := d.Blocks[1]
+	if bare.Type != BlockFigure || bare.Number != 2 || len(bare.Caption) != 0 || bare.Columns != 2 || bare.Width != 0 {
+		t.Errorf("uncaptioned grid = %+v", bare)
+	}
+	if d.Blocks[2].Type != BlockParagraph || d.Blocks[3].Type != BlockParagraph {
+		t.Errorf("pictures without a Figure: line, or only one, aren't a grid: %+v", d.Blocks[2:4])
+	}
+	if ref := d.Blocks[4].Inlines[1]; ref.Kind != KindFigure || ref.Number != 1 {
+		t.Errorf("ref = %+v", ref)
+	}
+}

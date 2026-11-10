@@ -14,10 +14,10 @@ import (
 	"mime"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -49,6 +49,10 @@ type DocService struct {
 	typstErr  error
 	settings  settings
 	scratches []string // scratch folders, removed on quit
+
+	menuMu     sync.Mutex
+	menu       *application.Menu // the menu bar
+	recentMenu *application.Menu // File → Open Recent
 }
 
 // DocInfo describes the open document.
@@ -59,12 +63,13 @@ type DocInfo struct {
 	Canceled bool   `json:"canceled"` // the user canceled a dialog; nothing changed
 }
 
-// RenderResult is a preview: one SVG per page.
+// RenderResult is a preview: one SVG per page, and the document's headings.
 type RenderResult struct {
-	Pages    []string `json:"pages"`
-	Warnings []string `json:"warnings"`
-	Error    string   `json:"error"`
-	Template string   `json:"template"` // the template used
+	Pages    []string      `json:"pages"`
+	Outline  []doc.Heading `json:"outline"`
+	Warnings []string      `json:"warnings"`
+	Error    string        `json:"error"`
+	Template string        `json:"template"` // the template used
 }
 
 // StartupInfo is what the editor needs when it opens.
@@ -72,10 +77,22 @@ type StartupInfo struct {
 	Document   DocInfo              `json:"document"`
 	Templates  []templates.Template `json:"templates"`
 	TypstError string               `json:"typstError"`
+	Recent     []RecentFile         `json:"recent"` // offered on opening; none on the first run
 }
 
+// RecentFile is a recently opened or saved document.
+type RecentFile struct {
+	Path   string `json:"path"`
+	Name   string `json:"name"`
+	Folder string `json:"folder"` // its folder, with ~ for the home folder
+}
+
+// maxRecent is how many documents the recent list keeps.
+const maxRecent = 10
+
 type settings struct {
-	Welcomed bool `json:"welcomed"`
+	Welcomed bool     `json:"welcomed"`
+	Recent   []string `json:"recent"` // newest first
 }
 
 func newDocService() *DocService {
@@ -88,19 +105,26 @@ func newDocService() *DocService {
 // --- Documents ---------------------------------------------------------------
 
 // Startup opens the welcome guide on the first run, and a blank document
-// after that.
+// (offering the recent ones) after that.
 func (s *DocService) Startup() (StartupInfo, error) {
 	info := StartupInfo{Templates: templates.List()}
 	if s.typstErr != nil {
 		info.TypstError = s.typstErr.Error()
 	}
+	s.mu.Lock()
+	welcomed := s.settings.Welcomed
+	s.mu.Unlock()
 	var err error
-	if !s.settings.Welcomed {
-		info.Document, err = s.OpenWelcome()
-		s.settings.Welcomed = true
-		s.saveSettings()
+	if !welcomed {
+		if info.Document, err = s.OpenWelcome(); err == nil {
+			s.mu.Lock()
+			s.settings.Welcomed = true
+			s.mu.Unlock()
+			s.saveSettings()
+		}
 	} else {
 		info.Document, err = s.NewDocument()
+		info.Recent = s.RecentFiles()
 	}
 	return info, err
 }
@@ -121,20 +145,26 @@ func (s *DocService) OpenWelcome() (DocInfo, error) {
 	if err != nil {
 		return DocInfo{}, err
 	}
-	sub, err := fs.Sub(starter, "starter")
+	content, err := copyStarter(dir)
 	if err != nil {
 		return DocInfo{}, err
 	}
-	if err := os.CopyFS(dir, sub); err != nil {
-		return DocInfo{}, err
-	}
-	content, err := os.ReadFile(filepath.Join(dir, "welcome.md"))
-	if err != nil {
-		return DocInfo{}, err
-	}
-	os.Remove(filepath.Join(dir, "welcome.md"))
 	s.setOpen("", dir)
-	return DocInfo{Name: "Welcome", Content: string(content)}, nil
+	return DocInfo{Name: "Welcome", Content: content}, nil
+}
+
+// copyStarter copies the welcome guide's images into dir and returns its
+// text.
+func copyStarter(dir string) (string, error) {
+	images, err := fs.Sub(starter, "starter/images")
+	if err != nil {
+		return "", err
+	}
+	if err := os.CopyFS(filepath.Join(dir, "images"), images); err != nil {
+		return "", err
+	}
+	b, err := starter.ReadFile("starter/welcome.md")
+	return string(b), err
 }
 
 // OpenDocument asks for a Markdown file and opens it.
@@ -151,13 +181,19 @@ func (s *DocService) OpenDocument() (DocInfo, error) {
 	return s.OpenPath(p)
 }
 
-// OpenPath opens the Markdown file at p.
+// OpenPath opens the Markdown file at p. A file that's gone is dropped from
+// the recent list.
 func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	b, err := os.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		s.forgetRecent(p)
+		return DocInfo{}, fmt.Errorf("%s isn't there anymore", filepath.Base(p))
+	}
 	if err != nil {
 		return DocInfo{}, err
 	}
 	s.setOpen(p, filepath.Dir(p))
+	s.remember(p)
 	return DocInfo{Path: p, Name: docName(p), Content: string(b)}, nil
 }
 
@@ -207,6 +243,7 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 		return DocInfo{}, err
 	}
 	s.setOpen(p, filepath.Dir(p))
+	s.remember(p)
 	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
 }
 
@@ -263,7 +300,7 @@ func (s *DocService) shouldClose() bool {
 
 func (s *DocService) setOpen(p, dir string) {
 	s.mu.Lock()
-	s.path, s.dir, s.dirty = p, dir, false
+	s.path, s.dir = p, dir
 	s.mu.Unlock()
 	s.SetDirty(false)
 }
@@ -299,8 +336,8 @@ var unsafeName = regexp.MustCompile(`[/\\:*?"<>|]+`)
 
 func safeFileName(s string) string {
 	s = strings.TrimSpace(unsafeName.ReplaceAllString(s, "-"))
-	if len(s) > 80 {
-		s = s[:80]
+	if r := []rune(s); len(r) > 80 {
+		s = strings.TrimSpace(string(r[:80]))
 	}
 	if s == "" {
 		return "Untitled"
@@ -313,22 +350,28 @@ var imageRef = regexp.MustCompile(`!\[[^\]]*\]\(\s*<?([^)\s>]+)>?`)
 // copyImages copies the images content refers to by relative path from one
 // folder to another, keeping any that are already there.
 func copyImages(content, from, to string) error {
-	if from == "" || from == to {
+	if from == to {
 		return nil
 	}
 	for _, m := range imageRef.FindAllStringSubmatch(content, -1) {
-		rel := m[1]
-		if strings.Contains(rel, "://") || filepath.IsAbs(rel) || strings.HasPrefix(path.Clean(rel), "..") {
+		if filepath.IsAbs(m[1]) {
+			continue // found the same from anywhere
+		}
+		src := doc.ImagePath(from, m[1])
+		if src == "" {
+			continue // missing before, missing after
+		}
+		rel, err := filepath.Rel(from, src)
+		if err != nil || !filepath.IsLocal(rel) {
 			continue
 		}
-		src := filepath.Join(from, filepath.FromSlash(rel))
-		dst := filepath.Join(to, filepath.FromSlash(rel))
+		dst := filepath.Join(to, rel)
 		if _, err := os.Stat(dst); err == nil {
 			continue
 		}
 		b, err := os.ReadFile(src)
 		if err != nil {
-			continue // missing before, missing after
+			return err
 		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
@@ -365,6 +408,29 @@ func (s *DocService) ChooseImage() (string, error) {
 		return "", err
 	}
 	return s.AddImageFile(p)
+}
+
+// ChooseImages asks for one or more image files and stores each like
+// AddImageFile; none if the user cancels.
+func (s *DocService) ChooseImages() ([]string, error) {
+	paths, err := s.app.Dialog.OpenFile().
+		SetTitle("Insert Pictures").
+		AddFilter("Images", "*.png;*.jpg;*.jpeg;*.gif;*.svg;*.webp").
+		CanChooseFiles(true).
+		AttachToWindow(s.window).
+		PromptForMultipleSelection()
+	if err != nil {
+		return nil, err
+	}
+	srcs := make([]string, 0, len(paths))
+	for _, p := range paths {
+		src, err := s.AddImageFile(p)
+		if err != nil {
+			return srcs, err
+		}
+		srcs = append(srcs, src)
+	}
+	return srcs, nil
 }
 
 // AddImageFile copies the image at path (picked or dropped) into the
@@ -433,15 +499,12 @@ func (s *DocService) storeImage(name string, b []byte) (string, error) {
 // ImageURL returns an image the document refers to as a data URL, for the
 // editor to show; "" if there's no such file.
 func (s *DocService) ImageURL(ref string) string {
-	if strings.Contains(ref, "://") {
-		return ""
-	}
 	s.mu.Lock()
 	dir := s.dir
 	s.mu.Unlock()
-	p := ref
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(dir, filepath.FromSlash(ref))
+	p := doc.ImagePath(dir, ref)
+	if p == "" {
+		return ""
 	}
 	b, err := os.ReadFile(p)
 	if err != nil {
@@ -459,9 +522,6 @@ func (s *DocService) ImageURL(ref string) string {
 // Render renders the document for the preview. A newer call cancels an
 // older one still running.
 func (s *DocService) Render(content string) RenderResult {
-	if s.typstErr != nil {
-		return RenderResult{Error: s.typstErr.Error()}
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
 	if s.cancel != nil {
@@ -473,9 +533,12 @@ func (s *DocService) Render(content string) RenderResult {
 	defer cancel()
 
 	d := doc.Parse(content, dir)
+	if s.typstErr != nil {
+		return RenderResult{Outline: d.Outline(), Error: s.typstErr.Error()}
+	}
 	tpl := templates.Get(d.Meta.Template)
 	pages, warnings, err := s.typst.Preview(ctx, d, tpl)
-	res := RenderResult{Pages: pages, Warnings: append(d.Warnings, warnings...), Template: tpl.ID}
+	res := RenderResult{Pages: pages, Outline: d.Outline(), Warnings: append(d.Warnings, warnings...), Template: tpl.ID}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			res.Error = "canceled"
@@ -599,15 +662,11 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 		return "", err
 	}
 	defer os.RemoveAll(dir)
-	sub, _ := fs.Sub(starter, "starter")
-	if err := os.CopyFS(dir, sub); err != nil {
-		return "", err
-	}
-	content, err := os.ReadFile(filepath.Join(dir, "welcome.md"))
+	content, err := copyStarter(dir)
 	if err != nil {
 		return "", err
 	}
-	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(string(content), dir), tpl)
+	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(content, dir), tpl)
 	if err != nil {
 		return "", err
 	}
@@ -645,6 +704,92 @@ func (s *DocService) OpenTemplatesFolder() error {
 	return s.Reveal(dir)
 }
 
+// --- Recent documents --------------------------------------------------------
+
+// RecentFiles lists the recent documents that are still there, newest first.
+func (s *DocService) RecentFiles() []RecentFile {
+	s.mu.Lock()
+	paths := slices.Clone(s.settings.Recent)
+	s.mu.Unlock()
+	home, _ := os.UserHomeDir()
+	files := []RecentFile{}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			continue // moved, deleted, or on a drive that isn't mounted
+		}
+		folder := filepath.Dir(p)
+		if home != "" && (folder == home || strings.HasPrefix(folder, home+string(filepath.Separator))) {
+			folder = "~" + folder[len(home):]
+		}
+		files = append(files, RecentFile{Path: p, Name: docName(p), Folder: folder})
+	}
+	return files
+}
+
+// ClearRecent empties the recent list.
+func (s *DocService) ClearRecent() {
+	s.mu.Lock()
+	s.settings.Recent = nil
+	s.mu.Unlock()
+	s.recentChanged()
+}
+
+// remember puts p at the top of the recent list.
+func (s *DocService) remember(p string) {
+	s.mu.Lock()
+	r := slices.DeleteFunc(slices.Clone(s.settings.Recent), func(q string) bool { return q == p })
+	r = slices.Insert(r, 0, p)
+	s.settings.Recent = r[:min(len(r), maxRecent)]
+	s.mu.Unlock()
+	s.recentChanged()
+}
+
+// forgetRecent takes p off the recent list.
+func (s *DocService) forgetRecent(p string) {
+	s.mu.Lock()
+	s.settings.Recent = slices.DeleteFunc(slices.Clone(s.settings.Recent), func(q string) bool { return q == p })
+	s.mu.Unlock()
+	s.recentChanged()
+}
+
+func (s *DocService) recentChanged() {
+	s.saveSettings()
+	s.fillRecentMenu()
+}
+
+// fillRecentMenu lists the recent documents in File → Open Recent and
+// refreshes the menu bar; choosing one sends the editor an "openRecent"
+// event with its path. Names that appear twice get their folder too.
+func (s *DocService) fillRecentMenu() {
+	s.menuMu.Lock()
+	defer s.menuMu.Unlock()
+	m := s.recentMenu
+	if m == nil {
+		return
+	}
+	m.Clear()
+	files := s.RecentFiles()
+	names := map[string]int{}
+	for _, f := range files {
+		names[f.Name]++
+	}
+	for _, f := range files {
+		label := f.Name
+		if names[f.Name] > 1 {
+			label += " — " + f.Folder
+		}
+		p := f.Path
+		m.Add(label).OnClick(func(*application.Context) { s.app.Event.Emit("openRecent", p) })
+	}
+	if len(files) > 0 {
+		m.AddSeparator()
+	}
+	m.Add("Clear Menu").SetEnabled(len(files) > 0).OnClick(func(*application.Context) { s.ClearRecent() })
+	if s.menu != nil {
+		s.menu.Update() // a no-op until the app runs
+	}
+}
+
 // --- Settings ----------------------------------------------------------------
 
 func settingsPath() (string, error) {
@@ -670,7 +815,9 @@ func (s *DocService) saveSettings() {
 	if err != nil {
 		return
 	}
+	s.mu.Lock()
 	b, _ := json.MarshalIndent(s.settings, "", "  ")
+	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err == nil {
 		os.WriteFile(p, b, 0o644)
 	}

@@ -79,9 +79,8 @@ type writer struct {
 
 	docRels, noteRels part
 
-	media   []mediaFile
-	pics    map[string]pic  // image cache, by path (and raster width)
-	foreign map[string]bool // paths that aren't PNG, JPEG or GIF
+	media   []*pic          // images placed, in order: word/media/image1.png, …
+	pics    map[string]*pic // image cache, by path (and raster width); nil for one Word can't show
 	drawing int             // last drawing id
 
 	bookmarks  map[string]string // figure/table label → bookmark name
@@ -124,11 +123,6 @@ func (p *part) add(typ, target string, external bool) string {
 	return id
 }
 
-type mediaFile struct {
-	name string // in word/media
-	data []byte
-}
-
 type orderedList struct{ level, start int }
 
 func newWriter(st templates.DocxStyle, opt Options) *writer {
@@ -150,7 +144,7 @@ func newWriter(st templates.DocxStyle, opt Options) *writer {
 	if st.MonoFont == "" {
 		st.MonoFont = "Menlo"
 	}
-	w := &writer{st: st, opt: opt, pics: map[string]pic{}, foreign: map[string]bool{}}
+	w := &writer{st: st, opt: opt, pics: map[string]*pic{}}
 	w.pageW, w.pageH = 12240, 15840
 	if strings.EqualFold(st.Paper, "a4") {
 		w.pageW, w.pageH = 11906, 16838

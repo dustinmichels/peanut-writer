@@ -49,6 +49,49 @@ onBeforeUnmount(() => {
   ro?.disconnect();
   pages.value.forEach((p) => URL.revokeObjectURL(p.url));
 });
+
+// applyTransform maps (x, y) through an SVG transform attribute.
+function applyTransform(t: string, x: number, y: number): [number, number] {
+  const fns = [...t.matchAll(/(\w+)\(([^)]*)\)/g)];
+  for (let i = fns.length - 1; i >= 0; i--) {
+    const [, name, args] = fns[i];
+    const v = args
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .map(Number);
+    if (name === "translate") [x, y] = [x + v[0], y + (v[1] ?? 0)];
+    else if (name === "scale") [x, y] = [x * v[0], y * (v[1] ?? v[0])];
+    else if (name === "matrix") [x, y] = [v[0] * x + v[2] * y + v[4], v[1] * x + v[3] * y + v[5]];
+  }
+  return [x, y];
+}
+
+// findHeading is where the heading on source line `line` is in the preview:
+// its page and its baseline in points from the page's top. The preview marks
+// each heading with an invisible `peanut:<line>` link (see peanut.typ).
+function findHeading(line: number): { page: number; y: number } | undefined {
+  const href = `peanut:${line}`;
+  const page = state.pages.findIndex((svg) => svg.includes(`href="${href}"`));
+  if (page < 0) return;
+  const svg = new DOMParser().parseFromString(state.pages[page], "image/svg+xml");
+  let x = 0;
+  let y = 0;
+  for (let el = svg.querySelector(`a[href="${href}"]`); el; el = el.parentElement) {
+    [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
+  }
+  return { page, y };
+}
+
+// showHeading scrolls the preview to the heading on source line `line`.
+function showHeading(line: number) {
+  const at = findHeading(line);
+  const el = scroller.value;
+  const page = at && el?.querySelectorAll<HTMLElement>(".page")[at.page];
+  if (!at || !el || !page) return;
+  // Leave room above the baseline for the heading itself.
+  el.scrollTo({ top: page.offsetTop + (at.y - 40) * PX * zoom.value, behavior: "smooth" });
+}
+defineExpose({ showHeading });
 </script>
 
 <template>

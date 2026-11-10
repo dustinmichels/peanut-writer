@@ -33,7 +33,7 @@ func main() {
 		},
 	})
 	docs.app = app
-	app.Menu.Set(menu(app))
+	app.Menu.Set(menu(app, docs))
 
 	docs.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Peanut Writer",
@@ -74,7 +74,7 @@ func main() {
 
 // menu builds the menu bar. File and Edit commands go to the editor as
 // "menu" events, so they act on its state (and its undo history).
-func menu(app *application.App) *application.Menu {
+func menu(app *application.App, docs *DocService) *application.Menu {
 	send := func(action string) func(*application.Context) {
 		return func(*application.Context) { app.Event.Emit("menu", action) }
 	}
@@ -84,6 +84,8 @@ func menu(app *application.App) *application.Menu {
 	file := m.AddSubmenu("File")
 	file.Add("New").SetAccelerator("CmdOrCtrl+N").OnClick(send("new"))
 	file.Add("Open…").SetAccelerator("CmdOrCtrl+O").OnClick(send("open"))
+	docs.menu, docs.recentMenu = m, file.AddSubmenu("Open Recent")
+	docs.fillRecentMenu()
 	file.AddSeparator()
 	file.Add("Save").SetAccelerator("CmdOrCtrl+S").OnClick(send("save"))
 	file.Add("Save As…").SetAccelerator("CmdOrCtrl+Shift+S").OnClick(send("saveAs"))
@@ -106,6 +108,8 @@ func menu(app *application.App) *application.Menu {
 	view.Add("Zoom In").SetAccelerator("CmdOrCtrl+=").OnClick(send("zoomIn"))
 	view.Add("Zoom Out").SetAccelerator("CmdOrCtrl+-").OnClick(send("zoomOut"))
 	view.Add("Actual Size").SetAccelerator("CmdOrCtrl+0").OnClick(send("zoomReset"))
+	view.AddSeparator()
+	view.Add("Outline").OnClick(send("outline"))
 
 	m.AddRole(application.WindowMenu)
 	help := m.AddSubmenu("Help")

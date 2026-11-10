@@ -44,6 +44,21 @@ export function ChooseImage(): $CancellablePromise<string> {
 }
 
 /**
+ * ChooseImages asks for one or more image files and stores each like
+ * AddImageFile; none if the user cancels.
+ */
+export function ChooseImages(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(1968189592);
+}
+
+/**
+ * ClearRecent empties the recent list.
+ */
+export function ClearRecent(): $CancellablePromise<void> {
+    return $Call.ByID(144409847);
+}
+
+/**
  * ConfirmDiscard asks what to do with unsaved changes: "save", "discard" or
  * "cancel".
  */
@@ -98,7 +113,8 @@ export function OpenDocument(): $CancellablePromise<$models.DocInfo> {
 }
 
 /**
- * OpenPath opens the Markdown file at p.
+ * OpenPath opens the Markdown file at p. A file that's gone is dropped from
+ * the recent list.
  */
 export function OpenPath(p: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(362042680, p);
@@ -123,6 +139,13 @@ export function OpenWelcome(): $CancellablePromise<$models.DocInfo> {
  */
 export function Quit(): $CancellablePromise<void> {
     return $Call.ByID(1740113628);
+}
+
+/**
+ * RecentFiles lists the recent documents that are still there, newest first.
+ */
+export function RecentFiles(): $CancellablePromise<$models.RecentFile[] | null> {
+    return $Call.ByID(2680212239);
 }
 
 /**
@@ -164,7 +187,7 @@ export function SetDirty(dirty: boolean): $CancellablePromise<void> {
 
 /**
  * Startup opens the welcome guide on the first run, and a blank document
- * after that.
+ * (offering the recent ones) after that.
  */
 export function Startup(): $CancellablePromise<$models.StartupInfo> {
     return $Call.ByID(1598475524);

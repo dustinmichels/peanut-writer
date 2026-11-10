@@ -15,74 +15,66 @@ import (
 	"strings"
 )
 
-// pic is an image in the package: its media file and pixel size.
+// pic is an image Word shows (PNG, JPEG or GIF) and its pixel size. It goes
+// into word/media, as name, when first drawn.
 type pic struct {
-	media  int
+	data   []byte
+	format string
 	px, py int
+	name   string
 }
 
-// native adds a PNG, JPEG or GIF image as it is; ok is false for anything
-// else (or a file that can't be read).
-func (w *writer) native(path string) (pic, bool) {
+// native is a PNG, JPEG or GIF image as it is; nil for anything else (or a
+// file that can't be read).
+func (w *writer) native(path string) *pic {
 	if p, ok := w.pics[path]; ok {
-		return p, true
+		return p
 	}
-	if w.foreign[path] {
-		return pic{}, false
+	var p *pic
+	if data, err := os.ReadFile(path); err == nil {
+		p = decodePic(data)
 	}
-	data, err := os.ReadFile(path)
-	if err == nil {
-		if p, ok := w.addMedia(data); ok {
-			w.pics[path] = p
-			return p, true
-		}
-	}
-	w.foreign[path] = true
-	return pic{}, false
+	w.pics[path] = p
+	return p
 }
 
-// raster adds an image Word can't show, drawn widthPt points wide by
-// Options.Rasterize.
-func (w *writer) raster(path string, widthPt float64) (pic, bool) {
+// raster is an image Word can't show, drawn widthPt points wide by
+// Options.Rasterize; nil when it can't be.
+func (w *writer) raster(path string, widthPt float64) *pic {
 	if w.opt.Rasterize == nil || widthPt <= 0 {
-		return pic{}, false
+		return nil
 	}
 	key := fmt.Sprintf("%s\x00%.1f", path, widthPt)
 	if p, ok := w.pics[key]; ok {
-		return p, true
+		return p
 	}
-	data, err := w.opt.Rasterize(path, widthPt)
-	if err != nil {
-		return pic{}, false
+	var p *pic
+	if data, err := w.opt.Rasterize(path, widthPt); err == nil {
+		p = decodePic(data)
 	}
-	p, ok := w.addMedia(data)
-	if ok {
-		w.pics[key] = p
-	}
-	return p, ok
+	w.pics[key] = p
+	return p
 }
 
-// addMedia adds image data in a format Word shows to word/media.
-func (w *writer) addMedia(data []byte) (pic, bool) {
+// decodePic is data as a pic, nil when it isn't an image Word shows.
+func decodePic(data []byte) *pic {
 	cfg, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 {
-		return pic{}, false
+		return nil
 	}
 	switch format {
 	case "png", "jpeg", "gif":
-	default:
-		return pic{}, false
+		return &pic{data: data, format: format, px: cfg.Width, py: cfg.Height}
 	}
-	w.media = append(w.media, mediaFile{fmt.Sprintf("image%d.%s", len(w.media)+1, format), data})
-	return pic{len(w.media) - 1, cfg.Width, cfg.Height}, true
+	return nil
 }
 
 // picture is a figure's image as a run: widthPt wide (0 for its natural
 // size at 96 dpi), shrunk to fit the text width and most of the page height.
 func (w *writer) picture(path string, widthPt float64, alt string) string {
 	maxW, maxH := w.textWidthPt(), w.textHeightPt()*0.85
-	p, ok := w.native(path)
-	if ok {
+	p := w.native(path)
+	if p != nil {
 		if widthPt <= 0 {
 			widthPt = float64(p.px) * 0.75
 		}
@@ -94,7 +86,7 @@ func (w *writer) picture(path string, widthPt float64, alt string) string {
 			}
 		}
 		widthPt = min(widthPt, maxW)
-		if p, ok = w.raster(path, widthPt); !ok {
+		if p = w.raster(path, widthPt); p == nil {
 			return w.imagePlaceholder(path, runProps{})
 		}
 	}
@@ -113,18 +105,18 @@ func (w *writer) inlineImage(path string, rp runProps) string {
 		return w.run("[missing image]", rp)
 	}
 	h := 1.2 * w.st.FontSize
-	p, ok := w.native(path)
-	if !ok {
+	p := w.native(path)
+	if p == nil {
 		guess := h
 		if sw, sh, ok := svgSize(path); ok {
 			guess = h * sw / sh
 		}
-		if p, ok = w.raster(path, guess); !ok {
+		if p = w.raster(path, guess); p == nil {
 			return w.imagePlaceholder(path, rp)
 		}
 		// Draw it again at the width it will have, if the guess was off.
 		if want := h * float64(p.px) / float64(p.py); math.Abs(want-guess) > 0.1*guess {
-			if q, ok := w.raster(path, want); ok {
+			if q := w.raster(path, want); q != nil {
 				p = q
 			}
 		}
@@ -138,8 +130,12 @@ func (w *writer) imagePlaceholder(path string, rp runProps) string {
 }
 
 // drawingRun is a run holding an inline picture.
-func (w *writer) drawingRun(p pic, widthPt, heightPt float64, alt string, rp runProps) string {
-	rid := w.part.add(relImage, "media/"+w.media[p.media].name, false)
+func (w *writer) drawingRun(p *pic, widthPt, heightPt float64, alt string, rp runProps) string {
+	if p.name == "" {
+		w.media = append(w.media, p)
+		p.name = fmt.Sprintf("image%d.%s", len(w.media), p.format)
+	}
+	rid := w.part.add(relImage, "media/"+p.name, false)
 	w.drawing++
 	id := w.drawing
 	cx, cy := emu(widthPt), emu(heightPt)
@@ -153,7 +149,7 @@ func (w *writer) drawingRun(p pic, widthPt, heightPt float64, alt string, rp run
 		`<pic:blipFill><a:blip r:embed="%[7]s"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`+
 		`<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="%[2]d" cy="%[3]d"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`+
 		`</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`,
-		w.rPr(rp), cx, cy, id, esc(alt), esc(w.media[p.media].name), rid)
+		w.rPr(rp), cx, cy, id, esc(alt), esc(p.name), rid)
 }
 
 // svgSize reads an SVG file's natural size in points from its root

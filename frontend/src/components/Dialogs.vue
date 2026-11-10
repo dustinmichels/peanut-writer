@@ -5,6 +5,7 @@ import CrossRefDialog from "./dialogs/CrossRefDialog.vue";
 import LinkDialog from "./dialogs/LinkDialog.vue";
 import PropertiesDialog from "./dialogs/PropertiesDialog.vue";
 import CheatSheet from "./dialogs/CheatSheet.vue";
+import RecentDialog from "./dialogs/RecentDialog.vue";
 import { editor, state } from "../lib/store";
 
 function close() {
@@ -14,10 +15,17 @@ function close() {
 </script>
 
 <template>
+  <!-- Keyed by item so a new figure or table gets a fresh dialog. -->
   <template v-if="state.dialog">
-    <FigureDialog v-if="state.dialog.kind === 'figure'" :item="state.dialog.item" @close="close" />
+    <FigureDialog
+      v-if="state.dialog.kind === 'figure'"
+      :key="state.dialog.item.from"
+      :item="state.dialog.item"
+      @close="close"
+    />
     <TableDialog
       v-else-if="state.dialog.kind === 'table'"
+      :key="state.dialog.item?.from ?? -1"
       :item="state.dialog.item"
       :cols="state.dialog.cols"
       :rows="state.dialog.rows"
@@ -27,5 +35,10 @@ function close() {
     <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
     <CheatSheet v-else-if="state.dialog.kind === 'cheatsheet'" @close="close" />
+    <RecentDialog
+      v-else-if="state.dialog.kind === 'recent'"
+      :files="state.dialog.files"
+      @close="close"
+    />
   </template>
 </template>

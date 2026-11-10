@@ -1,6 +1,7 @@
 // The Markdown editor: CodeMirror with Word-like conveniences. Figures show
-// their picture and number, tables get an edit bar, cross-references read
-// as "Figure 2", and the front matter becomes a document properties card.
+// their pictures and number (in place of their Markdown, unless Markdown
+// details are on), tables get an edit bar, cross-references read as
+// "Figure 2", and the front matter becomes a document properties card.
 
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
 import {
@@ -11,12 +12,19 @@ import {
   indentMore,
 } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
-import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import {
+  ensureSyntaxTree,
+  HighlightStyle,
+  syntaxHighlighting,
+  syntaxTree,
+} from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import {
+  Compartment,
   EditorSelection,
   EditorState,
   type Extension,
+  Facet,
   type Line,
   RangeSetBuilder,
   StateField,
@@ -67,6 +75,7 @@ export const itemsField = StateField.define<Item[]>({
 
 // --- Widgets -------------------------------------------------------------------
 
+// Pictures by reference, for the open document (replaceDoc clears it).
 const imageCache = new Map<string, Promise<string>>();
 
 const positions: { pos: Position; title: string }[] = [
@@ -100,6 +109,220 @@ function positionIcon(pos: Position): SVGSVGElement {
   return svg;
 }
 
+// loadPicture shows the picture src in img, or a note in its place when
+// there's no such file.
+function loadPicture(img: HTMLImageElement, src: string, handlers: Handlers) {
+  if (!imageCache.has(src)) imageCache.set(src, handlers.imageURL(src));
+  imageCache.get(src)!.then((url) => {
+    if (url) img.src = url;
+    else {
+      // Not found: look again next time, in case it turns up.
+      imageCache.delete(src);
+      img.parentElement?.classList.add("missing");
+      const msg = document.createElement("span");
+      msg.textContent = `Missing picture: ${src}`;
+      img.replaceWith(msg);
+    }
+  });
+}
+
+// gripIcon draws two columns of dots: something to take hold of.
+function gripIcon(): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  for (const cx of [6, 10]) {
+    for (const cy of [3.5, 8, 12.5]) {
+      const c = document.createElementNS(ns, "circle");
+      c.setAttribute("cx", String(cx));
+      c.setAttribute("cy", String(cy));
+      c.setAttribute("r", "1.4");
+      c.setAttribute("fill", "currentColor");
+      svg.append(c);
+    }
+  }
+  return svg;
+}
+
+// --- Moving figures ------------------------------------------------------------
+
+// dropTargets are where a figure may be put: the start of each top-level block
+// after the front matter and outside figures and tables, and the end.
+function dropTargets(state: EditorState): number[] {
+  const doc = state.doc;
+  const fmEnd = readFrontMatter(doc.toString()).to;
+  const items = state.field(itemsField);
+  const tree = ensureSyntaxTree(state, doc.length, 200) ?? syntaxTree(state);
+  const out: number[] = [];
+  for (let n = tree.topNode.firstChild; n; n = n.nextSibling) {
+    const p = doc.lineAt(n.from).from;
+    if (p < fmEnd || out[out.length - 1] === p) continue;
+    if (items.some((x) => p > x.from && p <= x.to)) continue;
+    out.push(p);
+  }
+  if (out[out.length - 1] !== doc.length) out.push(doc.length);
+  return out;
+}
+
+// targetY is where the drop line for target p is drawn, in screen
+// coordinates: in the blank line before the block, or at its top.
+function targetY(view: EditorView, p: number): number {
+  const doc = view.state.doc;
+  if (p === doc.length && p > 0) return view.lineBlockAt(p).bottom + view.documentTop;
+  if (p > 0 && doc.lineAt(p - 1).text.trim() === "") {
+    const b = view.lineBlockAt(p - 1);
+    return (b.top + b.bottom) / 2 + view.documentTop;
+  }
+  return view.lineBlockAt(p).top + view.documentTop;
+}
+
+// moveFigure moves item's Markdown to the block start target (or the end),
+// keeping a blank line on either side. Dropping it where it is does nothing.
+function moveFigure(view: EditorView, item: Item, target: number) {
+  const doc = view.state.doc;
+  const text = doc.sliceString(item.from, item.to);
+  const blank = (n: number) => doc.line(n).text.trim() === "";
+  // What goes: the figure and the blank lines after it, or before it when
+  // nothing follows.
+  const last = doc.lineAt(item.to).number;
+  let next = last + 1;
+  while (next <= doc.lines && blank(next)) next++;
+  let from = item.from;
+  let to: number;
+  if (next <= doc.lines) to = doc.line(next).from;
+  else {
+    let prev = doc.lineAt(item.from).number - 1;
+    while (prev >= 1 && blank(prev)) prev--;
+    if (prev < 1) return; // the only block: nowhere else to go
+    from = doc.line(prev).to;
+    to = item.to;
+  }
+  if (target >= item.from && target <= (next <= doc.lines ? to : doc.length)) return;
+
+  let insert: string;
+  let at: number;
+  if (target >= doc.length) {
+    const tail = doc.sliceString(Math.max(0, doc.length - 2));
+    at = doc.length;
+    insert = (tail.endsWith("\n\n") ? "" : tail.endsWith("\n") ? "\n" : "\n\n") + text + "\n";
+  } else {
+    at = target;
+    const before = at > 0 && doc.lineAt(at - 1).text.trim() !== "" ? "\n" : "";
+    insert = before + text + "\n\n";
+  }
+  const changes = view.state.changes([
+    { from, to },
+    { from: at, insert },
+  ]);
+  const start = changes.mapPos(at, -1) + insert.indexOf(text);
+  view.dispatch({
+    changes,
+    selection: EditorSelection.cursor(start),
+    scrollIntoView: true,
+    userEvent: "move.drop",
+  });
+}
+
+// startMove drags the figure el (whose Markdown current() finds) by its
+// grip: a line shows where it will land, the editor scrolls near its edges,
+// and Escape cancels.
+function startMove(
+  view: EditorView,
+  el: HTMLElement,
+  grip: HTMLElement,
+  e: PointerEvent,
+  current: () => Item | undefined,
+) {
+  const item = current();
+  if (!item) return;
+  e.preventDefault();
+  const state = view.state;
+  const targets = dropTargets(state);
+  const line = document.createElement("div");
+  line.className = "pw-drop-line";
+  view.dom.append(line);
+  grip.setPointerCapture(e.pointerId);
+  el.classList.add("moving");
+  let y = e.clientY;
+  let target = -1;
+  let frame = 0;
+
+  // Measured through CodeMirror, which first brings its line heights up to
+  // date (pictures may have loaded since it last looked).
+  const measure = {
+    key: line,
+    read: () => {
+      let best = Infinity;
+      let top = 0;
+      for (const p of targets) {
+        const ty = targetY(view, p);
+        if (Math.abs(ty - y) < best) {
+          best = Math.abs(ty - y);
+          target = p;
+          top = ty;
+        }
+      }
+      const box = view.dom.getBoundingClientRect();
+      const content = view.contentDOM.getBoundingClientRect();
+      const css = getComputedStyle(view.contentDOM);
+      const pl = parseFloat(css.paddingLeft);
+      return {
+        top: top - box.top - 1,
+        left: content.left - box.left + pl,
+        width: content.width - pl - parseFloat(css.paddingRight),
+      };
+    },
+    write: (m: { top: number; left: number; width: number }) => {
+      line.style.top = `${m.top}px`;
+      line.style.left = `${m.left}px`;
+      line.style.width = `${m.width}px`;
+    },
+  };
+  const place = () => view.requestMeasure(measure);
+  // Near the top or bottom edge, scroll that way while the pointer stays.
+  const tick = () => {
+    const r = view.scrollDOM.getBoundingClientRect();
+    const edge = 48;
+    const dy = y < r.top + edge ? -(r.top + edge - y) : y > r.bottom - edge ? y - (r.bottom - edge) : 0;
+    if (dy) {
+      view.scrollDOM.scrollTop += Math.max(-24, Math.min(24, dy / 2));
+      place();
+    }
+    frame = requestAnimationFrame(tick);
+  };
+  const move = (ev: PointerEvent) => {
+    y = ev.clientY;
+    place();
+  };
+  const finish = (drop: boolean) => {
+    cancelAnimationFrame(frame);
+    grip.removeEventListener("pointermove", move);
+    grip.removeEventListener("pointerup", up);
+    grip.removeEventListener("pointercancel", cancel);
+    window.removeEventListener("keydown", key, true);
+    if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
+    line.remove();
+    el.classList.remove("moving");
+    if (drop && target >= 0 && view.state === state) moveFigure(view, item, target);
+  };
+  const up = () => finish(true);
+  const cancel = () => finish(false);
+  const key = (ev: KeyboardEvent) => {
+    if (ev.key !== "Escape") return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    finish(false);
+  };
+  grip.addEventListener("pointermove", move);
+  grip.addEventListener("pointerup", up);
+  grip.addEventListener("pointercancel", cancel);
+  window.addEventListener("keydown", key, true);
+  place();
+  frame = requestAnimationFrame(tick);
+}
+
 class FigureWidget extends WidgetType {
   constructor(
     readonly item: Item,
@@ -111,7 +334,8 @@ class FigureWidget extends WidgetType {
     const a = this.item;
     const b = o.item;
     return (
-      a.src === b.src &&
+      JSON.stringify(a.pictures) === JSON.stringify(b.pictures) &&
+      a.columns === b.columns &&
       a.number === b.number &&
       a.caption === b.caption &&
       a.width === b.width &&
@@ -120,15 +344,18 @@ class FigureWidget extends WidgetType {
     );
   }
   toDOM(view: EditorView) {
+    const pictures = this.item.pictures ?? [];
+    const grid = pictures.length > 1;
     const el = document.createElement("div");
     el.className = "pw-figure";
     if (this.item.position) el.classList.add(this.item.position);
-    // The item as the document has it now (this widget may be older).
+    // The item as the document has it now (this widget may be older). The
+    // widget sits after the figure's Markdown, or in its place.
     const current = () => {
       const pos = view.posAtDOM(el);
       return view.state
         .field(itemsField)
-        .find((x) => x.kind === "figure" && x.to <= pos + 1 && x.to >= pos - 1);
+        .find((x) => x.kind === "figure" && pos >= x.from - 1 && pos <= x.to + 1);
     };
     const update = (patch: Partial<FigureSpec>) => {
       const item = current();
@@ -142,28 +369,44 @@ class FigureWidget extends WidgetType {
         userEvent: "input",
       });
     };
+    const open = () => {
+      const item = current();
+      if (item) this.handlers.editFigure(item);
+    };
 
     const frame = document.createElement("div");
     frame.className = "pw-figure-frame";
-    const img = document.createElement("img");
-    img.alt = plain(this.item.caption);
-    img.draggable = false;
     const w = this.item.width || 0;
-    frame.style.width = w > 0 ? `${w}%` : "auto";
-    const src = this.item.src ?? "";
-    if (!imageCache.has(src)) imageCache.set(src, this.handlers.imageURL(src));
-    imageCache.get(src)!.then((url) => {
-      if (url) img.src = url;
-      else {
-        frame.classList.add("missing");
-        const msg = document.createElement("span");
-        msg.textContent = `Missing picture: ${src}`;
-        img.replaceWith(msg);
-      }
-    });
+    frame.style.width = w > 0 ? `${w}%` : grid ? "100%" : "auto";
+    let body: HTMLElement = frame;
+    if (grid) {
+      body = document.createElement("div");
+      body.className = "pw-figure-grid";
+      body.style.gridTemplateColumns = `repeat(${this.item.columns || 1}, minmax(0, 1fr))`;
+      frame.append(body);
+    }
+    for (const p of pictures) {
+      const img = document.createElement("img");
+      img.alt = plain(grid ? p.alt : this.item.caption);
+      img.draggable = false;
+      img.ondblclick = open;
+      if (grid) {
+        const cell = document.createElement("div");
+        cell.className = "pw-figure-cell";
+        cell.append(img);
+        body.append(cell);
+      } else body.append(img);
+      loadPicture(img, p.src, this.handlers);
+    }
 
     const tools = document.createElement("div");
     tools.className = "pw-figure-tools";
+    const grip = document.createElement("div");
+    grip.className = "pw-figure-grip";
+    grip.title = "Drag to move";
+    grip.append(gripIcon());
+    grip.onpointerdown = (e) => startMove(view, el, grip, e, current);
+    tools.append(grip);
     for (const p of positions) {
       const b = document.createElement("button");
       b.className = "pw-figure-tool";
@@ -212,7 +455,7 @@ class FigureWidget extends WidgetType {
       handle.addEventListener("pointerup", up);
       handle.addEventListener("pointercancel", up);
     };
-    frame.append(img, tools, handle, size);
+    frame.append(tools, handle, size);
 
     const cap = document.createElement("div");
     cap.className = "pw-figure-caption";
@@ -227,12 +470,7 @@ class FigureWidget extends WidgetType {
     edit.className = "pw-widget-btn";
     edit.textContent = "Edit figure";
     edit.onmousedown = (e) => e.preventDefault();
-    const open = () => {
-      const item = current();
-      if (item) this.handlers.editFigure(item);
-    };
     edit.onclick = open;
-    img.ondblclick = open;
     cap.append(edit);
     el.append(frame, cap);
     return el;
@@ -340,6 +578,15 @@ class PropertiesCard extends WidgetType {
 const refRe = /(^|[^\w])@((?:fig|tbl):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
 const footRe = /\[\^[^\]\s]+\](?!:)/g;
 
+// Whether figures show their Markdown (above the figure) or only the figure.
+const markdownDetails = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
+const detailsSlot = new Compartment();
+
+// setMarkdownDetails shows or hides the Markdown behind figures.
+export function setMarkdownDetails(view: EditorView, show: boolean) {
+  view.dispatch({ effects: detailsSlot.reconfigure(markdownDetails.of(show)) });
+}
+
 interface Decos {
   deco: DecorationSet;
   atomic: DecorationSet;
@@ -348,7 +595,9 @@ interface Decos {
 function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   const doc = state.doc;
   const items = state.field(itemsField);
-  const labels = new Map(items.filter((x) => x.label).map((x) => [x.label, x]));
+  // The first of a label wins, as in internal/doc.
+  const labels = new Map<string, Item>();
+  for (const x of items) if (x.label && !labels.has(x.label)) labels.set(x.label, x);
   const ranges: { from: number; to: number; deco: Decoration; atomic?: boolean }[] = [];
 
   const fm = readFrontMatter(doc.toString());
@@ -366,18 +615,37 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     });
   }
 
+  // Figures replace their Markdown unless details are on; nothing else is
+  // decorated inside them then.
+  const details = state.facet(markdownDetails);
+  const hidden: Item[] = [];
   for (const it of items) {
     if (it.kind === "figure") {
+      const widget = new FigureWidget(it, handlers);
+      if (!details) {
+        hidden.push(it);
+        ranges.push({
+          from: it.from,
+          to: it.to,
+          deco: Decoration.replace({ widget, block: true }),
+          atomic: true,
+        });
+        continue;
+      }
       ranges.push({
         from: it.to,
         to: it.to,
-        deco: Decoration.widget({ widget: new FigureWidget(it, handlers), block: true, side: 1 }),
+        deco: Decoration.widget({ widget, block: true, side: 1 }),
       });
-      ranges.push({
-        from: it.from,
-        to: it.from,
-        deco: Decoration.line({ class: "pw-figure-line" }),
-      });
+      for (let p = it.from; p <= it.to;) {
+        const line = doc.lineAt(p);
+        ranges.push({
+          from: line.from,
+          to: line.from,
+          deco: Decoration.line({ class: "pw-figure-line" }),
+        });
+        p = line.to + 1;
+      }
     } else {
       ranges.push({
         from: it.from,
@@ -415,7 +683,8 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   for (const m of text.matchAll(refRe)) {
     const from = m.index! + m[1].length;
     const to = from + m[2].length + 1;
-    if (from < fm.to || inCode(from)) continue;
+    if (from < fm.to || inCode(from) || hidden.some((h) => from >= h.from && from <= h.to))
+      continue;
     const target = labels.get(m[2]);
     const label = target
       ? `${target.kind === "figure" ? "Figure" : "Table"} ${target.number}`
@@ -428,7 +697,8 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     });
   }
   for (const m of text.matchAll(footRe)) {
-    if (m.index! < fm.to || inCode(m.index!)) continue;
+    const at = m.index!;
+    if (at < fm.to || inCode(at) || hidden.some((h) => at >= h.from && at <= h.to)) continue;
     ranges.push({
       from: m.index!,
       to: m.index! + m[0].length,
@@ -450,7 +720,9 @@ function decorations(handlers: Handlers): Extension {
   const field = StateField.define<Decos>({
     create: (s) => buildDecorations(s, handlers),
     update: (d, tr: Transaction) =>
-      tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+      tr.docChanged ||
+      syntaxTree(tr.state) !== syntaxTree(tr.startState) ||
+      tr.state.facet(markdownDetails) !== tr.startState.facet(markdownDetails)
         ? buildDecorations(tr.state, handlers)
         : d,
     provide: (f) => [
@@ -682,16 +954,39 @@ export function toggleList(view: EditorView, kind: "bullet" | "ordered") {
     view.dispatch({
       changes: { from: pos, insert: kind === "bullet" ? "- " : "1. " },
       selection: { anchor: pos + (kind === "bullet" ? 2 : 3) },
+      userEvent: "input.format",
     });
   } else view.dispatch({ changes, userEvent: "input.format" });
   view.focus();
 }
 
+const fenceRe = /^\s{0,3}(```|~~~)/;
+
+// toggleCodeBlock fences the selected lines, or removes the fences around
+// the code block the cursor is in.
 export function toggleCodeBlock(view: EditorView) {
-  const { from, to } = view.state.selection.main;
-  const a = view.state.doc.lineAt(from);
-  const b = view.state.doc.lineAt(to);
-  const body = view.state.sliceDoc(a.from, b.to);
+  const state = view.state;
+  const { from, to } = state.selection.main;
+  const a = state.doc.lineAt(from);
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(a.from, 1); n; n = n.parent) {
+    if (n.name !== "FencedCode") continue;
+    const open = state.doc.lineAt(n.from);
+    const close = state.doc.lineAt(n.to);
+    const closed = close.number > open.number && fenceRe.test(close.text);
+    const changes = !closed
+      ? [{ from: open.from, to: Math.min(open.to + 1, state.doc.length) }]
+      : close.number === open.number + 1
+        ? [{ from: open.from, to: close.to }]
+        : [
+            { from: open.from, to: open.to + 1 },
+            { from: close.from - 1, to: close.to },
+          ];
+    view.dispatch({ changes, userEvent: "input.format" });
+    view.focus();
+    return;
+  }
+  const b = state.doc.lineAt(to);
+  const body = state.sliceDoc(a.from, b.to);
   insertBlock(view, "```\n" + body + "\n```", {
     replace: { from: a.from, to: b.to },
     cursorOffset: 4,
@@ -799,7 +1094,12 @@ function refCompletions(ctx: CompletionContext) {
 
 // --- Setup ----------------------------------------------------------------------
 
-export function createEditor(parent: HTMLElement, doc: string, handlers: Handlers): EditorView {
+export function createEditor(
+  parent: HTMLElement,
+  doc: string,
+  handlers: Handlers,
+  details: boolean,
+): EditorView {
   const formatting = keymap.of([
     { key: "Mod-b", run: (v) => toggleMark(v, "strong") },
     { key: "Mod-i", run: (v) => toggleMark(v, "emph") },
@@ -851,14 +1151,36 @@ export function createEditor(parent: HTMLElement, doc: string, handlers: Handler
       },
     }),
   ];
-  const view = new EditorView({ parent, state: EditorState.create({ doc, extensions }) });
-  editorExtensions.set(view, extensions);
+  const view = new EditorView({
+    parent,
+    state: EditorState.create({
+      doc,
+      extensions: [extensions, detailsSlot.of(markdownDetails.of(details))],
+    }),
+  });
+  editorSetup.set(view, { extensions, handlers });
   return view;
 }
 
-const editorExtensions = new WeakMap<EditorView, Extension[]>();
+const editorSetup = new WeakMap<EditorView, { extensions: Extension[]; handlers: Handlers }>();
 
 // replaceDoc swaps in a new document, starting a fresh undo history.
 export function replaceDoc(view: EditorView, doc: string) {
-  view.setState(EditorState.create({ doc, extensions: editorExtensions.get(view) }));
+  imageCache.clear(); // picture paths are relative to the document
+  const { extensions, handlers } = editorSetup.get(view)!;
+  const details = detailsSlot.of(markdownDetails.of(view.state.facet(markdownDetails)));
+  view.setState(EditorState.create({ doc, extensions: [extensions, details] }));
+  handlers.changed(view.state, false); // setState skips update listeners
+}
+
+// revealLine puts the cursor at the start of line n (1-based) and scrolls it
+// to the top of the editor.
+export function revealLine(view: EditorView, n: number) {
+  if (n < 1 || n > view.state.doc.lines) return;
+  const { from } = view.state.doc.line(n);
+  view.dispatch({
+    selection: { anchor: from },
+    effects: EditorView.scrollIntoView(from, { y: "start", yMargin: 24 }),
+  });
+  view.focus();
 }

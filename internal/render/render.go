@@ -88,7 +88,7 @@ func (t *Typst) Preview(ctx context.Context, d *doc.Document, tpl templates.Temp
 		return nil, nil, err
 	}
 	defer os.RemoveAll(dir)
-	stderr, err := t.compile(ctx, dir, "main.typ", "page-{0p}.svg")
+	stderr, err := t.compile(ctx, dir, "main.typ", "page-{0p}.svg", "--input", "peanut-preview=1")
 	if err != nil {
 		return nil, nil, err
 	}

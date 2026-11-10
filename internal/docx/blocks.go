@@ -149,9 +149,29 @@ func (w *writer) list(b *doc.Block, depth int) {
 // listIndent is where a list level's text starts, in twips.
 func listIndent(level int) int { return 720 * (level + 1) }
 
-// figure writes the picture, centered unless placed left or right, then its
-// caption, aligned with it.
+// figure writes the picture (or a grid's pictures), centered unless placed
+// left or right, then its caption, aligned with it.
 func (w *writer) figure(b *doc.Block) {
+	captioned := len(b.Caption) > 0 || b.Label != ""
+	jc := ""
+	if b.Position != "" {
+		jc = `<w:jc w:val="` + b.Position + `"/>`
+	}
+	if len(b.Pictures) > 0 {
+		w.pictureGrid(b)
+		if captioned {
+			w.para("Caption", jc, w.captionRuns("Figure", b))
+		} else {
+			// A little space under the grid, keeping Word's count of
+			// figures in step with the numbering.
+			runs := ""
+			if b.Number > 0 {
+				runs = w.hiddenSeq("Figure")
+			}
+			w.para("", fmt.Sprintf(`<w:spacing w:before="0" w:after="0" w:line="%d" w:lineRule="exact"/><w:ind w:firstLine="0"/>`, twips(max(w.st.SpaceAfter, 6))), runs)
+		}
+		return
+	}
 	var runs string
 	if b.Src == "" {
 		runs = w.run("[missing image: "+b.Missing+"]", runProps{i: true})
@@ -160,12 +180,7 @@ func (w *writer) figure(b *doc.Block) {
 		if b.Width > 0 {
 			want = b.Width / 100 * w.textWidthPt()
 		}
-		runs = w.picture(b.Src, want, plainText(b.Caption))
-	}
-	captioned := len(b.Caption) > 0 || b.Label != ""
-	jc := ""
-	if b.Position != "" {
-		jc = `<w:jc w:val="` + b.Position + `"/>`
+		runs = w.picture(b.Src, want, doc.PlainText(b.Caption))
 	}
 	ppr := jc
 	if captioned {
@@ -178,6 +193,53 @@ func (w *writer) figure(b *doc.Block) {
 	if captioned {
 		w.para("Caption", jc, w.captionRuns("Figure", b))
 	}
+}
+
+// gridCellPad is Normal Table's cell margin on each side, in twips.
+const gridCellPad = 108
+
+// pictureGrid writes a grid's pictures as a borderless table, Columns to a
+// row, each picture as wide as its cell; the rows keep with what follows.
+func (w *writer) pictureGrid(b *doc.Block) {
+	cols := max(b.Columns, 1)
+	width := w.textW
+	if b.Width > 0 {
+		width = int(float64(w.textW) * b.Width / 100)
+	}
+	colW := width / cols
+	jc := "center"
+	if b.Position != "" {
+		jc = b.Position
+	}
+	fmt.Fprintf(w.out, `<w:tbl><w:tblPr><w:tblW w:w="%d" w:type="dxa"/><w:jc w:val="%s"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>`, colW*cols, jc)
+	for range cols {
+		fmt.Fprintf(w.out, `<w:gridCol w:w="%d"/>`, colW)
+	}
+	w.out.WriteString(`</w:tblGrid>`)
+	picW := float64(max(colW-2*gridCellPad, 20)) / 20
+	for row := 0; row < len(b.Pictures); row += cols {
+		w.out.WriteString(`<w:tr><w:trPr><w:cantSplit/></w:trPr>`)
+		for c := range cols {
+			fmt.Fprintf(w.out, `<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>`, colW)
+			runs := ""
+			if i := row + c; i < len(b.Pictures) {
+				pic := &b.Pictures[i]
+				if pic.Src == "" {
+					runs = w.run("[missing image: "+pic.Missing+"]", runProps{i: true})
+				} else {
+					alt := doc.PlainText(pic.Alt)
+					if alt == "" {
+						alt = doc.PlainText(b.Caption)
+					}
+					runs = w.picture(pic.Src, picW, alt)
+				}
+			}
+			w.para("Figure", `<w:keepNext/><w:jc w:val="center"/>`, runs)
+			w.out.WriteString("</w:tc>")
+		}
+		w.out.WriteString("</w:tr>")
+	}
+	w.out.WriteString("</w:tbl>")
 }
 
 // captionRuns is "Figure N: caption" (or "Table N: …"), with "Figure N"

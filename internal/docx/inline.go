@@ -25,28 +25,17 @@ func (w *writer) rPr(p runProps) string {
 			font = w.st.MonoFont
 		}
 	}
-	if style == "" && !p.b && !p.i && !p.strike {
+	props := rpr(font, p.b, p.i, "", 0)
+	if p.strike {
+		props += "<w:strike/>"
+	}
+	if style != "" {
+		props = `<w:rStyle w:val="` + style + `"/>` + props
+	}
+	if props == "" {
 		return ""
 	}
-	var b strings.Builder
-	b.WriteString("<w:rPr>")
-	if style != "" {
-		fmt.Fprintf(&b, `<w:rStyle w:val="%s"/>`, style)
-	}
-	if font != "" {
-		fmt.Fprintf(&b, `<w:rFonts w:ascii="%[1]s" w:hAnsi="%[1]s" w:cs="%[1]s"/>`, esc(font))
-	}
-	if p.b {
-		b.WriteString("<w:b/><w:bCs/>")
-	}
-	if p.i {
-		b.WriteString("<w:i/><w:iCs/>")
-	}
-	if p.strike {
-		b.WriteString("<w:strike/>")
-	}
-	b.WriteString("</w:rPr>")
-	return b.String()
+	return "<w:rPr>" + props + "</w:rPr>"
 }
 
 // run is text as a run; tabs become Word tabs and newlines line breaks.
@@ -194,25 +183,6 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	w.out, w.part, w.paraStyle, w.inNote = out, part, style, false
 	w.notes = append(w.notes, fmt.Sprintf(`<w:footnote w:id="%d">%s</w:footnote>`, id, body.String()))
 	fmt.Fprintf(sb, `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="%d"/></w:r>`, id)
-}
-
-// plainText is inlines' text, for alt text.
-func plainText(xs []doc.Inline) string {
-	var b strings.Builder
-	var walk func([]doc.Inline)
-	walk = func(xs []doc.Inline) {
-		for _, x := range xs {
-			switch x.Type {
-			case doc.InlineText, doc.InlineCode:
-				b.WriteString(x.Text)
-			case doc.InlineLineBreak:
-				b.WriteString(" ")
-			}
-			walk(x.Children)
-		}
-	}
-	walk(xs)
-	return b.String()
 }
 
 // clean drops characters XML can't hold (and carriage returns).

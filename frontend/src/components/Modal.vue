@@ -7,7 +7,10 @@ const emit = defineEmits<{ close: []; submit: [] }>();
 
 function key(e: KeyboardEvent) {
   if (e.key === "Escape") emit("close");
-  else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) emit("submit");
+  else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault(); // or a focused field submits the form as well
+    emit("submit");
+  }
 }
 onMounted(() => window.addEventListener("keydown", key));
 onUnmounted(() => window.removeEventListener("keydown", key));
@@ -90,6 +93,7 @@ h2 {
 }
 footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   padding: 12px 18px 16px;

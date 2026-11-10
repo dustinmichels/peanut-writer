@@ -4,19 +4,22 @@
 import { reactive, shallowRef } from "vue";
 import type { EditorView } from "@codemirror/view";
 import { DocService } from "../../bindings/peanut-writer";
+import type { RecentFile } from "../../bindings/peanut-writer/models";
 import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
+import type { Heading } from "../../bindings/peanut-writer/internal/doc/models";
 import type { BlockStyle, Mark } from "./editor";
 import type { Item } from "./markdown";
 
-export type Dialog =
+type Dialog =
   | { kind: "figure"; item: Item }
   | { kind: "table"; item?: Item; cols?: number; rows?: number }
   | { kind: "crossref" }
   | { kind: "link"; text: string }
   | { kind: "properties" }
-  | { kind: "cheatsheet" };
+  | { kind: "cheatsheet" }
+  | { kind: "recent"; files: RecentFile[] };
 
-export interface Toast {
+interface Toast {
   id: number;
   text: string;
   tone: "info" | "error" | "success";
@@ -35,6 +38,8 @@ export const state = reactive({
   warnings: [] as string[],
   rendering: false,
   typstError: "",
+  outline: [] as Heading[], // the headings, from the latest render
+  outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
 
   templates: [] as Template[],
   template: "classic", // the template the preview used
@@ -45,6 +50,8 @@ export const state = reactive({
   block: "p" as BlockStyle | "code" | "list",
 
   zoom: 0, // preview zoom as a fraction; 0 = fit the page to the pane
+  // The editor shows the Markdown behind figures.
+  markdownDetails: localStorage.getItem("markdownDetails") === "1",
   fitZoom: 1,
   dialog: null as Dialog | null,
   toasts: [] as Toast[],
@@ -93,6 +100,7 @@ async function renderNow() {
   try {
     const res = await DocService.Render(state.content);
     if (res.error === "canceled") return;
+    state.outline = res.outline ?? [];
     if (res.error) state.renderError = res.error;
     else {
       state.pages = res.pages ?? [];

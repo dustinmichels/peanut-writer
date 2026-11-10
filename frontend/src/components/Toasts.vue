@@ -18,7 +18,7 @@ import { dismiss, state } from "../lib/store";
 <style scoped>
 .toasts {
   position: fixed;
-  right: 18px;
+  right: 16px;
   bottom: 40px;
   z-index: 100;
   display: flex;

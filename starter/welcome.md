@@ -16,7 +16,7 @@ Type on the left; the page on the right updates as you go. Use the **Home** tab 
 
 # Figures and tables
 
-Drag an image onto the editor, paste one, or use **Insert → Picture**. Give it a caption and it becomes a numbered figure, like @fig:peanut. Hover a picture to move it left, center or right, or drag its corner to resize it.
+Drag an image onto the editor, paste one, or use **Insert → Picture**. Give it a caption and it becomes a numbered figure, like @fig:peanut. Hover a picture to move it left, center or right, drag its corner to resize it, or drag its grip (⠿) to move it somewhere else in the document.
 
 ![Peanut, the mascot, ready to help.](images/peanut.svg){#fig:peanut width=28%}
 

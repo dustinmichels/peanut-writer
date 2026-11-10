@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Events } from "@wailsio/runtime";
 import { DocService } from "../bindings/peanut-writer";
 import TitleBar from "./components/TitleBar.vue";
 import Ribbon from "./components/Ribbon.vue";
 import EditorPane from "./components/EditorPane.vue";
+import OutlinePane from "./components/OutlinePane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
 import StatusBar from "./components/StatusBar.vue";
 import Dialogs from "./components/Dialogs.vue";
 import Toasts from "./components/Toasts.vue";
-import { loadDoc, menu } from "./lib/actions";
-import { errorText, state, toast } from "./lib/store";
+import { loadDoc, menu, openRecent } from "./lib/actions";
+import { revealLine } from "./lib/editor";
+import { editor, errorText, state, toast } from "./lib/store";
 
 const split = ref(Number(localStorage.getItem("split")) || 0.5);
 const main = ref<HTMLElement>();
@@ -21,20 +23,37 @@ function startResize(e: PointerEvent) {
   const target = e.currentTarget as HTMLElement; // the splitter, which captures the pointer
   target.setPointerCapture(e.pointerId);
   const rect = el.getBoundingClientRect();
+  // The split is between editor and preview; the outline, when shown, is left of both.
+  const left = (target.previousElementSibling as HTMLElement).getBoundingClientRect().left;
   const move = (ev: PointerEvent) => {
-    split.value = Math.min(0.75, Math.max(0.28, (ev.clientX - rect.left) / rect.width));
+    split.value = Math.min(0.75, Math.max(0.28, (ev.clientX - left) / (rect.right - left)));
   };
-  const up = () => {
+  // Fires after pointerup and pointercancel alike.
+  const done = () => {
     target.removeEventListener("pointermove", move);
     localStorage.setItem("split", String(split.value));
   };
   target.addEventListener("pointermove", move);
-  target.addEventListener("pointerup", up, { once: true });
+  target.addEventListener("lostpointercapture", done, { once: true });
+}
+
+const columns = computed(
+  () =>
+    `${state.outlineOpen ? "clamp(150px, 16%, 240px) " : ""}${split.value}fr 6px ${1 - split.value}fr`,
+);
+
+// jump shows a heading from the outline in the editor and the preview.
+const preview = ref<InstanceType<typeof PreviewPane>>();
+function jump(line: number) {
+  if (editor.value) revealLine(editor.value, line);
+  preview.value?.showHeading(line);
 }
 
 let offMenu: (() => void) | undefined;
+let offRecent: (() => void) | undefined;
 onMounted(async () => {
   offMenu = Events.On("menu", (e: { data: string }) => menu(e.data));
+  offRecent = Events.On("openRecent", (e: { data: string }) => openRecent(e.data));
   // A file dropped outside the editor mustn't replace the page.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
@@ -43,21 +62,26 @@ onMounted(async () => {
     state.templates = info.templates ?? [];
     state.typstError = info.typstError;
     loadDoc(info.document);
+    if (info.recent?.length) state.dialog = { kind: "recent", files: info.recent };
   } catch (e) {
     toast(`Couldn't start: ${errorText(e)}`, "error");
   }
 });
-onUnmounted(() => offMenu?.());
+onUnmounted(() => {
+  offMenu?.();
+  offRecent?.();
+});
 </script>
 
 <template>
   <div class="app">
     <TitleBar />
     <Ribbon />
-    <main ref="main" class="main" :style="{ gridTemplateColumns: `${split}fr 6px ${1 - split}fr` }">
+    <main ref="main" class="main" :style="{ gridTemplateColumns: columns }">
+      <OutlinePane v-if="state.outlineOpen" @jump="jump" />
       <EditorPane />
       <div class="splitter" @pointerdown="startResize"><span /></div>
-      <PreviewPane />
+      <PreviewPane ref="preview" />
     </main>
     <StatusBar />
     <Dialogs />

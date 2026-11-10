@@ -4,6 +4,12 @@
 
 #let _align(a) = if a == "left" { left } else if a == "center" { center } else if a == "right" { right } else { auto }
 
+// The live preview (not PDF export) compiles with `--input peanut-preview=1`.
+#let _preview = sys.inputs.at("peanut-preview", default: "") == "1"
+
+// Whether content is being laid out inside the outline.
+#let _in_outline = state("peanut-in-outline", false)
+
 #let _missing(what) = block(
   width: 60%,
   height: 3cm,
@@ -34,11 +40,23 @@
   else if t == "ref" {
     if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
   }
-  else if t == "footnote" { footnote(blocks(n.blocks)) }
+  else if t == "footnote" {
+    // A note whose text isn't typed yet ("[^1]: ") has no blocks.
+    let body = blocks(n.at("blocks", default: ()))
+    // A heading's note stays out of the outline's copy of the heading (a
+    // show rule can't hide it: it would still be numbered and listed).
+    context if not _in_outline.get() { footnote(if body == none [] else { body }) }
+  }
 
   // Blocks. Paragraphs are separated with parbreak() by whoever lays them out.
   else if t == "paragraph" { all(n.inlines) }
-  else if t == "heading" { heading(level: n.level, all(n.inlines)) }
+  else if t == "heading" {
+    // In the preview each heading carries an invisible link to its source
+    // line, which the outline pane finds in the SVG to scroll to it.
+    let line = n.at("line", default: 0)
+    let mark = if _preview and line > 0 { link("peanut:" + str(line), box(width: 0.01pt, height: 0.01pt)) }
+    heading(level: n.level, [#mark#all(n.inlines)])
+  }
   else if t == "list" {
     // Tight items: a nested list follows its text without a paragraph break.
     let tight = n.at("tight", default: false)
@@ -56,7 +74,19 @@
   else if t == "toc" { outline() }
   else if t == "figure" {
     let w = n.at("width", default: 0)
-    let body = if n.at("src", default: "") != "" {
+    let pics = n.at("pictures", default: ())
+    let body = if pics.len() > 0 {
+      // A grid: the pictures fill equal columns, together w wide (or the
+      // full width).
+      block(width: if w > 0 { w * 1% } else { 100% }, grid(
+        columns: (1fr,) * n.at("columns", default: pics.len()),
+        gutter: 0.6em,
+        align: center + horizon,
+        ..pics.map(p => if p.at("src", default: "") != "" {
+          image(p.src, width: 100%)
+        } else { _missing(p.at("missing", default: "")) }),
+      ))
+    } else if n.at("src", default: "") != "" {
       image(n.src, width: if w > 0 { w * 1% } else { auto })
     } else { _missing(n.at("missing", default: "")) }
     let cap = n.at("caption", default: ())
@@ -88,4 +118,17 @@
 }
 
 // render renders the whole document body.
-#let render(doc) = doc.blocks.map(node).join(parbreak())
+#let render(doc) = {
+  // Footnote numbers are drawn smaller and raised rather than with the
+  // font's superscript glyphs: many fonts have ¹ ² ³ but not 4 and up.
+  set super(typographic: false)
+  // Outline entries repeat heading text: leave the preview's marks and
+  // footnotes out.
+  show outline: it => {
+    show link: l => if type(l.dest) == str and l.dest.starts-with("peanut:") { none } else { l }
+    _in_outline.update(true)
+    it
+    _in_outline.update(false)
+  }
+  doc.blocks.map(node).join(parbreak())
+}
