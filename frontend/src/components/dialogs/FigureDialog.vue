@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { ImageUp, Trash2 } from "lucide-vue-next";
+import { AlignCenter, AlignLeft, AlignRight, ImageUp, Trash2 } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { DocService } from "../../../bindings/peanut-writer";
 import { applyFigure, deleteBlock, replacePicture } from "../../lib/actions";
-import { type Item, uniqueLabel } from "../../lib/markdown";
+import { type Item, type Position, uniqueLabel } from "../../lib/markdown";
 import { state } from "../../lib/store";
 
 const props = defineProps<{ item: Item }>();
@@ -15,13 +15,17 @@ const caption = ref(props.item.caption);
 const label = ref(props.item.label);
 const autoWidth = ref(!props.item.width);
 const width = ref(props.item.width || 70);
+const position = ref<Position>(props.item.position ?? "");
 const preview = ref("");
 // A new figure's label follows its caption until it's edited by hand.
 const labelTouched = ref(!!props.item.label);
 
-watch(src, async (s) => (preview.value = s ? await DocService.ImageURL(s) : ""), { immediate: true });
+watch(src, async (s) => (preview.value = s ? await DocService.ImageURL(s) : ""), {
+  immediate: true,
+});
 watch(caption, (c) => {
-  if (!labelTouched.value) label.value = c.trim() ? uniqueLabel("fig", c, state.items, props.item.label) : "";
+  if (!labelTouched.value)
+    label.value = c.trim() ? uniqueLabel("fig", c, state.items, props.item.label) : "";
 });
 
 const refs = computed(() => {
@@ -43,6 +47,7 @@ function submit() {
     caption: caption.value.trim(),
     label: label.value.trim(),
     width: autoWidth.value ? 0 : width.value,
+    position: position.value,
   });
   emit("close");
 }
@@ -55,7 +60,7 @@ function remove() {
 
 <template>
   <Modal :title="`Figure ${item.number}`" @close="emit('close')" @submit="submit">
-    <div class="pic">
+    <div class="pic" :class="position">
       <div class="frame" :style="{ width: autoWidth ? 'auto' : `${width}%` }">
         <img v-if="preview" :src="preview" alt="" />
         <div v-else class="missing">Picture not found: {{ src }}</div>
@@ -64,29 +69,76 @@ function remove() {
     <label class="field">
       Caption
       <input ref="captionInput" v-model="caption" placeholder="Describe the picture" />
-      <span class="hint">Shown under the picture as “Figure {{ item.number }}: …”. *Italic* and **bold** work here.</span>
+      <span class="hint"
+        >Shown under the picture as “Figure {{ item.number }}: …”. *Italic* and **bold** work
+        here.</span
+      >
     </label>
     <div class="cols">
       <label class="field">
         Reference name
         <input v-model="label" placeholder="fig:name" @input="labelTouched = true" />
         <span class="hint">
-          {{ refs ? `Referenced ${refs} ${refs === 1 ? "time" : "times"}; renaming updates them.` : "Used by cross-references." }}
+          {{
+            refs
+              ? `Referenced ${refs} ${refs === 1 ? "time" : "times"}; renaming updates them.`
+              : "Used by cross-references."
+          }}
         </span>
       </label>
       <div class="field">
         Size
         <div class="size">
           <label class="check"><input v-model="autoWidth" type="checkbox" /> Natural</label>
-          <input v-model.number="width" type="range" min="10" max="100" step="5" :disabled="autoWidth" />
+          <input
+            v-model.number="width"
+            type="range"
+            min="10"
+            max="100"
+            step="5"
+            :disabled="autoWidth"
+          />
           <span class="pct">{{ autoWidth ? "" : `${width}%` }}</span>
         </div>
-        <span class="hint">Of the text width.</span>
+        <span class="hint"
+          >Of the text width. You can also drag the picture's corner in the editor.</span
+        >
       </div>
+    </div>
+    <div class="field">
+      Position
+      <span class="group">
+        <button
+          type="button"
+          :class="{ on: position === 'left' }"
+          title="Left"
+          @click="position = 'left'"
+        >
+          <AlignLeft :size="15" />
+        </button>
+        <button
+          type="button"
+          :class="{ on: position === '' }"
+          title="Centered"
+          @click="position = ''"
+        >
+          <AlignCenter :size="15" />
+        </button>
+        <button
+          type="button"
+          :class="{ on: position === 'right' }"
+          title="Right"
+          @click="position = 'right'"
+        >
+          <AlignRight :size="15" />
+        </button>
+      </span>
     </div>
     <template #footer>
       <button type="button" class="btn danger" @click="remove"><Trash2 :size="14" /> Delete</button>
-      <button type="button" class="btn" @click="replace"><ImageUp :size="14" /> Replace picture…</button>
+      <button type="button" class="btn" @click="replace">
+        <ImageUp :size="14" /> Replace picture…
+      </button>
       <span style="flex: 1" />
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
       <button type="submit" class="btn primary">Done</button>
@@ -102,6 +154,12 @@ function remove() {
   border-radius: 12px;
   background: var(--panel);
   border: 1px solid var(--border);
+}
+.pic.left {
+  justify-content: flex-start;
+}
+.pic.right {
+  justify-content: flex-end;
 }
 .frame {
   max-width: 100%;
@@ -145,5 +203,30 @@ function remove() {
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   font-weight: 400;
+}
+.group {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 1px;
+  padding: 2px 4px;
+  border-radius: 9px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.group button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-ink);
+}
+.group button:hover {
+  background: var(--hover);
+}
+.group button.on {
+  background: var(--active);
 }
 </style>

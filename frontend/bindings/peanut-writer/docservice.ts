@@ -20,16 +20,24 @@ import * as templates$0 from "./internal/templates/models.js";
 import * as $models from "./models.js";
 
 /**
- * AddImage stores an image (base64 data, from a drop or a paste) in the
- * document's images folder and returns its path relative to the document.
+ * AddImage stores an image (base64 data, from a paste) in the document's
+ * images folder and returns its path relative to the document.
  */
 export function AddImage(name: string, data: string): $CancellablePromise<string> {
     return $Call.ByID(567103547, name, data);
 }
 
 /**
- * ChooseImage asks for an image file and stores it like AddImage; "" if the
- * user cancels.
+ * AddImageFile copies the image at path (picked or dropped) into the
+ * document's images folder and returns its path relative to the document.
+ */
+export function AddImageFile(path: string): $CancellablePromise<string> {
+    return $Call.ByID(1382889653, path);
+}
+
+/**
+ * ChooseImage asks for an image file and stores it like AddImageFile; "" if
+ * the user cancels.
  */
 export function ChooseImage(): $CancellablePromise<string> {
     return $Call.ByID(1763036283);

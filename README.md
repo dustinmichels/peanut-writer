@@ -12,7 +12,8 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
 - **Ribbon**: File, Home (formatting, lists, styles), Insert (picture, table, link, footnote, code, divider, page
   break), References (cross-reference, footnote, contents) and Design (templates, document properties).
 - **Pictures**: drag one onto the editor, paste one, or use Insert → Picture. It's copied into an `images/` folder
-  beside the document and shown in the editor; **Edit figure** sets its caption, reference name and size.
+  beside the document and shown in the editor. Hover a picture to place it left, centered or right, or drag its corner
+  to resize it; **Edit figure** sets its caption, reference name, size and position.
 - **Tables**: Insert → Table, pick a size, fill in the grid. **Edit table** above any table reopens the grid (add and
   remove rows and columns, align columns, caption).
 - **Cross-references**: References → Cross-reference lists every figure and table with its current number, or type
@@ -41,7 +42,7 @@ template: report # classic (the default), academic, report, peanut, or a custom 
 
 As @fig:chart shows, sales went up (@tbl:sales).
 
-![Sales over time](images/chart.png){#fig:chart width=70%}
+![Sales over time](images/chart.png){#fig:chart width=70% align=left}
 
 | Year | Sales |
 | ---- | ----: |
@@ -59,7 +60,7 @@ Text with a note.[^1]
 ```
 
 - A figure is a paragraph holding only a picture; the attribute block is optional (`width` is a percentage of the text
-  width).
+  width; `align` is `left` or `right`, centered when left out, and the caption follows the picture).
 - A table's caption is the paragraph right after it, starting `Table:`.
 - `@fig:…` / `@tbl:…` become “Figure n” / “Table n”; one with no matching name shows as **??**, as in LaTeX, and is
   listed in the status bar's notes.

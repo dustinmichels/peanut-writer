@@ -36,7 +36,14 @@ function submit() {
         Date
         <div class="date">
           <input v-model="meta.date" placeholder="e.g. March 3, 2026" />
-          <button type="button" class="btn" title="Always today's date" @click="meta.date = 'today'">Today</button>
+          <button
+            type="button"
+            class="btn"
+            title="Always today's date"
+            @click="meta.date = 'today'"
+          >
+            Today
+          </button>
         </div>
       </label>
     </div>

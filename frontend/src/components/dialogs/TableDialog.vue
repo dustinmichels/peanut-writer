@@ -21,19 +21,24 @@ const props = defineProps<{ item?: Item; cols?: number; rows?: number }>();
 const emit = defineEmits<{ close: [] }>();
 
 const t = reactive(
-  props.item ? parseTable(state.content.slice(props.item.tableFrom, props.item.tableTo)) : emptyTable(props.cols ?? 3, Math.max(1, (props.rows ?? 3) - 1)),
+  props.item
+    ? parseTable(state.content.slice(props.item.tableFrom, props.item.tableTo))
+    : emptyTable(props.cols ?? 3, Math.max(1, (props.rows ?? 3) - 1)),
 );
 const caption = ref(props.item?.caption ?? "");
 const label = ref(props.item?.label ?? "");
 const labelTouched = ref(!!props.item?.label);
 watch(caption, (c) => {
-  if (!labelTouched.value) label.value = c.trim() ? uniqueLabel("tbl", c, state.items, props.item?.label ?? "") : "";
+  if (!labelTouched.value)
+    label.value = c.trim() ? uniqueLabel("tbl", c, state.items, props.item?.label ?? "") : "";
 });
 
 // The cell with focus: row -1 is the header.
 const cur = reactive({ r: -1, c: 0 });
 const grid = ref<HTMLElement>();
-const number = computed(() => props.item?.number ?? state.items.filter((x) => x.kind === "table").length + 1);
+const number = computed(
+  () => props.item?.number ?? state.items.filter((x) => x.kind === "table").length + 1,
+);
 
 async function focusCell(r: number, c: number) {
   await nextTick();
@@ -87,7 +92,12 @@ const alignOf = (c: number) => t.align[c] || "left";
 </script>
 
 <template>
-  <Modal :title="item ? `Table ${number}` : 'Insert Table'" wide @close="emit('close')" @submit="submit">
+  <Modal
+    :title="item ? `Table ${number}` : 'Insert Table'"
+    wide
+    @close="emit('close')"
+    @submit="submit"
+  >
     <label class="field">
       Caption
       <input v-model="caption" placeholder="What the table shows" />
@@ -97,20 +107,63 @@ const alignOf = (c: number) => t.align[c] || "left";
     <div class="tools">
       <span class="group" title="Rows">
         <Rows3 :size="14" class="lead" />
-        <button type="button" title="Insert row above" :disabled="cur.r < 0" @click="addRow(false)"><ArrowUpToLine :size="15" /></button>
-        <button type="button" title="Insert row below" @click="addRow(true)"><ArrowDownToLine :size="15" /></button>
-        <button type="button" title="Delete row" :disabled="cur.r < 0 || t.rows.length <= 1" @click="deleteRow"><Trash2 :size="15" /></button>
+        <button type="button" title="Insert row above" :disabled="cur.r < 0" @click="addRow(false)">
+          <ArrowUpToLine :size="15" />
+        </button>
+        <button type="button" title="Insert row below" @click="addRow(true)">
+          <ArrowDownToLine :size="15" />
+        </button>
+        <button
+          type="button"
+          title="Delete row"
+          :disabled="cur.r < 0 || t.rows.length <= 1"
+          @click="deleteRow"
+        >
+          <Trash2 :size="15" />
+        </button>
       </span>
       <span class="group" title="Columns">
         <Columns3 :size="14" class="lead" />
-        <button type="button" title="Insert column left" @click="addCol(false)"><ArrowLeftToLine :size="15" /></button>
-        <button type="button" title="Insert column right" @click="addCol(true)"><ArrowRightToLine :size="15" /></button>
-        <button type="button" title="Delete column" :disabled="t.header.length <= 1" @click="deleteCol"><Trash2 :size="15" /></button>
+        <button type="button" title="Insert column left" @click="addCol(false)">
+          <ArrowLeftToLine :size="15" />
+        </button>
+        <button type="button" title="Insert column right" @click="addCol(true)">
+          <ArrowRightToLine :size="15" />
+        </button>
+        <button
+          type="button"
+          title="Delete column"
+          :disabled="t.header.length <= 1"
+          @click="deleteCol"
+        >
+          <Trash2 :size="15" />
+        </button>
       </span>
       <span class="group" title="Alignment of this column">
-        <button type="button" :class="{ on: t.align[cur.c] === 'left' }" title="Align left" @click="setAlign('left')"><AlignLeft :size="15" /></button>
-        <button type="button" :class="{ on: t.align[cur.c] === 'center' }" title="Center" @click="setAlign('center')"><AlignCenter :size="15" /></button>
-        <button type="button" :class="{ on: t.align[cur.c] === 'right' }" title="Align right" @click="setAlign('right')"><AlignRight :size="15" /></button>
+        <button
+          type="button"
+          :class="{ on: t.align[cur.c] === 'left' }"
+          title="Align left"
+          @click="setAlign('left')"
+        >
+          <AlignLeft :size="15" />
+        </button>
+        <button
+          type="button"
+          :class="{ on: t.align[cur.c] === 'center' }"
+          title="Center"
+          @click="setAlign('center')"
+        >
+          <AlignCenter :size="15" />
+        </button>
+        <button
+          type="button"
+          :class="{ on: t.align[cur.c] === 'right' }"
+          title="Align right"
+          @click="setAlign('right')"
+        >
+          <AlignRight :size="15" />
+        </button>
       </span>
     </div>
 
@@ -124,7 +177,7 @@ const alignOf = (c: number) => t.align[c] || "left";
                 :data-cell="`-1:${c}`"
                 :style="{ textAlign: alignOf(c) }"
                 placeholder="Heading"
-                @focus="(cur.r = -1), (cur.c = c)"
+                @focus="((cur.r = -1), (cur.c = c))"
                 @keydown.enter.prevent="focusCell(0, c)"
               />
             </th>
@@ -137,7 +190,7 @@ const alignOf = (c: number) => t.align[c] || "left";
                 v-model="row[c]"
                 :data-cell="`${r}:${c}`"
                 :style="{ textAlign: alignOf(c) }"
-                @focus="(cur.r = r), (cur.c = c)"
+                @focus="((cur.r = r), (cur.c = c))"
                 @keydown.enter.exact.prevent="enter(r, c)"
               />
             </td>
@@ -152,7 +205,9 @@ const alignOf = (c: number) => t.align[c] || "left";
     </label>
 
     <template #footer>
-      <button v-if="item" type="button" class="btn danger" @click="remove"><Trash2 :size="14" /> Delete table</button>
+      <button v-if="item" type="button" class="btn danger" @click="remove">
+        <Trash2 :size="14" /> Delete table
+      </button>
       <span style="flex: 1" />
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
       <button type="submit" class="btn primary">{{ item ? "Done" : "Insert" }}</button>

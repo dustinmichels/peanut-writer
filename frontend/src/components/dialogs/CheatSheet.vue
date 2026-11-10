@@ -9,7 +9,10 @@ const rows: [string, string][] = [
   ["- item   1. item", "Bulleted and numbered lists; Tab nests"],
   ["> quoted", "A quotation"],
   ["[text](https://…)", "A link"],
-  ["![Caption](images/a.png){#fig:a width=60%}", "A figure with a caption, a name and a size"],
+  [
+    "![Caption](images/a.png){#fig:a width=60% align=left}",
+    "A figure with a caption, a name, a size and a position (left or right; centered by default)",
+  ],
   ["Table: Caption {#tbl:b}", "A table's caption, on the line after the table"],
   ["@fig:a   @tbl:b", "Cross-references: become “Figure 1”, “Table 1”"],
   ["Text[^1]   [^1]: The note.", "A footnote"],
@@ -21,7 +24,9 @@ const rows: [string, string][] = [
 
 <template>
   <Modal title="Markdown Cheat Sheet" wide @close="emit('close')" @submit="emit('close')">
-    <p class="lead">Everything on the ribbon is plain text underneath. Type it directly whenever that's quicker.</p>
+    <p class="lead">
+      Everything on the ribbon is plain text underneath. Type it directly whenever that's quicker.
+    </p>
     <table>
       <tr v-for="[code, what] in rows" :key="code">
         <td><code>{{ code }}</code></td>

@@ -8,7 +8,9 @@ import { state } from "../../lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 const kind = ref<"all" | "figure" | "table">("all");
-const list = computed(() => state.items.filter((x) => kind.value === "all" || x.kind === kind.value));
+const list = computed(() =>
+  state.items.filter((x) => kind.value === "all" || x.kind === kind.value),
+);
 const picked = ref(0);
 
 function insert(item: Item | undefined) {
@@ -31,7 +33,13 @@ onUnmounted(() => window.removeEventListener("keydown", key));
 <template>
   <Modal title="Cross-reference" @close="emit('close')" @submit="insert(list[picked])">
     <div class="seg">
-      <button v-for="k in ['all', 'figure', 'table'] as const" :key="k" type="button" :class="{ on: kind === k }" @click="(kind = k), (picked = 0)">
+      <button
+        v-for="k in ['all', 'figure', 'table'] as const"
+        :key="k"
+        type="button"
+        :class="{ on: kind === k }"
+        @click="((kind = k), (picked = 0))"
+      >
         {{ k === "all" ? "Everything" : k === "figure" ? "Figures" : "Tables" }}
       </button>
     </div>
@@ -55,7 +63,10 @@ onUnmounted(() => window.removeEventListener("keydown", key));
       <img src="/peanut.svg" alt="" />
       Nothing to refer to yet. Add a picture or a table first.
     </div>
-    <p class="hint">The reference reads like “Figure 2” and keeps up when things move. You can also type <code>@</code> in the text.</p>
+    <p class="hint">
+      The reference reads like “Figure 2” and keeps up when things move. You can also type
+      <code>@</code> in the text.
+    </p>
     <template #footer>
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
       <button type="submit" class="btn primary" :disabled="!list.length">Insert</button>

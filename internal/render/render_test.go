@@ -28,7 +28,7 @@ Text with **bold**, *emph*, ~~strike~~, ` + "`code`" + `, a [link](https://examp
 a hard  
 break, an inline ![x](images/p.svg) image and a note.[^n] See @fig:a, @tbl:b and @fig:nope.
 
-![Caption *here*](images/p.svg){#fig:a width=30%}
+![Caption *here*](images/p.svg){#fig:a width=30% align=right}
 
 ![Missing](images/gone.png)
 

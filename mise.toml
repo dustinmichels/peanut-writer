@@ -3,6 +3,7 @@ go = "1.27.3"
 bun = "1.4.4"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"
 typst = "0.15.1"
+"npm:oxfmt" = "0.77.0"
 
 [tasks.dev]
 description = "Run the app in dev mode (Vite HMR + Go rebuild on change)"
@@ -24,3 +25,7 @@ run = "go test ./internal/..."
 description = "Type-check the editor"
 dir = "frontend"
 run = "bunx vue-tsc --noEmit"
+
+[tasks.fmt]
+description = "Format Go with gofmt and everything else with oxfmt (skips generated bindings)"
+run = ["gofmt -w .", "oxfmt '!frontend/bindings/**'"]

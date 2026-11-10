@@ -15,7 +15,8 @@ function submit() {
   const v = editor.value;
   if (!v || !url.value.trim()) return emit("close");
   let target = url.value.trim();
-  if (!/^[a-z]+:/i.test(target)) target = target.includes("@") ? `mailto:${target}` : `https://${target}`;
+  if (!/^[a-z]+:/i.test(target))
+    target = target.includes("@") ? `mailto:${target}` : `https://${target}`;
   const label = text.value.trim() || target;
   insertText(v, `[${label.replace(/([\][])/g, "\\$1")}](<${target}>)`);
   emit("close");

@@ -79,7 +79,9 @@ select {
   border: 1px solid var(--border-strong);
   background: var(--surface);
   font-weight: 500;
-  transition: background 0.12s, transform 0.12s;
+  transition:
+    background 0.12s,
+    transform 0.12s;
 }
 .btn:hover {
   background: var(--panel);
@@ -91,7 +93,9 @@ select {
   background: linear-gradient(180deg, #cf7a5d, var(--accent));
   border-color: #a95940;
   color: white;
-  box-shadow: 0 2px 6px rgba(160, 80, 40, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 2px 6px rgba(160, 80, 40, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 .btn.primary:hover {
   background: linear-gradient(180deg, #d5856a, #c86f54);
@@ -120,7 +124,9 @@ select {
   padding: 7px 10px;
   background: white;
   outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
 }
 .field input:focus,
 .field textarea:focus,
@@ -186,8 +192,16 @@ select {
   border: 1px solid var(--border);
   text-align: center;
 }
+.pw-figure.left {
+  text-align: left;
+}
+.pw-figure.right {
+  text-align: right;
+}
 .pw-figure-frame {
+  position: relative;
   display: inline-block;
+  vertical-align: top;
   max-width: 100%;
   min-width: 80px;
 }
@@ -196,6 +210,84 @@ select {
   width: 100%;
   max-height: 340px;
   object-fit: contain;
+  border-radius: 6px;
+}
+.pw-figure-tools {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.pw-figure-tool {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-ink);
+}
+.pw-figure-tool:hover {
+  background: var(--hover);
+}
+.pw-figure-tool.on {
+  background: var(--active);
+}
+.pw-figure-handle {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.pw-figure.right .pw-figure-handle {
+  right: auto;
+  left: -5px;
+  cursor: nesw-resize;
+}
+.pw-figure-size {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.pw-figure-tools,
+.pw-figure-handle,
+.pw-figure-size {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.pw-figure-frame:hover .pw-figure-tools,
+.pw-figure-frame:hover .pw-figure-handle,
+.pw-figure.resizing .pw-figure-handle,
+.pw-figure.resizing .pw-figure-size {
+  opacity: 1;
+}
+.pw-figure.resizing .pw-figure-tools {
+  opacity: 0;
+}
+.pw-figure.resizing .pw-figure-frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
   border-radius: 6px;
 }
 .pw-figure-frame.missing {
@@ -218,6 +310,12 @@ select {
 }
 .pw-figure-caption {
   justify-content: center;
+}
+.pw-figure.left .pw-figure-caption {
+  justify-content: flex-start;
+}
+.pw-figure.right .pw-figure-caption {
+  justify-content: flex-end;
 }
 .pw-tablebar {
   margin: 10px 0 4px;

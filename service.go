@@ -342,8 +342,8 @@ func copyImages(content, from, to string) error {
 
 // --- Images ------------------------------------------------------------------
 
-// AddImage stores an image (base64 data, from a drop or a paste) in the
-// document's images folder and returns its path relative to the document.
+// AddImage stores an image (base64 data, from a paste) in the document's
+// images folder and returns its path relative to the document.
 func (s *DocService) AddImage(name, data string) (string, error) {
 	b, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
@@ -352,8 +352,8 @@ func (s *DocService) AddImage(name, data string) (string, error) {
 	return s.storeImage(name, b)
 }
 
-// ChooseImage asks for an image file and stores it like AddImage; "" if the
-// user cancels.
+// ChooseImage asks for an image file and stores it like AddImageFile; "" if
+// the user cancels.
 func (s *DocService) ChooseImage() (string, error) {
 	p, err := s.app.Dialog.OpenFile().
 		SetTitle("Insert Picture").
@@ -364,23 +364,40 @@ func (s *DocService) ChooseImage() (string, error) {
 	if err != nil || p == "" {
 		return "", err
 	}
-	b, err := os.ReadFile(p)
+	return s.AddImageFile(p)
+}
+
+// AddImageFile copies the image at path (picked or dropped) into the
+// document's images folder and returns its path relative to the document.
+func (s *DocService) AddImageFile(path string) (string, error) {
+	name := filepath.Base(path)
+	if err := checkImageName(name); err != nil {
+		return "", err
+	}
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
-	return s.storeImage(filepath.Base(p), b)
+	return s.storeImage(name, b)
 }
 
 var (
-	imageExts     = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true, ".webp": true}
-	nonNameChars  = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
+	imageExts    = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true, ".webp": true}
+	nonNameChars = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 )
 
-func (s *DocService) storeImage(name string, b []byte) (string, error) {
-	ext := strings.ToLower(filepath.Ext(name))
-	if !imageExts[ext] {
-		return "", fmt.Errorf("%s isn't a picture Peanut Writer can use (PNG, JPEG, GIF, SVG or WebP)", name)
+func checkImageName(name string) error {
+	if !imageExts[strings.ToLower(filepath.Ext(name))] {
+		return fmt.Errorf("%s isn't a picture Peanut Writer can use (PNG, JPEG, GIF, SVG or WebP)", name)
 	}
+	return nil
+}
+
+func (s *DocService) storeImage(name string, b []byte) (string, error) {
+	if err := checkImageName(name); err != nil {
+		return "", err
+	}
+	ext := strings.ToLower(filepath.Ext(name))
 	base := strings.Trim(nonNameChars.ReplaceAllString(strings.TrimSuffix(filepath.Base(name), filepath.Ext(name)), "-"), "-")
 	if base == "" || strings.EqualFold(base, "image") {
 		sum := sha256.Sum256(b)

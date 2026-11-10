@@ -12,7 +12,14 @@ export interface Meta {
   template: string;
 }
 
-export const metaKeys: (keyof Meta)[] = ["title", "subtitle", "author", "date", "abstract", "template"];
+export const metaKeys: (keyof Meta)[] = [
+  "title",
+  "subtitle",
+  "author",
+  "date",
+  "abstract",
+  "template",
+];
 
 export interface FrontMatter {
   meta: Meta;
@@ -97,6 +104,7 @@ export interface Item {
   // figure
   src?: string;
   width?: number; // percent; 0 = natural
+  position?: Position;
   // table
   tableFrom?: number;
   tableTo?: number; // end of the last row
@@ -104,19 +112,30 @@ export interface Item {
   captionTo?: number;
 }
 
-export const figureLine = /^!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)\s*(\{[^{}]*\})?\s*$/;
+export const figureLine =
+  /^!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)\s*(\{[^{}]*\})?\s*$/;
 const delimiterRow = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
 export const captionLine = /^(?:Table:|:\s)\s*(.*?)\s*(\{[^{}]*\})?\s*$/i;
 const fence = /^\s{0,3}(```|~~~)/;
 
-export function parseAttrs(block: string | undefined): { id: string; width: number } {
-  const out = { id: "", width: 0 };
+// Where a figure sits across the text width; "" is centered.
+export type Position = "" | "left" | "right";
+
+export function parseAttrs(block: string | undefined): {
+  id: string;
+  width: number;
+  position: Position;
+} {
+  const out = { id: "", width: 0, position: "" as Position };
   if (!block) return out;
   for (const f of block.slice(1, -1).trim().split(/\s+/)) {
     if (f.startsWith("#")) out.id = f.slice(1);
     else if (/^width=/i.test(f)) {
       const n = parseFloat(f.slice(6).replace(/["'%]/g, ""));
       if (n > 0) out.width = Math.min(n, 100);
+    } else if (/^align=/i.test(f)) {
+      const a = f.slice(6).replace(/["']/g, "").toLowerCase();
+      if (a === "left" || a === "right") out.position = a;
     }
   }
   return out;
@@ -167,10 +186,16 @@ export function scan(text: string): Item[] {
         line: i + 1,
         src: fig[2],
         width: a.width,
+        position: a.position,
       });
       continue;
     }
-    if (line.includes("|") && i + 1 < lines.length && delimiterRow.test(lines[i + 1]) && prevBoundary) {
+    if (
+      line.includes("|") &&
+      i + 1 < lines.length &&
+      delimiterRow.test(lines[i + 1]) &&
+      prevBoundary
+    ) {
       let j = i + 2;
       while (j < lines.length && !blank(j)) j++;
       const lastRow = j - 1;
@@ -220,7 +245,12 @@ export function slug(s: string): string {
 }
 
 // uniqueLabel is `<prefix>:<slug of text>`, numbered if it's taken.
-export function uniqueLabel(prefix: "fig" | "tbl", text: string, items: Item[], except = ""): string {
+export function uniqueLabel(
+  prefix: "fig" | "tbl",
+  text: string,
+  items: Item[],
+  except = "",
+): string {
   const taken = new Set(items.map((x) => x.label).filter((l) => l && l !== except));
   const base = `${prefix}:${slug(text || (prefix === "fig" ? "figure" : "table"))}`;
   let label = base;
@@ -232,13 +262,39 @@ export function escapeCaption(s: string): string {
   return s.replace(/([\][\\])/g, "\\$1").replace(/\s*\n\s*/g, " ");
 }
 
-export function figureMarkdown(src: string, caption: string, label: string, width: number): string {
-  const attrs = [label ? `#${label}` : "", width > 0 ? `width=${Math.round(width)}%` : ""].filter(Boolean);
-  return `![${escapeCaption(caption)}](${src})${attrs.length ? `{${attrs.join(" ")}}` : ""}`;
+export interface FigureSpec {
+  src: string;
+  caption: string;
+  label: string;
+  width: number; // percent; 0 = natural
+  position: Position;
+}
+
+export function figureMarkdown(f: FigureSpec): string {
+  const attrs = [
+    f.label ? `#${f.label}` : "",
+    f.width > 0 ? `width=${Math.round(f.width)}%` : "",
+    f.position ? `align=${f.position}` : "",
+  ].filter(Boolean);
+  return `![${escapeCaption(f.caption)}](${f.src})${attrs.length ? `{${attrs.join(" ")}}` : ""}`;
+}
+
+// figureSpec is what figureMarkdown writes for item.
+export function figureSpec(item: Item): FigureSpec {
+  return {
+    src: item.src ?? "",
+    caption: item.caption,
+    label: item.label,
+    width: item.width ?? 0,
+    position: item.position ?? "",
+  };
 }
 
 export function captionMarkdown(caption: string, label: string): string {
-  return `Table: ${caption.replace(/\s*\n\s*/g, " ").trim()}${label ? ` {#${label}}` : ""}`.replace(/:\s+\{/, ": {");
+  return `Table: ${caption.replace(/\s*\n\s*/g, " ").trim()}${label ? ` {#${label}}` : ""}`.replace(
+    /:\s+\{/,
+    ": {",
+  );
 }
 
 // --- Tables ---------------------------------------------------------------
@@ -292,20 +348,29 @@ export function parseTable(src: string): Table {
   };
 }
 
-const escapeCell = (s: string) => s.replace(/\n/g, " ").replace(/(?<!\\)\|/g, "\\|").trim();
+const escapeCell = (s: string) =>
+  s
+    .replace(/\n/g, " ")
+    .replace(/(?<!\\)\|/g, "\\|")
+    .trim();
 
 // writeTable lays a table out with padded columns.
 export function writeTable(t: Table): string {
   const n = t.header.length;
-  const rows = [t.header, ...t.rows].map((r) => Array.from({ length: n }, (_, i) => escapeCell(r[i] ?? "")));
-  const widths = Array.from({ length: n }, (_, i) => Math.max(3, ...rows.map((r) => [...r[i]].length)));
+  const rows = [t.header, ...t.rows].map((r) =>
+    Array.from({ length: n }, (_, i) => escapeCell(r[i] ?? "")),
+  );
+  const widths = Array.from({ length: n }, (_, i) =>
+    Math.max(3, ...rows.map((r) => [...r[i]].length)),
+  );
   const pad = (s: string, w: number, a: Align) => {
     const gap = w - [...s].length;
     if (a === "right") return " ".repeat(gap) + s;
     if (a === "center") return " ".repeat(Math.floor(gap / 2)) + s + " ".repeat(Math.ceil(gap / 2));
     return s + " ".repeat(gap);
   };
-  const line = (r: string[]) => `| ${r.map((c, i) => pad(c, widths[i], t.align[i] ?? "")).join(" | ")} |`;
+  const line = (r: string[]) =>
+    `| ${r.map((c, i) => pad(c, widths[i], t.align[i] ?? "")).join(" | ")} |`;
   // Each delimiter cell is as wide as its column, colons included.
   const delim = `|${widths
     .map((w, i) => {

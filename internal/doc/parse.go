@@ -253,6 +253,9 @@ func (p *parser) figure(n ast.Node) (Block, bool) {
 	if w, ok := kv["width"]; ok {
 		b.Width = parseWidth(w)
 	}
+	if a := strings.ToLower(kv["align"]); a == "left" || a == "right" {
+		b.Position = a
+	}
 	return b, true
 }
 

@@ -41,10 +41,14 @@ func main() {
 		Height:    900,
 		MinWidth:  960,
 		MinHeight: 600,
-		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 44,
-			TitleBar:                application.MacTitleBarHiddenInset,
-		},
+		// The title bar's drag area comes from --wails-draggable in the page
+		// (TitleBar.vue). A native InvisibleTitleBarHeight drag area on top of
+		// it would start a window drag on every click there, swallowing the
+		// mouse-up the page needs to finish clicks.
+		Mac: application.MacWindow{TitleBar: application.MacTitleBarHiddenInset},
+		// Files dropped on a data-file-drop-target element arrive as
+		// WindowFilesDropped (the webview's own drop events never see them).
+		EnableFileDrop:   true,
 		BackgroundColour: application.NewRGB(251, 247, 241),
 		URL:              "/",
 	})
@@ -53,6 +57,14 @@ func main() {
 		if !docs.shouldClose() {
 			e.Cancel()
 		}
+	})
+	// Pictures dropped on the editor become figures where they land.
+	docs.window.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		drop := map[string]any{"paths": e.Context().DroppedFiles()}
+		if t := e.Context().DropTargetDetails(); t != nil {
+			drop["x"], drop["y"] = t.X, t.Y
+		}
+		app.Event.Emit("filesDropped", drop)
 	})
 
 	if err := app.Run(); err != nil {

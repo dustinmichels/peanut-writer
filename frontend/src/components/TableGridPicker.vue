@@ -16,7 +16,7 @@ const N = 8;
           v-for="c in N"
           :key="c"
           :class="{ on: c <= cols && r <= rows }"
-          @mouseenter="(cols = c), (rows = r)"
+          @mouseenter="((cols = c), (rows = r))"
           @click="emit('pick', c, r)"
         />
       </template>

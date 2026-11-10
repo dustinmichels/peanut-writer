@@ -3,11 +3,25 @@
 // as "Figure 2", and the front matter becomes a document properties card.
 
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap, indentLess, indentMore } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentLess,
+  indentMore,
+} from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
-import { EditorSelection, EditorState, type Extension, type Line, RangeSetBuilder, StateField, type Transaction } from "@codemirror/state";
+import {
+  EditorSelection,
+  EditorState,
+  type Extension,
+  type Line,
+  RangeSetBuilder,
+  StateField,
+  type Transaction,
+} from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
@@ -23,13 +37,23 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { tags as t } from "@lezer/highlight";
-import { type Item, plain, readFrontMatter, scan } from "./markdown";
+import {
+  figureMarkdown,
+  figureSpec,
+  type FigureSpec,
+  type Item,
+  plain,
+  type Position,
+  readFrontMatter,
+  scan,
+} from "./markdown";
 
 export interface Handlers {
   editFigure(item: Item): void;
   editTable(item: Item): void;
   editProperties(): void;
-  dropImages(files: File[], pos: number): void;
+  // Dropped files arrive through Wails (see EditorPane), not DOM drop events.
+  pasteImages(files: File[], pos: number): void;
   imageURL(src: string): Promise<string>;
   changed(state: EditorState, docChanged: boolean): void;
 }
@@ -45,6 +69,37 @@ export const itemsField = StateField.define<Item[]>({
 
 const imageCache = new Map<string, Promise<string>>();
 
+const positions: { pos: Position; title: string }[] = [
+  { pos: "left", title: "Left" },
+  { pos: "", title: "Centered" },
+  { pos: "right", title: "Right" },
+];
+
+// positionIcon draws a picture (the box) on a line, pushed left, centered
+// or right.
+function positionIcon(pos: Position): SVGSVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", "14");
+  svg.setAttribute("height", "14");
+  const x = pos === "left" ? 1 : pos === "right" ? 7 : 4;
+  for (const [rx, ry, rw, rh] of [
+    [x, 2, 8, 7],
+    [1, 12, 14, 2],
+  ]) {
+    const r = document.createElementNS(ns, "rect");
+    r.setAttribute("x", String(rx));
+    r.setAttribute("y", String(ry));
+    r.setAttribute("width", String(rw));
+    r.setAttribute("height", String(rh));
+    r.setAttribute("rx", "1");
+    r.setAttribute("fill", "currentColor");
+    svg.append(r);
+  }
+  return svg;
+}
+
 class FigureWidget extends WidgetType {
   constructor(
     readonly item: Item,
@@ -55,44 +110,129 @@ class FigureWidget extends WidgetType {
   eq(o: FigureWidget) {
     const a = this.item;
     const b = o.item;
-    return a.src === b.src && a.number === b.number && a.caption === b.caption && a.width === b.width && a.label === b.label;
+    return (
+      a.src === b.src &&
+      a.number === b.number &&
+      a.caption === b.caption &&
+      a.width === b.width &&
+      a.label === b.label &&
+      a.position === b.position
+    );
   }
   toDOM(view: EditorView) {
     const el = document.createElement("div");
     el.className = "pw-figure";
+    if (this.item.position) el.classList.add(this.item.position);
+    // The item as the document has it now (this widget may be older).
+    const current = () => {
+      const pos = view.posAtDOM(el);
+      return view.state
+        .field(itemsField)
+        .find((x) => x.kind === "figure" && x.to <= pos + 1 && x.to >= pos - 1);
+    };
+    const update = (patch: Partial<FigureSpec>) => {
+      const item = current();
+      if (!item) return;
+      view.dispatch({
+        changes: {
+          from: item.from,
+          to: item.to,
+          insert: figureMarkdown({ ...figureSpec(item), ...patch }),
+        },
+        userEvent: "input",
+      });
+    };
+
     const frame = document.createElement("div");
     frame.className = "pw-figure-frame";
     const img = document.createElement("img");
     img.alt = plain(this.item.caption);
+    img.draggable = false;
     const w = this.item.width || 0;
-    frame.style.width = w > 0 ? `${Math.max(w, 18)}%` : "auto";
+    frame.style.width = w > 0 ? `${w}%` : "auto";
     const src = this.item.src ?? "";
     if (!imageCache.has(src)) imageCache.set(src, this.handlers.imageURL(src));
     imageCache.get(src)!.then((url) => {
       if (url) img.src = url;
       else {
         frame.classList.add("missing");
-        frame.textContent = `Missing picture: ${src}`;
+        const msg = document.createElement("span");
+        msg.textContent = `Missing picture: ${src}`;
+        img.replaceWith(msg);
       }
     });
-    frame.append(img);
+
+    const tools = document.createElement("div");
+    tools.className = "pw-figure-tools";
+    for (const p of positions) {
+      const b = document.createElement("button");
+      b.className = "pw-figure-tool";
+      if ((this.item.position ?? "") === p.pos) b.classList.add("on");
+      b.title = p.title;
+      b.append(positionIcon(p.pos));
+      b.onmousedown = (e) => e.preventDefault();
+      b.onclick = () => update({ position: p.pos });
+      tools.append(b);
+    }
+
+    // Dragging the corner sets the width as a share of the text width. A
+    // centered picture grows on both sides, so it follows the pointer at
+    // twice the rate.
+    const handle = document.createElement("div");
+    handle.className = "pw-figure-handle";
+    handle.title = "Drag to resize";
+    const size = document.createElement("div");
+    size.className = "pw-figure-size";
+    handle.onpointerdown = (e) => {
+      e.preventDefault();
+      const css = getComputedStyle(el);
+      const full = el.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+      const startW = frame.getBoundingClientRect().width;
+      const startX = e.clientX;
+      const rate = (this.item.position === "right" ? -1 : 1) * (this.item.position ? 1 : 2);
+      let pct = 0;
+      size.textContent = `${Math.round((startW / full) * 100)}%`;
+      handle.setPointerCapture(e.pointerId);
+      el.classList.add("resizing");
+      const move = (ev: PointerEvent) => {
+        pct = Math.round(
+          Math.min(100, Math.max(10, ((startW + rate * (ev.clientX - startX)) / full) * 100)),
+        );
+        frame.style.width = `${pct}%`;
+        size.textContent = `${pct}%`;
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        el.classList.remove("resizing");
+        if (pct && pct !== this.item.width) update({ width: pct });
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    };
+    frame.append(img, tools, handle, size);
+
     const cap = document.createElement("div");
     cap.className = "pw-figure-caption";
     const badge = document.createElement("span");
     badge.className = "pw-badge";
     badge.textContent = `Figure ${this.item.number}`;
-    cap.append(badge, document.createTextNode(" " + (plain(this.item.caption) || "No caption yet")));
+    cap.append(
+      badge,
+      document.createTextNode(" " + (plain(this.item.caption) || "No caption yet")),
+    );
     const edit = document.createElement("button");
     edit.className = "pw-widget-btn";
     edit.textContent = "Edit figure";
     edit.onmousedown = (e) => e.preventDefault();
     const open = () => {
-      const pos = view.posAtDOM(el);
-      const item = view.state.field(itemsField).find((x) => x.kind === "figure" && x.to <= pos + 1 && x.to >= pos - 1);
+      const item = current();
       if (item) this.handlers.editFigure(item);
     };
     edit.onclick = open;
-    frame.ondblclick = open;
+    img.ondblclick = open;
     cap.append(edit);
     el.append(frame, cap);
     return el;
@@ -127,7 +267,9 @@ class TableBar extends WidgetType {
     edit.onmousedown = (e) => e.preventDefault();
     edit.onclick = () => {
       const pos = view.posAtDOM(el);
-      const item = view.state.field(itemsField).find((x) => x.kind === "table" && Math.abs(x.from - pos) <= 1);
+      const item = view.state
+        .field(itemsField)
+        .find((x) => x.kind === "table" && Math.abs(x.from - pos) <= 1);
       if (item) this.handlers.editTable(item);
     };
     el.append(badge, cap, edit);
@@ -216,24 +358,47 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     ranges.push({
       from: 0,
       to: end,
-      deco: Decoration.replace({ widget: new PropertiesCard(fm.meta.title, by, handlers), block: true }),
+      deco: Decoration.replace({
+        widget: new PropertiesCard(fm.meta.title, by, handlers),
+        block: true,
+      }),
       atomic: true,
     });
   }
 
   for (const it of items) {
     if (it.kind === "figure") {
-      ranges.push({ from: it.to, to: it.to, deco: Decoration.widget({ widget: new FigureWidget(it, handlers), block: true, side: 1 }) });
-      ranges.push({ from: it.from, to: it.from, deco: Decoration.line({ class: "pw-figure-line" }) });
+      ranges.push({
+        from: it.to,
+        to: it.to,
+        deco: Decoration.widget({ widget: new FigureWidget(it, handlers), block: true, side: 1 }),
+      });
+      ranges.push({
+        from: it.from,
+        to: it.from,
+        deco: Decoration.line({ class: "pw-figure-line" }),
+      });
     } else {
-      ranges.push({ from: it.from, to: it.from, deco: Decoration.widget({ widget: new TableBar(it, handlers), block: true, side: -1 }) });
-      for (let p = it.tableFrom!; p <= it.tableTo!; ) {
+      ranges.push({
+        from: it.from,
+        to: it.from,
+        deco: Decoration.widget({ widget: new TableBar(it, handlers), block: true, side: -1 }),
+      });
+      for (let p = it.tableFrom!; p <= it.tableTo!;) {
         const line = doc.lineAt(p);
-        ranges.push({ from: line.from, to: line.from, deco: Decoration.line({ class: "pw-table-line" }) });
+        ranges.push({
+          from: line.from,
+          to: line.from,
+          deco: Decoration.line({ class: "pw-table-line" }),
+        });
         p = line.to + 1;
       }
       if (it.captionFrom !== undefined) {
-        ranges.push({ from: it.captionFrom, to: it.captionFrom, deco: Decoration.line({ class: "pw-caption-line" }) });
+        ranges.push({
+          from: it.captionFrom,
+          to: it.captionFrom,
+          deco: Decoration.line({ class: "pw-caption-line" }),
+        });
       }
     }
   }
@@ -252,12 +417,23 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     const to = from + m[2].length + 1;
     if (from < fm.to || inCode(from)) continue;
     const target = labels.get(m[2]);
-    const label = target ? `${target.kind === "figure" ? "Figure" : "Table"} ${target.number}` : `?? ${m[2]}`;
-    ranges.push({ from, to, deco: Decoration.replace({ widget: new RefWidget(m[2], label, !!target) }), atomic: true });
+    const label = target
+      ? `${target.kind === "figure" ? "Figure" : "Table"} ${target.number}`
+      : `?? ${m[2]}`;
+    ranges.push({
+      from,
+      to,
+      deco: Decoration.replace({ widget: new RefWidget(m[2], label, !!target) }),
+      atomic: true,
+    });
   }
   for (const m of text.matchAll(footRe)) {
     if (m.index! < fm.to || inCode(m.index!)) continue;
-    ranges.push({ from: m.index!, to: m.index! + m[0].length, deco: Decoration.mark({ class: "pw-footnote-ref" }) });
+    ranges.push({
+      from: m.index!,
+      to: m.index! + m[0].length,
+      deco: Decoration.mark({ class: "pw-footnote-ref" }),
+    });
   }
 
   ranges.sort((a, b) => a.from - b.from || a.deco.startSide - b.deco.startSide);
@@ -273,8 +449,14 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
 function decorations(handlers: Handlers): Extension {
   const field = StateField.define<Decos>({
     create: (s) => buildDecorations(s, handlers),
-    update: (d, tr: Transaction) => (tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState) ? buildDecorations(tr.state, handlers) : d),
-    provide: (f) => [EditorView.decorations.from(f, (d) => d.deco), EditorView.atomicRanges.of((v) => v.state.field(f).atomic)],
+    update: (d, tr: Transaction) =>
+      tr.docChanged || syntaxTree(tr.state) !== syntaxTree(tr.startState)
+        ? buildDecorations(tr.state, handlers)
+        : d,
+    provide: (f) => [
+      EditorView.decorations.from(f, (d) => d.deco),
+      EditorView.atomicRanges.of((v) => v.state.field(f).atomic),
+    ],
   });
   return field;
 }
@@ -287,7 +469,8 @@ const lineStyles = ViewPlugin.fromClass(
       this.decorations = this.build(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || syntaxTree(u.state) !== syntaxTree(u.startState)) this.decorations = this.build(u.view);
+      if (u.docChanged || u.viewportChanged || syntaxTree(u.state) !== syntaxTree(u.startState))
+        this.decorations = this.build(u.view);
     }
     build(view: EditorView) {
       const b = new RangeSetBuilder<Decoration>();
@@ -306,9 +489,10 @@ const lineStyles = ViewPlugin.fromClass(
             const h = /^ATXHeading(\d)$/.exec(n.name);
             if (h) add(n.from, `pw-h pw-h${h[1]}`);
             else if (n.name === "Blockquote" || n.name === "FencedCode") {
-              for (let p = n.from; p <= n.to; ) {
+              for (let p = n.from; p <= n.to;) {
                 const line = view.state.doc.lineAt(p);
-                if (line.from >= from && line.from <= to) add(line.from, n.name === "Blockquote" ? "pw-quote-line" : "pw-code-line");
+                if (line.from >= from && line.from <= to)
+                  add(line.from, n.name === "Blockquote" ? "pw-quote-line" : "pw-code-line");
                 p = line.to + 1;
               }
               return false;
@@ -345,11 +529,18 @@ const theme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", fontSize: "16px" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--writing)", lineHeight: "1.7", overflow: "auto" },
-  ".cm-content": { maxWidth: "760px", margin: "0 auto", padding: "36px 48px 40vh", caretColor: "var(--roast)" },
+  ".cm-content": {
+    maxWidth: "760px",
+    margin: "0 auto",
+    padding: "36px 48px 40vh",
+    caretColor: "var(--roast)",
+  },
   ".cm-line": { padding: "0 2px" },
   ".cm-activeLine": { backgroundColor: "rgba(217, 158, 130, 0.07)" },
   ".cm-cursor": { borderLeftColor: "var(--roast)", borderLeftWidth: "2px" },
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "rgba(217, 158, 130, 0.32) !important" },
+  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
+    backgroundColor: "rgba(217, 158, 130, 0.32) !important",
+  },
   ".cm-placeholder": { color: "var(--muted)", fontStyle: "italic" },
   ".cm-panels": { backgroundColor: "var(--surface)", borderColor: "var(--border)" },
 });
@@ -358,7 +549,12 @@ const theme = EditorView.theme({
 
 export type Mark = "strong" | "emph" | "strike" | "code";
 const markText: Record<Mark, string> = { strong: "**", emph: "*", strike: "~~", code: "`" };
-const markNode: Record<Mark, string> = { strong: "StrongEmphasis", emph: "Emphasis", strike: "Strikethrough", code: "InlineCode" };
+const markNode: Record<Mark, string> = {
+  strong: "StrongEmphasis",
+  emph: "Emphasis",
+  strike: "Strikethrough",
+  code: "InlineCode",
+};
 
 // activeMarks lists the inline styles around the cursor.
 export function activeMarks(state: EditorState): Set<Mark> {
@@ -378,7 +574,11 @@ export function toggleMark(view: EditorView, mark: Mark): boolean {
   const state = view.state;
   const tr = state.changeByRange((range) => {
     // Already inside: remove the marks around it.
-    for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(range.from, -1); n; n = n.parent) {
+    for (
+      let n: SyntaxNode | null = syntaxTree(state).resolveInner(range.from, -1);
+      n;
+      n = n.parent
+    ) {
       if (n.name === node) {
         const inner = state.sliceDoc(n.from, n.to);
         if (inner.startsWith(s) && inner.endsWith(s)) {
@@ -387,7 +587,10 @@ export function toggleMark(view: EditorView, mark: Mark): boolean {
               { from: n.from, to: n.from + s.length },
               { from: n.to - s.length, to: n.to },
             ],
-            range: EditorSelection.range(Math.max(n.from, range.from - s.length), Math.max(n.from, range.to - s.length)),
+            range: EditorSelection.range(
+              Math.max(n.from, range.from - s.length),
+              Math.max(n.from, range.to - s.length),
+            ),
           };
         }
       }
@@ -420,7 +623,11 @@ export function clearFormatting(view: EditorView) {
   if (from === to) return;
   // Not underscores: they're more often in names than marks.
   const text = view.state.sliceDoc(from, to).replace(/(\*\*|~~|\*|`)(?=\S)([\s\S]*?\S)\1/g, "$2");
-  view.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from, head: from + text.length }, userEvent: "input.format" });
+  view.dispatch({
+    changes: { from, to, insert: text },
+    selection: { anchor: from, head: from + text.length },
+    userEvent: "input.format",
+  });
 }
 
 export type BlockStyle = "p" | "h1" | "h2" | "h3" | "h4" | "quote";
@@ -441,7 +648,7 @@ export function blockStyleAt(state: EditorState): BlockStyle | "code" | "list" {
 function selectedLines(state: EditorState) {
   const lines: Line[] = [];
   const { from, to } = state.selection.main;
-  for (let p = state.doc.lineAt(from).from; p <= to; ) {
+  for (let p = state.doc.lineAt(from).from; p <= to;) {
     const line = state.doc.lineAt(p);
     lines.push(line);
     p = line.to + 1;
@@ -472,7 +679,10 @@ export function toggleList(view: EditorView, kind: "bullet" | "ordered") {
   });
   if (!lines.length) {
     const pos = view.state.selection.main.head;
-    view.dispatch({ changes: { from: pos, insert: kind === "bullet" ? "- " : "1. " }, selection: { anchor: pos + (kind === "bullet" ? 2 : 3) } });
+    view.dispatch({
+      changes: { from: pos, insert: kind === "bullet" ? "- " : "1. " },
+      selection: { anchor: pos + (kind === "bullet" ? 2 : 3) },
+    });
   } else view.dispatch({ changes, userEvent: "input.format" });
   view.focus();
 }
@@ -482,7 +692,10 @@ export function toggleCodeBlock(view: EditorView) {
   const a = view.state.doc.lineAt(from);
   const b = view.state.doc.lineAt(to);
   const body = view.state.sliceDoc(a.from, b.to);
-  insertBlock(view, "```\n" + body + "\n```", { replace: { from: a.from, to: b.to }, cursorOffset: 4 });
+  insertBlock(view, "```\n" + body + "\n```", {
+    replace: { from: a.from, to: b.to },
+    cursorOffset: 4,
+  });
 }
 
 // insertBlock puts text in a paragraph of its own at the cursor (or in place
@@ -500,13 +713,28 @@ export function insertBlock(
     const pos = opts.at ?? state.selection.main.head;
     const line = state.doc.lineAt(pos);
     // Within a line: break it at the cursor; at its ends: next to it.
-    from = to = line.text.trim() === "" ? line.from : pos === line.from ? line.from : pos === line.to ? line.to : pos;
+    from = to =
+      line.text.trim() === ""
+        ? line.from
+        : pos === line.from
+          ? line.from
+          : pos === line.to
+            ? line.to
+            : pos;
     if (line.text.trim() === "") to = line.to;
   }
   const before = state.sliceDoc(Math.max(0, from - 2), from);
   const after = state.sliceDoc(to, to + 2);
-  const lead = from === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
-  const trail = to >= state.doc.length ? "\n" : after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+  const lead =
+    from === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const trail =
+    to >= state.doc.length
+      ? "\n"
+      : after.startsWith("\n\n")
+        ? ""
+        : after.startsWith("\n")
+          ? "\n"
+          : "\n\n";
   const start = from + lead.length;
   const cursor = start + (opts.cursorOffset ?? text.length);
   view.dispatch({
@@ -550,7 +778,6 @@ export function insertFootnote(view: EditorView) {
   });
   view.focus();
 }
-
 
 // --- Cross-reference completion -----------------------------------------
 
@@ -604,31 +831,22 @@ export function createEditor(parent: HTMLElement, doc: string, handlers: Handler
     autocompletion({ override: [refCompletions], icons: false }),
     decorations(handlers),
     lineStyles,
-    EditorView.contentAttributes.of({ spellcheck: "true", autocorrect: "on", autocapitalize: "sentences" }),
+    EditorView.contentAttributes.of({
+      spellcheck: "true",
+      autocorrect: "on",
+      autocapitalize: "sentences",
+    }),
     EditorView.updateListener.of((u) => {
       if (u.docChanged || u.selectionSet) handlers.changed(u.state, u.docChanged);
     }),
     EditorView.domEventHandlers({
-      dragover(e) {
-        if (e.dataTransfer?.types.includes("Files")) {
-          e.preventDefault();
-          return true;
-        }
-        return false;
-      },
-      drop(e, view) {
-        const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith("image/") || /\.(svg|webp)$/i.test(f.name));
-        if (!files.length) return false;
-        e.preventDefault();
-        const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }) ?? view.state.selection.main.head;
-        handlers.dropImages(files, pos);
-        return true;
-      },
       paste(e, view) {
-        const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith("image/"));
+        const files = [...(e.clipboardData?.files ?? [])].filter((f) =>
+          f.type.startsWith("image/"),
+        );
         if (!files.length) return false;
         e.preventDefault();
-        handlers.dropImages(files, view.state.selection.main.head);
+        handlers.pasteImages(files, view.state.selection.main.head);
         return true;
       },
     }),

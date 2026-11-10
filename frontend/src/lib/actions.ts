@@ -8,7 +8,9 @@ import type { DocInfo } from "../../bindings/peanut-writer/models";
 import { insertBlock, itemsField, replaceDoc } from "./editor";
 import {
   captionMarkdown,
+  type FigureSpec,
   figureMarkdown,
+  figureSpec,
   type Item,
   type Meta,
   readFrontMatter,
@@ -118,7 +120,10 @@ export async function saveAs(): Promise<boolean> {
 async function exported(kind: string, f: () => Promise<string>) {
   const path = await run(`Export as ${kind}`, f);
   if (!path) return;
-  toast(`Exported ${path.split("/").pop()}`, "success", { label: "Show in Finder", run: () => DocService.Reveal(path) });
+  toast(`Exported ${path.split("/").pop()}`, "success", {
+    label: "Show in Finder",
+    run: () => DocService.Reveal(path),
+  });
 }
 
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
@@ -192,14 +197,33 @@ function pastedName(file: File): string {
 // then opens it for a caption.
 function addFigure(src: string, at?: number) {
   const v = view();
-  const start = insertBlock(v, figureMarkdown(src, "", "", 70), { at });
+  const start = insertBlock(
+    v,
+    figureMarkdown({ src, caption: "", label: "", width: 70, position: "" }),
+    { at },
+  );
   const item = v.state.field(itemsField).find((x) => x.kind === "figure" && x.from === start);
   if (item) state.dialog = { kind: "figure", item };
 }
 
 export async function insertImages(files: File[], pos: number) {
   for (const file of files) {
-    const src = await run(`Adding ${file.name || "picture"}`, async () => DocService.AddImage(pastedName(file), await base64(file)));
+    const src = await run(`Adding ${file.name || "picture"}`, async () =>
+      DocService.AddImage(pastedName(file), await base64(file)),
+    );
+    if (src) {
+      addFigure(src, pos);
+      pos = view().state.selection.main.head;
+    }
+  }
+}
+
+// insertImageFiles adds figures for image files on disk (dropped ones).
+export async function insertImageFiles(paths: string[], pos: number) {
+  for (const path of paths) {
+    const src = await run(`Adding ${path.split(/[\\/]/).pop()}`, () =>
+      DocService.AddImageFile(path),
+    );
     if (src) {
       addFigure(src, pos);
       pos = view().state.selection.main.head;
@@ -219,7 +243,10 @@ export async function replacePicture(): Promise<string> {
 // relabelChanges points every reference to one label at another.
 function relabelChanges(text: string, from: string, to: string): ChangeSpec[] {
   if (!from || from === to) return [];
-  const re = new RegExp(`(^|[^\\w])@${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:-]*[A-Za-z0-9_])`, "g");
+  const re = new RegExp(
+    `(^|[^\\w])@${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:-]*[A-Za-z0-9_])`,
+    "g",
+  );
   const out: ChangeSpec[] = [];
   for (const m of text.matchAll(re)) {
     const at = m.index! + m[1].length + 1;
@@ -228,13 +255,13 @@ function relabelChanges(text: string, from: string, to: string): ChangeSpec[] {
   return out;
 }
 
-export function applyFigure(item: Item, f: { src: string; caption: string; label: string; width: number }) {
+export function applyFigure(item: Item, f: FigureSpec) {
   const v = view();
   const items = v.state.field(itemsField);
   const label = f.label || uniqueLabel("fig", f.caption, items, item.label);
   v.dispatch({
     changes: [
-      { from: item.from, to: item.to, insert: figureMarkdown(f.src, f.caption, label, f.width) },
+      { from: item.from, to: item.to, insert: figureMarkdown({ ...f, label }) },
       ...relabelChanges(v.state.doc.toString(), item.label, label),
     ],
     userEvent: "input",
@@ -261,7 +288,10 @@ export function applyTable(item: Item | undefined, table: Table, caption: string
   const text = `${writeTable(table)}\n\n${captionMarkdown(caption, id)}`;
   if (item) {
     v.dispatch({
-      changes: [{ from: item.tableFrom!, to: item.to, insert: text }, ...relabelChanges(v.state.doc.toString(), item.label, id)],
+      changes: [
+        { from: item.tableFrom!, to: item.to, insert: text },
+        ...relabelChanges(v.state.doc.toString(), item.label, id),
+      ],
       userEvent: "input",
     });
     v.focus();
@@ -282,9 +312,17 @@ export function insertCrossRef(item: Item) {
   if (!label) {
     label = uniqueLabel(item.kind === "figure" ? "fig" : "tbl", item.caption, items);
     if (item.kind === "figure") {
-      changes.push({ from: item.from, to: item.to, insert: figureMarkdown(item.src ?? "", item.caption, label, item.width ?? 0) });
+      changes.push({
+        from: item.from,
+        to: item.to,
+        insert: figureMarkdown({ ...figureSpec(item), label }),
+      });
     } else if (item.captionFrom !== undefined) {
-      changes.push({ from: item.captionFrom, to: item.captionTo!, insert: captionMarkdown(item.caption, label) });
+      changes.push({
+        from: item.captionFrom,
+        to: item.captionTo!,
+        insert: captionMarkdown(item.caption, label),
+      });
     } else {
       changes.push({ from: item.tableTo!, insert: `\n\n${captionMarkdown("", label)}` });
     }
@@ -295,7 +333,10 @@ export function insertCrossRef(item: Item) {
   changes.push({ from, to, insert: text });
   v.dispatch({ changes, userEvent: "input" });
   // The cursor goes after the reference, wherever the changes moved it.
-  const at = v.state.doc.toString().lastIndexOf("@" + label, v.state.selection.main.head + text.length) + label.length + 1;
+  const at =
+    v.state.doc.toString().lastIndexOf("@" + label, v.state.selection.main.head + text.length) +
+    label.length +
+    1;
   v.dispatch({ selection: { anchor: Math.min(at, v.state.doc.length) } });
   v.focus();
 }

@@ -8,7 +8,7 @@ abstract: Peanut Writer feels like a word processor but keeps your words in plai
 
 # Writing
 
-Type on the left; the page on the right updates as you go. Use the **Home** tab for *emphasis*, headings and lists, or type Markdown directly — whatever you prefer.
+Type on the left; the page on the right updates as you go. Use the **Home** tab for _emphasis_, headings and lists, or type Markdown directly — whatever you prefer.
 
 - Bold, italic, ~~strikethrough~~ and `code` are on the Home tab.
 - Lists can be bulleted or numbered.
@@ -16,17 +16,17 @@ Type on the left; the page on the right updates as you go. Use the **Home** tab 
 
 # Figures and tables
 
-Drag an image onto the editor, paste one, or use **Insert → Picture**. Give it a caption and it becomes a numbered figure, like @fig:peanut.
+Drag an image onto the editor, paste one, or use **Insert → Picture**. Give it a caption and it becomes a numbered figure, like @fig:peanut. Hover a picture to move it left, center or right, or drag its corner to resize it.
 
 ![Peanut, the mascot, ready to help.](images/peanut.svg){#fig:peanut width=28%}
 
 Tables are made with **Insert → Table**. Click inside one and choose **Edit Table** to change it in a grid. @tbl:snacks is numbered on its own, separately from figures.
 
 | Snack        | Crunch | Rating |
-|:-------------|:------:|-------:|
-| Peanuts      | High   | 10     |
-| Pretzels     | Medium | 7      |
-| Marshmallows | None   | 6      |
+| :----------- | :----: | -----: |
+| Peanuts      |  High  |     10 |
+| Pretzels     | Medium |      7 |
+| Marshmallows |  None  |      6 |
 
 Table: Snacks, ranked very scientifically {#tbl:snacks}
 

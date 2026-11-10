@@ -14,11 +14,7 @@
     "justify": false,
     "textColor": "1F2328",
     "headingColor": "0F6E6E",
-    "headingSizes": [
-      18,
-      14,
-      12
-    ],
+    "headingSizes": [18, 14, 12],
     "headingBold": true,
     "numberedHeadings": true,
     "titleSize": 30,

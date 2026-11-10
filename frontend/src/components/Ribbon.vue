@@ -50,7 +50,17 @@ import {
   saveAs,
   setTemplate,
 } from "../lib/actions";
-import { type BlockStyle, clearFormatting, insertBlock, insertFootnote, type Mark, setBlockStyle, toggleCodeBlock, toggleList, toggleMark } from "../lib/editor";
+import {
+  type BlockStyle,
+  clearFormatting,
+  insertBlock,
+  insertFootnote,
+  type Mark,
+  setBlockStyle,
+  toggleCodeBlock,
+  toggleList,
+  toggleMark,
+} from "../lib/editor";
 import { editor, errorText, state, toast } from "../lib/store";
 
 type Tab = "file" | "home" | "insert" | "references" | "design";
@@ -99,7 +109,10 @@ async function customize() {
   try {
     const id = await DocService.CustomizeTemplate(state.template);
     state.templates = (await DocService.Templates()) ?? [];
-    toast("Copied the template to your templates folder. Edit it there; changes show up as you work.", "success");
+    toast(
+      "Copied the template to your templates folder. Edit it there; changes show up as you work.",
+      "success",
+    );
     setTemplate(id);
   } catch (e) {
     toast(`Customize template: ${errorText(e)}`, "error");
@@ -117,7 +130,13 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
 <template>
   <nav class="ribbon">
     <div class="tabs">
-      <button v-for="t in tabs" :key="t.id" class="tab" :class="{ on: tab === t.id, file: t.id === 'file' }" @click="tab = t.id">
+      <button
+        v-for="t in tabs"
+        :key="t.id"
+        class="tab"
+        :class="{ on: tab === t.id, file: t.id === 'file' }"
+        @click="tab = t.id"
+      >
         {{ t.label }}
       </button>
     </div>
@@ -130,20 +149,43 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
             <RibbonButton big :icon="FilePlus2" label="New" title="New (⌘N)" @click="newDoc" />
             <RibbonButton big :icon="FolderOpen" label="Open" title="Open (⌘O)" @click="openDoc" />
             <RibbonButton big :icon="Save" label="Save" title="Save (⌘S)" @click="save" />
-            <RibbonButton big :icon="SaveAll" label="Save As" title="Save As (⇧⌘S)" @click="saveAs" />
+            <RibbonButton
+              big
+              :icon="SaveAll"
+              label="Save As"
+              title="Save As (⇧⌘S)"
+              @click="saveAs"
+            />
           </div>
           <label>Document</label>
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="FileDown" label="PDF" title="Export as PDF (⌘E)" @click="exportPdf" />
-            <RibbonButton big :icon="FileText" label="Word" title="Export as Word (⇧⌘E)" @click="exportDocx" />
+            <RibbonButton
+              big
+              :icon="FileDown"
+              label="PDF"
+              title="Export as PDF (⌘E)"
+              @click="exportPdf"
+            />
+            <RibbonButton
+              big
+              :icon="FileText"
+              label="Word"
+              title="Export as Word (⇧⌘E)"
+              @click="exportDocx"
+            />
           </div>
           <label>Export</label>
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Settings2" label="Properties" @click="state.dialog = { kind: 'properties' }" />
+            <RibbonButton
+              big
+              :icon="Settings2"
+              label="Properties"
+              @click="state.dialog = { kind: 'properties' }"
+            />
           </div>
           <label>Info</label>
         </div>
@@ -161,14 +203,38 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
         <div class="group">
           <div class="stack">
             <div class="row">
-              <RibbonButton :icon="Bold" title="Bold (⌘B)" :active="state.marks.has('strong')" @click="mark('strong')" />
-              <RibbonButton :icon="Italic" title="Italic (⌘I)" :active="state.marks.has('emph')" @click="mark('emph')" />
-              <RibbonButton :icon="Strikethrough" title="Strikethrough (⇧⌘X)" :active="state.marks.has('strike')" @click="mark('strike')" />
-              <RibbonButton :icon="Code" title="Code (⌘`)" :active="state.marks.has('code')" @click="mark('code')" />
+              <RibbonButton
+                :icon="Bold"
+                title="Bold (⌘B)"
+                :active="state.marks.has('strong')"
+                @click="mark('strong')"
+              />
+              <RibbonButton
+                :icon="Italic"
+                title="Italic (⌘I)"
+                :active="state.marks.has('emph')"
+                @click="mark('emph')"
+              />
+              <RibbonButton
+                :icon="Strikethrough"
+                title="Strikethrough (⇧⌘X)"
+                :active="state.marks.has('strike')"
+                @click="mark('strike')"
+              />
+              <RibbonButton
+                :icon="Code"
+                title="Code (⌘`)"
+                :active="state.marks.has('code')"
+                @click="mark('code')"
+              />
             </div>
             <div class="row">
               <RibbonButton :icon="Link" title="Link" @click="link" />
-              <RibbonButton :icon="RemoveFormatting" title="Clear formatting" @click="withView(clearFormatting)" />
+              <RibbonButton
+                :icon="RemoveFormatting"
+                title="Clear formatting"
+                @click="withView(clearFormatting)"
+              />
             </div>
           </div>
           <label>Font</label>
@@ -176,15 +242,45 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
         <div class="group">
           <div class="stack">
             <div class="row">
-              <RibbonButton :icon="List" title="Bullets" @click="withView((v) => toggleList(v, 'bullet'))" />
-              <RibbonButton :icon="ListOrdered" title="Numbering" @click="withView((v) => toggleList(v, 'ordered'))" />
-              <RibbonButton :icon="IndentDecrease" title="Decrease indent (⇧⇥)" @click="withView(indentLess)" />
-              <RibbonButton :icon="IndentIncrease" title="Increase indent (⇥)" @click="withView(indentMore)" />
+              <RibbonButton
+                :icon="List"
+                title="Bullets"
+                @click="withView((v) => toggleList(v, 'bullet'))"
+              />
+              <RibbonButton
+                :icon="ListOrdered"
+                title="Numbering"
+                @click="withView((v) => toggleList(v, 'ordered'))"
+              />
+              <RibbonButton
+                :icon="IndentDecrease"
+                title="Decrease indent (⇧⇥)"
+                @click="withView(indentLess)"
+              />
+              <RibbonButton
+                :icon="IndentIncrease"
+                title="Increase indent (⇥)"
+                @click="withView(indentMore)"
+              />
             </div>
             <div class="row">
-              <RibbonButton :icon="TextQuote" title="Quote" :active="state.block === 'quote'" @click="block(state.block === 'quote' ? 'p' : 'quote')" />
-              <RibbonButton :icon="CodeXml" title="Code block" :active="state.block === 'code'" @click="withView(toggleCodeBlock)" />
-              <RibbonButton :icon="Minus" title="Divider" @click="withView((v) => insertBlock(v, '---'))" />
+              <RibbonButton
+                :icon="TextQuote"
+                title="Quote"
+                :active="state.block === 'quote'"
+                @click="block(state.block === 'quote' ? 'p' : 'quote')"
+              />
+              <RibbonButton
+                :icon="CodeXml"
+                title="Code block"
+                :active="state.block === 'code'"
+                @click="withView(toggleCodeBlock)"
+              />
+              <RibbonButton
+                :icon="Minus"
+                title="Divider"
+                @click="withView((v) => insertBlock(v, '---'))"
+              />
             </div>
           </div>
           <label>Paragraph</label>
@@ -217,7 +313,13 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
       <template v-if="tab === 'insert'">
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Image" label="Picture" title="Insert a picture (or drag one in)" @click="choosePicture" />
+            <RibbonButton
+              big
+              :icon="Image"
+              label="Picture"
+              title="Insert a picture (or drag one in)"
+              @click="choosePicture"
+            />
             <div class="pop" @mouseleave="tablePicker = false">
               <RibbonButton big :icon="Table" label="Table" @click="tablePicker = !tablePicker" />
               <div v-if="tablePicker" class="popover"><TableGridPicker @pick="pickTable" /></div>
@@ -228,15 +330,30 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
         <div class="group">
           <div class="row">
             <RibbonButton big :icon="Link" label="Link" @click="link" />
-            <RibbonButton big :icon="Footprints" label="Footnote" @click="withView(insertFootnote)" />
+            <RibbonButton
+              big
+              :icon="Footprints"
+              label="Footnote"
+              @click="withView(insertFootnote)"
+            />
           </div>
           <label>Text</label>
         </div>
         <div class="group">
           <div class="row">
             <RibbonButton big :icon="CodeXml" label="Code" @click="withView(toggleCodeBlock)" />
-            <RibbonButton big :icon="Minus" label="Divider" @click="withView((v) => insertBlock(v, '---'))" />
-            <RibbonButton big :icon="SquareSplitVertical" label="Page Break" @click="withView((v) => insertBlock(v, '\\pagebreak'))" />
+            <RibbonButton
+              big
+              :icon="Minus"
+              label="Divider"
+              @click="withView((v) => insertBlock(v, '---'))"
+            />
+            <RibbonButton
+              big
+              :icon="SquareSplitVertical"
+              label="Page Break"
+              @click="withView((v) => insertBlock(v, '\\pagebreak'))"
+            />
           </div>
           <label>Layout</label>
         </div>
@@ -246,14 +363,30 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
       <template v-if="tab === 'references'">
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Link2" label="Cross-reference" @click="state.dialog = { kind: 'crossref' }" />
+            <RibbonButton
+              big
+              :icon="Link2"
+              label="Cross-reference"
+              @click="state.dialog = { kind: 'crossref' }"
+            />
           </div>
           <label>Captions</label>
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Footprints" label="Footnote" @click="withView(insertFootnote)" />
-            <RibbonButton big :icon="ListTree" label="Contents" title="Table of contents" @click="withView((v) => insertBlock(v, '[TOC]'))" />
+            <RibbonButton
+              big
+              :icon="Footprints"
+              label="Footnote"
+              @click="withView(insertFootnote)"
+            />
+            <RibbonButton
+              big
+              :icon="ListTree"
+              label="Contents"
+              title="Table of contents"
+              @click="withView((v) => insertBlock(v, '[TOC]'))"
+            />
           </div>
           <label>Notes &amp; Contents</label>
         </div>
@@ -275,8 +408,19 @@ const tables = computed(() => state.items.filter((x) => x.kind === "table").leng
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton big :icon="Settings2" label="Properties" @click="state.dialog = { kind: 'properties' }" />
-            <RibbonButton big :icon="Palette" label="Customize" title="Make an editable copy of this template" @click="customize" />
+            <RibbonButton
+              big
+              :icon="Settings2"
+              label="Properties"
+              @click="state.dialog = { kind: 'properties' }"
+            />
+            <RibbonButton
+              big
+              :icon="Palette"
+              label="Customize"
+              title="Make an editable copy of this template"
+              @click="customize"
+            />
             <RibbonButton
               big
               :icon="FolderCog"

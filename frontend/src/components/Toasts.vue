@@ -7,7 +7,9 @@ import { dismiss, state } from "../lib/store";
   <TransitionGroup name="toast" tag="div" class="toasts">
     <div v-for="t in state.toasts" :key="t.id" class="toast" :class="t.tone">
       <span class="text">{{ t.text }}</span>
-      <button v-if="t.action" class="act" @click="(t.action.run(), dismiss(t.id))">{{ t.action.label }}</button>
+      <button v-if="t.action" class="act" @click="(t.action.run(), dismiss(t.id))">
+        {{ t.action.label }}
+      </button>
       <button class="x" @click="dismiss(t.id)"><X :size="13" /></button>
     </div>
   </TransitionGroup>

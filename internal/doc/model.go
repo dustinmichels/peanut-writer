@@ -6,7 +6,7 @@
 //   - YAML-style front matter (flat `key: value` lines): title, subtitle,
 //     author, date, abstract, template.
 //   - Figures: a paragraph holding only an image, optionally followed by an
-//     attribute block: `![Caption](images/a.png){#fig:a width=60%}`.
+//     attribute block: `![Caption](images/a.png){#fig:a width=60% align=left}`.
 //   - Table captions: a paragraph right after a table, starting `Table:`, with
 //     an optional attribute block: `Table: Sales by year {#tbl:sales}`.
 //   - Cross-references: `@fig:a`, `@tbl:sales`. Numbers follow document order.
@@ -72,10 +72,12 @@ type Block struct {
 
 	// figure: the image's absolute path, "" when it can't be shown (then
 	// Missing names what was asked for). Width is a percentage of the text
-	// width; 0 means the image's natural size, shrunk to fit.
-	Src     string  `json:"src,omitempty"`
-	Missing string  `json:"missing,omitempty"`
-	Width   float64 `json:"width,omitempty"`
+	// width; 0 means the image's natural size, shrunk to fit. Position is
+	// "left" or "right"; "" means centered.
+	Src      string  `json:"src,omitempty"`
+	Missing  string  `json:"missing,omitempty"`
+	Width    float64 `json:"width,omitempty"`
+	Position string  `json:"position,omitempty"`
 
 	// table: Align per column ("left", "center", "right" or ""), the header
 	// row and the body rows; each cell is a run of inlines.

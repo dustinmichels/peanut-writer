@@ -62,7 +62,13 @@
     let cap = n.at("caption", default: ())
     let f = figure(body, kind: image, caption: if cap.len() > 0 { all(cap) } else { none })
     let l = n.at("label", default: "")
-    if l != "" [#f#label(l)] else { f }
+    let f = if l != "" [#f#label(l)] else { f }
+    // Left and right figures take their caption with them, as in Word.
+    let pos = n.at("position", default: "")
+    if pos == "" { f } else {
+      show figure: set align(_align(pos))
+      f
+    }
   }
   else if t == "table" {
     let header = n.at("header", default: ())

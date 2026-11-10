@@ -30,8 +30,14 @@ function pick(f: () => unknown) {
           <FileDown :size="15" /> Export <ChevronDown :size="13" />
         </button>
         <div v-if="exportOpen" class="menu">
-          <button @click="pick(exportPdf)"><FileDown :size="16" /> <span><b>PDF</b><small>Exactly as previewed · ⌘E</small></span></button>
-          <button @click="pick(exportDocx)"><FileText :size="16" /> <span><b>Word document</b><small>Editable .docx · ⇧⌘E</small></span></button>
+          <button @click="pick(exportPdf)">
+            <FileDown :size="16" /> <span><b>PDF</b><small>Exactly as previewed · ⌘E</small></span>
+          </button>
+          <button @click="pick(exportDocx)">
+            <FileText :size="16" /> <span
+              ><b>Word document</b><small>Editable .docx · ⇧⌘E</small></span
+            >
+          </button>
         </div>
       </div>
     </div>

@@ -5,7 +5,9 @@ import { menu } from "../lib/actions";
 import { state } from "../lib/store";
 
 const showWarnings = ref(false);
-const templateName = computed(() => state.templates.find((t) => t.id === state.template)?.name ?? state.template);
+const templateName = computed(
+  () => state.templates.find((t) => t.id === state.template)?.name ?? state.template,
+);
 const zoomPct = computed(() => Math.round((state.zoom || state.fitZoom) * 100));
 const pages = computed(() => state.pages.length);
 </script>
@@ -16,7 +18,8 @@ const pages = computed(() => state.pages.length);
     <span>{{ state.words.toLocaleString() }} {{ state.words === 1 ? "word" : "words" }}</span>
     <span>Template: <b>{{ templateName }}</b></span>
     <span v-if="state.warnings.length" class="warn" @click="showWarnings = !showWarnings">
-      <AlertTriangle :size="13" /> {{ state.warnings.length }} {{ state.warnings.length === 1 ? "note" : "notes" }}
+      <AlertTriangle :size="13" /> {{ state.warnings.length }}
+      {{ state.warnings.length === 1 ? "note" : "notes" }}
       <div v-if="showWarnings" class="popover" @click.stop>
         <div v-for="(w, i) in state.warnings" :key="i">{{ w }}</div>
       </div>
@@ -24,11 +27,19 @@ const pages = computed(() => state.pages.length);
     <span class="spacer" />
     <span class="typesetting" :class="{ on: state.rendering }">
       <img src="/peanut.svg" alt="" />
-      {{ state.rendering ? "Typesetting…" : state.renderError ? "Preview is out of date" : "Up to date" }}
+      {{
+        state.rendering
+          ? "Typesetting…"
+          : state.renderError
+            ? "Preview is out of date"
+            : "Up to date"
+      }}
     </span>
     <span class="zoom">
       <button title="Zoom out (⌘−)" @click="menu('zoomOut')"><Minus :size="12" /></button>
-      <button class="pct" title="Fit to width (⌘0)" @click="menu('zoomReset')">{{ state.zoom ? `${zoomPct}%` : "Fit" }}</button>
+      <button class="pct" title="Fit to width (⌘0)" @click="menu('zoomReset')">
+        {{ state.zoom ? `${zoomPct}%` : "Fit" }}
+      </button>
       <button title="Zoom in (⌘+)" @click="menu('zoomIn')"><Plus :size="12" /></button>
     </span>
   </footer>

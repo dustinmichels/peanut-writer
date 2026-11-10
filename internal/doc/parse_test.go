@@ -20,7 +20,7 @@ author: Ann
 ---
 See @tbl:sales and @fig:b, then @fig:a. Mail me@fig:a.com.
 
-![First *one*](images/a.png){#fig:a width=60%}
+![First *one*](images/a.png){#fig:a width=60% align=Right}
 
 | Year | Sales |
 |:-----|------:|
@@ -41,7 +41,7 @@ Table: Sales by_year {#tbl:sales}
 	}
 
 	fig := d.Blocks[1]
-	if fig.Type != BlockFigure || fig.Label != "fig:a" || fig.Number != 1 || fig.Width != 60 {
+	if fig.Type != BlockFigure || fig.Label != "fig:a" || fig.Number != 1 || fig.Width != 60 || fig.Position != "right" {
 		t.Errorf("figure = %+v", fig)
 	}
 	if fig.Src != filepath.Join(dir, "images", "a.png") {
@@ -63,7 +63,7 @@ Table: Sales by_year {#tbl:sales}
 	}
 
 	missing := d.Blocks[3]
-	if missing.Number != 2 || missing.Src != "" || missing.Missing != "images/missing.png" {
+	if missing.Number != 2 || missing.Src != "" || missing.Missing != "images/missing.png" || missing.Position != "" {
 		t.Errorf("missing figure = %+v", missing)
 	}
 	if d.Blocks[4].Type != BlockParagraph {

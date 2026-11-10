@@ -149,7 +149,8 @@ func (w *writer) list(b *doc.Block, depth int) {
 // listIndent is where a list level's text starts, in twips.
 func listIndent(level int) int { return 720 * (level + 1) }
 
-// figure writes the picture, centered, then its caption.
+// figure writes the picture, centered unless placed left or right, then its
+// caption, aligned with it.
 func (w *writer) figure(b *doc.Block) {
 	var runs string
 	if b.Src == "" {
@@ -162,16 +163,20 @@ func (w *writer) figure(b *doc.Block) {
 		runs = w.picture(b.Src, want, plainText(b.Caption))
 	}
 	captioned := len(b.Caption) > 0 || b.Label != ""
-	ppr := ""
+	jc := ""
+	if b.Position != "" {
+		jc = `<w:jc w:val="` + b.Position + `"/>`
+	}
+	ppr := jc
 	if captioned {
-		ppr = "<w:keepNext/>"
+		ppr = "<w:keepNext/>" + jc
 	} else if b.Number > 0 {
 		// Keep Word's count of figures in step with the numbering.
 		runs += w.hiddenSeq("Figure")
 	}
 	w.para("Figure", ppr, runs)
 	if captioned {
-		w.para("Caption", "", w.captionRuns("Figure", b))
+		w.para("Caption", jc, w.captionRuns("Figure", b))
 	}
 }
 

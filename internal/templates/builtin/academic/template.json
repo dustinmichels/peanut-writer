@@ -14,11 +14,7 @@
     "justify": true,
     "textColor": "000000",
     "headingColor": "000000",
-    "headingSizes": [
-      14.4,
-      12,
-      11
-    ],
+    "headingSizes": [14.4, 12, 11],
     "headingBold": true,
     "numberedHeadings": true,
     "titleSize": 17.3,
