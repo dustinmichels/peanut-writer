@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { Events } from "@wailsio/runtime";
-import { FileCode } from "lucide-vue-next";
 import { DocService } from "../../bindings/peanut-writer";
-import { contentChanged, insertImageFiles, insertImages, toggleMarkdown } from "../lib/actions";
+import { contentChanged, insertImageFiles, insertImages } from "../lib/actions";
 import { activeMarks, blockStyleAt, createEditor } from "../lib/editor";
 import { editor, state } from "../lib/store";
 
@@ -55,15 +54,6 @@ onBeforeUnmount(() => {
   <!-- Wails adds file-drop-target-active while files are dragged over the pane. -->
   <section class="pane" data-file-drop-target>
     <div ref="host" class="host" />
-    <button
-      class="mode"
-      :class="{ on: state.showMarkdown }"
-      title="Show and edit the Markdown behind the document (⌘/)"
-      @mousedown.prevent
-      @click="toggleMarkdown"
-    >
-      <FileCode :size="13" /> Markdown
-    </button>
     <div class="drop">
       <img src="/peanut.svg" alt="" />
       <span>Drop a picture to add a figure</span>
@@ -82,36 +72,6 @@ onBeforeUnmount(() => {
   height: 100%;
   user-select: text;
   -webkit-user-select: text;
-}
-.mode {
-  position: absolute;
-  top: 8px;
-  right: 14px;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(255, 252, 247, 0.9);
-  font-family: var(--ui);
-  font-size: 11.5px;
-  font-weight: 500;
-  color: var(--muted);
-  opacity: 0.75;
-  cursor: pointer;
-}
-.mode:hover {
-  opacity: 1;
-  color: var(--accent-ink);
-}
-.mode.on {
-  opacity: 1;
-  background: var(--active);
-  border-color: var(--shell);
-  color: var(--accent-ink);
 }
 .drop {
   position: absolute;

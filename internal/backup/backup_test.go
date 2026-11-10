@@ -32,6 +32,9 @@ func TestWriteKeepsNewestPerDocument(t *testing.T) {
 			t.Errorf("pruned %s still there: %v", ext, err)
 		}
 	}
+	if _, err := os.Stat(stampDir(notes, "2026-11-10T09-01-00")); !os.IsNotExist(err) {
+		t.Errorf("emptied stamp folder still there: %v", err)
+	}
 	if d := list(draft); !slices.Equal(d, []string{"2026-11-10T09-00-00"}) {
 		t.Errorf("notes-draft backups = %v; pruning notes mustn't touch them", d)
 	}

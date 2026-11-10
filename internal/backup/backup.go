@@ -1,5 +1,5 @@
 // Package backup keeps timestamped copies of a document, as Markdown and as
-// a Word file, in a "backups" folder beside it.
+// a Word file, in "backups/<datetime>/" folders beside it.
 package backup
 
 import (
@@ -32,12 +32,13 @@ func Changed(docPath, content string) bool {
 }
 
 // Write saves content, and word unless it's nil, as backups of the document
-// at docPath stamped with at, then removes all but its newest Keep backups.
+// at docPath in a folder stamped with at, then removes all but its newest
+// Keep backups.
 func Write(docPath, content string, word []byte, at time.Time) error {
-	if err := os.MkdirAll(filepath.Join(filepath.Dir(docPath), Folder), 0o755); err != nil {
+	stamp := at.Format(stampLayout)
+	if err := os.MkdirAll(stampDir(docPath, stamp), 0o755); err != nil {
 		return err
 	}
-	stamp := at.Format(stampLayout)
 	if err := os.WriteFile(file(docPath, stamp, ".md"), []byte(content), 0o644); err != nil {
 		return err
 	}
@@ -53,6 +54,9 @@ func Write(docPath, content string, word []byte, at time.Time) error {
 				return err
 			}
 		}
+		// Another document's backups may share the folder; it's removed
+		// only once empty.
+		_ = os.Remove(stampDir(docPath, old))
 	}
 	return nil
 }
@@ -62,26 +66,36 @@ func stem(docPath string) string {
 	return strings.TrimSuffix(base, filepath.Ext(base))
 }
 
-func file(docPath, stamp, ext string) string {
-	return filepath.Join(filepath.Dir(docPath), Folder, stem(docPath)+"-"+stamp+ext)
+func stampDir(docPath, stamp string) string {
+	return filepath.Join(filepath.Dir(docPath), Folder, stamp)
 }
 
-// list returns the stamps of the document's backups, oldest first. Only
-// names that are exactly the document's name and a stamp count, so
-// "notes.md" doesn't claim "notes-draft.md"'s backups.
+func file(docPath, stamp, ext string) string {
+	return filepath.Join(stampDir(docPath, stamp), stem(docPath)+ext)
+}
+
+var stampRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$`)
+
+// list returns the stamps of the document's backups, oldest first: the
+// stamped folders holding a copy of it, so "notes.md" doesn't claim
+// "notes-draft.md"'s backups.
 func list(docPath string) []string {
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(docPath), Folder))
 	if err != nil {
 		return nil
 	}
-	re := regexp.MustCompile(`^` + regexp.QuoteMeta(stem(docPath)) +
-		`-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.(?:md|docx)$`)
 	var stamps []string
 	for _, e := range entries {
-		if m := re.FindStringSubmatch(e.Name()); m != nil {
-			stamps = append(stamps, m[1])
+		if !e.IsDir() || !stampRe.MatchString(e.Name()) {
+			continue
+		}
+		for _, ext := range []string{".md", ".docx"} {
+			if _, err := os.Stat(file(docPath, e.Name(), ext)); err == nil {
+				stamps = append(stamps, e.Name())
+				break
+			}
 		}
 	}
 	slices.Sort(stamps)
-	return slices.Compact(stamps)
+	return stamps
 }

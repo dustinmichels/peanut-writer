@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"peanut-writer/internal/backup"
 	"peanut-writer/internal/doc"
 	"peanut-writer/internal/docx"
+	"peanut-writer/internal/mdfmt"
 	"peanut-writer/internal/render"
 	"peanut-writer/internal/templates"
 )
@@ -49,6 +51,7 @@ type DocService struct {
 	previews  map[string]string // template previews by id and source hash
 	typst     *render.Typst
 	typstErr  error
+	oxfmt     *mdfmt.Oxfmt // found on first use
 	settings  settings
 	scratches []string // scratch folders, removed on quit
 
@@ -83,6 +86,7 @@ type StartupInfo struct {
 	Templates  []templates.Template `json:"templates"`
 	TypstError string               `json:"typstError"`
 	Recent     []RecentFile         `json:"recent"` // offered on opening; none on the first run
+	Version    string               `json:"version"` // the app's, recorded in documents' front matter on saving
 }
 
 // RecentFile is a recently opened or saved document.
@@ -113,7 +117,7 @@ func newDocService() *DocService {
 // (offering the recent ones) after that.
 func (s *DocService) Startup() (StartupInfo, error) {
 	s.backupOnce.Do(func() { go s.backupPeriodically() })
-	info := StartupInfo{Templates: templates.List()}
+	info := StartupInfo{Templates: templates.List(), Version: appVersion}
 	if s.typstErr != nil {
 		info.TypstError = s.typstErr.Error()
 	}
@@ -145,20 +149,36 @@ func (s *DocService) newUntitled() (DocInfo, error) {
 	return DocInfo{Name: "Untitled"}, nil
 }
 
-// NewDocument asks for a name and a place, and starts a blank document in a
-// folder of that name there.
+// NewDocument asks for a name and a place, and starts a document in a folder
+// of that name there, its properties titled with the name (in title case),
+// dated today and marked with the app's version.
 func (s *DocService) NewDocument() (DocInfo, error) {
 	p, err := s.chooseDocFolder("Untitled", "")
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
-	if err := os.WriteFile(p, nil, 0o644); err != nil {
+	name := docName(p)
+	content := "---\ntitle: " + frontMatterValue(mdfmt.TitleCase(name)) +
+		"\ndate: " + time.Now().Format("January 2, 2006") +
+		"\npeanut-version: " + frontMatterValue(appVersion) + "\n---\n\n"
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
-	return DocInfo{Path: p, Name: docName(p)}, nil
+	return DocInfo{Path: p, Name: name, Content: content}, nil
 }
+
+// frontMatterValue quotes v when it would otherwise read differently in front
+// matter (as the editor's writeFrontMatter does).
+func frontMatterValue(v string) string {
+	if frontMatterQuote.MatchString(v) {
+		return strconv.Quote(v)
+	}
+	return v
+}
+
+var frontMatterQuote = regexp.MustCompile("^[\\s\"'\\[{>|*&!%@`#-]|:\\s|\\s$|#")
 
 // chooseDocFolder asks for a document's name and where to put it, makes a
 // folder of that name there (it holds the document, its images and its
@@ -391,7 +411,7 @@ func (s *DocService) backupPeriodically() {
 	}
 }
 
-// backup copies the saved file at p into the backups folder beside it, as
+// backup copies the saved file at p into a timestamped backups folder beside it, as
 // Markdown and as Word, unless it hasn't changed since its last backup. The
 // Markdown copy is kept even if the Word one can't be made.
 func (s *DocService) backup(p string) {
@@ -708,9 +728,9 @@ func (s *DocService) ExportDOCX(content string) (string, error) {
 	return p, os.WriteFile(p, b, 0o644)
 }
 
-// SyncFiles writes a PDF and a Word copy of the saved document beside its
-// file, under the same name, replacing earlier copies; returns their paths.
-// Neither is written unless both render.
+// SyncFiles writes a PDF and a Word copy of the saved document into the
+// "out" folder beside its file, under the same name, replacing earlier
+// copies; returns their paths. Neither is written unless both render.
 func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if s.typstErr != nil {
 		return nil, s.typstErr
@@ -731,7 +751,11 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Word: %w", err)
 	}
-	base := strings.TrimSuffix(cur, filepath.Ext(cur))
+	out := filepath.Join(filepath.Dir(cur), "out")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return nil, err
+	}
+	base := filepath.Join(out, strings.TrimSuffix(filepath.Base(cur), filepath.Ext(cur)))
 	paths := []string{base + ".pdf", base + ".docx"}
 	for i, b := range [][]byte{pdf, word} {
 		if err := os.WriteFile(paths[i], b, 0o644); err != nil {
@@ -797,6 +821,35 @@ func (s *DocService) Reveal(p string) error {
 	}
 	go cmd.Wait()
 	return nil
+}
+
+// --- Formatting --------------------------------------------------------------
+
+// Format tidies the document's Markdown with oxfmt and, if titleCase, puts
+// its headings in title case.
+func (s *DocService) Format(content string, titleCase bool) (string, error) {
+	s.mu.Lock()
+	o := s.oxfmt
+	s.mu.Unlock()
+	if o == nil {
+		// Looked for again each time until found, so installing it needn't
+		// mean restarting.
+		var err error
+		if o, err = mdfmt.Find(); err != nil {
+			return "", err
+		}
+		s.mu.Lock()
+		s.oxfmt = o
+		s.mu.Unlock()
+	}
+	out, err := o.Format(context.Background(), content)
+	if err != nil {
+		return "", err
+	}
+	if titleCase {
+		out = mdfmt.TitleCaseHeadings(out)
+	}
+	return out, nil
 }
 
 // --- Templates ---------------------------------------------------------------
@@ -867,6 +920,92 @@ func (s *DocService) OpenTemplatesFolder() error {
 		return err
 	}
 	return s.Reveal(dir)
+}
+
+// RenameTemplate sets one of the user's templates' name and description.
+func (s *DocService) RenameTemplate(id, name, description string) error {
+	return templates.Rename(id, name, description)
+}
+
+// EditTemplate shows one of the user's templates' template.typ in Finder,
+// to open in a text editor.
+func (s *DocService) EditTemplate(id string) error {
+	t, err := templates.User(id)
+	if err != nil {
+		return err
+	}
+	return s.Reveal(filepath.Join(t.Dir(), "template.typ"))
+}
+
+// DeleteTemplate asks, then deletes one of the user's templates. It reports
+// whether it did.
+func (s *DocService) DeleteTemplate(id string) (bool, error) {
+	t, err := templates.User(id)
+	if err != nil {
+		return false, err
+	}
+	choice := make(chan bool, 1)
+	d := s.app.Dialog.Question().
+		SetTitle(fmt.Sprintf("Delete the template “%s”?", t.Name)).
+		SetMessage("Its folder is deleted from your templates folder; this can't be undone. Documents that use it look Classic.")
+	d.AddButton("Delete").OnClick(func() { choice <- true })
+	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
+	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
+	if !<-choice {
+		return false, nil
+	}
+	return true, templates.Delete(id)
+}
+
+// ShareTemplate asks where to save one of the user's templates as a .zip
+// (for ImportTemplate on another computer), writes it and shows it in
+// Finder. It returns the file's path, or "" if canceled.
+func (s *DocService) ShareTemplate(id string) (string, error) {
+	t, err := templates.User(id)
+	if err != nil {
+		return "", err
+	}
+	p, err := s.app.Dialog.SaveFile().
+		SetFilename(safeFileName(t.Name)+".zip").
+		AddFilter("Template", "*.zip").
+		CanCreateDirectories(true).
+		AttachToWindow(s.window).
+		PromptForSingleSelection()
+	if err != nil || p == "" {
+		return "", err
+	}
+	f, err := os.Create(p)
+	if err != nil {
+		return "", err
+	}
+	if err := templates.Export(id, f); err != nil {
+		f.Close()
+		os.Remove(p)
+		return "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", err
+	}
+	return p, s.Reveal(p)
+}
+
+// ImportTemplate asks for a shared template .zip and adds it to the user's
+// templates. It returns the new template's id, or "" if canceled.
+func (s *DocService) ImportTemplate() (string, error) {
+	p, err := s.app.Dialog.OpenFile().
+		SetTitle("Import Template").
+		AddFilter("Template", "*.zip").
+		CanChooseFiles(true).
+		AttachToWindow(s.window).
+		PromptForSingleSelection()
+	if err != nil || p == "" {
+		return "", err
+	}
+	dir, err := templates.Import(p)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(dir), nil
 }
 
 // --- Recent documents --------------------------------------------------------

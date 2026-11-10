@@ -69,4 +69,9 @@ export interface StartupInfo {
      * offered on opening; none on the first run
      */
     "recent": RecentFile[] | null;
+
+    /**
+     * the app's, recorded in documents' front matter on saving
+     */
+    "version": string;
 }

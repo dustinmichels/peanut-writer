@@ -157,10 +157,11 @@ function gripIcon(): SVGSVGElement {
   return svg;
 }
 
-// --- Moving figures ------------------------------------------------------------
+// --- Moving figures and tables ---------------------------------------------------
 
-// dropTargets are where a figure may be put: the start of each top-level block
-// after the front matter and outside figures and tables, and the end.
+// dropTargets are where a figure or table may be put: the start of each
+// top-level block after the front matter and outside figures and tables, and
+// the end.
 function dropTargets(state: EditorState): number[] {
   const doc = state.doc;
   const fmEnd = readFrontMatter(doc.toString()).to;
@@ -189,13 +190,14 @@ function targetY(view: EditorView, p: number): number {
   return view.lineBlockAt(p).top + view.documentTop;
 }
 
-// moveFigure moves item's Markdown to the block start target (or the end),
-// keeping a blank line on either side. Dropping it where it is does nothing.
-function moveFigure(view: EditorView, item: Item, target: number) {
+// moveItem moves a figure's or table's Markdown to the block start target (or
+// the end), keeping a blank line on either side. Dropping it where it is does
+// nothing.
+function moveItem(view: EditorView, item: Item, target: number) {
   const doc = view.state.doc;
   const text = doc.sliceString(item.from, item.to);
   const blank = (n: number) => doc.line(n).text.trim() === "";
-  // What goes: the figure and the blank lines after it, or before it when
+  // What goes: the item and the blank lines after it, or before it when
   // nothing follows.
   const last = doc.lineAt(item.to).number;
   let next = last + 1;
@@ -236,8 +238,8 @@ function moveFigure(view: EditorView, item: Item, target: number) {
   });
 }
 
-// startMove drags the figure el (whose Markdown current() finds) by its
-// grip: a line shows where it will land, the editor scrolls near its edges,
+// startMove drags the figure or table el (whose Markdown current() finds) by
+// its grip: a line shows where it will land, the editor scrolls near its edges,
 // and Escape cancels.
 function startMove(
   view: EditorView,
@@ -317,7 +319,7 @@ function startMove(
     if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
     line.remove();
     el.classList.remove("moving");
-    if (drop && target >= 0 && view.state === state) moveFigure(view, item, target);
+    if (drop && target >= 0 && view.state === state) moveItem(view, item, target);
   };
   const up = () => finish(true);
   const cancel = () => finish(false);
@@ -532,15 +534,23 @@ class TableBar extends WidgetType {
     edit.className = "pw-widget-btn";
     edit.textContent = "Edit table";
     edit.onmousedown = (e) => e.preventDefault();
-    const open = () => {
+    const current = () => {
       const pos = view.posAtDOM(root);
-      const item = view.state
+      return view.state
         .field(itemsField)
         .find((x) => x.kind === "table" && Math.abs(x.from - pos) <= 1);
+    };
+    const open = () => {
+      const item = current();
       if (item) this.handlers.editTable(item);
     };
     edit.onclick = open;
-    bar.append(badge, cap, edit);
+    const grip = document.createElement("div");
+    grip.className = "pw-tablebar-grip";
+    grip.title = "Drag to move";
+    grip.append(gripIcon());
+    grip.onpointerdown = (e) => startMove(view, root, grip, e, current);
+    bar.append(grip, badge, cap, edit);
     if (!this.table) return block(bar, "pw-tablebar-block");
 
     root.className = "pw-table";
@@ -632,7 +642,9 @@ const footRe = /\[\^[^\]\s]+\](?!:)/g;
 
 // Whether the editor shows the document's Markdown, or hides its marks and
 // puts figures and tables in place of theirs.
-const showMarkdown = Facet.define<boolean, boolean>({ combine: (v) => v.some(Boolean) });
+const showMarkdown = Facet.define<boolean, boolean>({
+  combine: (v) => v.some(Boolean),
+});
 const showSlot = new Compartment();
 
 // setShowMarkdown shows or hides the document's Markdown.
@@ -651,11 +663,28 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   // The first of a label wins, as in internal/doc.
   const labels = new Map<string, Item>();
   for (const x of items) if (x.label && !labels.has(x.label)) labels.set(x.label, x);
-  const ranges: { from: number; to: number; deco: Decoration; atomic?: boolean }[] = [];
+  const ranges: {
+    from: number;
+    to: number;
+    deco: Decoration;
+    atomic?: boolean;
+  }[] = [];
 
   const show = state.facet(showMarkdown);
   const fm = readFrontMatter(doc.toString());
-  if (fm.to > 0 && !show) {
+  if (fm.to === 0 && !show) {
+    // No properties yet (a new document, or one on the default template):
+    // the card still sits on top, so they can be added.
+    ranges.push({
+      from: 0,
+      to: 0,
+      deco: Decoration.widget({
+        widget: new PropertiesCard("", "", handlers),
+        block: true,
+        side: -1,
+      }),
+    });
+  } else if (!show) {
     const by = [fm.meta.author, fm.meta.date].filter(Boolean).join(" · ");
     const end = doc.lineAt(Math.max(fm.to - 1, 0)).to;
     ranges.push({
@@ -715,14 +744,21 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       ranges.push({
         from: it.from,
         to: it.to,
-        deco: Decoration.replace({ widget: new TableBar(it, handlers, table), block: true }),
+        deco: Decoration.replace({
+          widget: new TableBar(it, handlers, table),
+          block: true,
+        }),
         atomic: true,
       });
     } else {
       ranges.push({
         from: it.from,
         to: it.from,
-        deco: Decoration.widget({ widget: new TableBar(it, handlers), block: true, side: -1 }),
+        deco: Decoration.widget({
+          widget: new TableBar(it, handlers),
+          block: true,
+          side: -1,
+        }),
       });
       for (let p = it.tableFrom!; p <= it.tableTo!;) {
         const line = doc.lineAt(p);
@@ -766,7 +802,9 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       ranges.push({
         from,
         to,
-        deco: Decoration.replace({ widget: new RefWidget(m[2], label, !!target) }),
+        deco: Decoration.replace({
+          widget: new RefWidget(m[2], label, !!target),
+        }),
         atomic: true,
       });
     }
@@ -1045,10 +1083,10 @@ function buildHidden(view: EditorView): Hidden {
             if (marks[1].from > marks[0].to) {
               const title = doc.sliceString(url.from, url.to);
               deco.push(
-                Decoration.mark({ class: "pw-link", attributes: { title } }).range(
-                  marks[0].to,
-                  marks[1].from,
-                ),
+                Decoration.mark({
+                  class: "pw-link",
+                  attributes: { title },
+                }).range(marks[0].to, marks[1].from),
               );
             }
             break;
@@ -1074,7 +1112,10 @@ function buildHidden(view: EditorView): Hidden {
     deco.push(Decoration.replace({}).range(pair.from, pair.from + half));
     deco.push(Decoration.replace({}).range(pair.to - half, pair.to));
   }
-  return { deco: Decoration.set(deco, true), atomic: Decoration.set(atomic, true) };
+  return {
+    deco: Decoration.set(deco, true),
+    atomic: Decoration.set(atomic, true),
+  };
 }
 
 const hiddenMarks = ViewPlugin.fromClass(
@@ -1280,7 +1321,12 @@ const highlight = HighlightStyle.define([
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--accent-ink)", textDecoration: "underline" },
   { tag: t.url, color: "var(--muted)" },
-  { tag: t.monospace, fontFamily: "var(--mono)", fontSize: "0.92em", color: "var(--roast)" },
+  {
+    tag: t.monospace,
+    fontFamily: "var(--mono)",
+    fontSize: "0.92em",
+    color: "var(--roast)",
+  },
   { tag: [t.processingInstruction, t.meta], color: "var(--marks)" },
   { tag: t.contentSeparator, color: "var(--marks)" },
   { tag: t.quote, color: "var(--quote)" },
@@ -1290,7 +1336,11 @@ const highlight = HighlightStyle.define([
 const theme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "transparent", fontSize: "16px" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--writing)", lineHeight: "1.7", overflow: "auto" },
+  ".cm-scroller": {
+    fontFamily: "var(--writing)",
+    lineHeight: "1.7",
+    overflow: "auto",
+  },
   ".cm-content": {
     maxWidth: "760px",
     margin: "0 auto",
@@ -1304,13 +1354,21 @@ const theme = EditorView.theme({
     backgroundColor: "rgba(217, 158, 130, 0.32) !important",
   },
   ".cm-placeholder": { color: "var(--muted)", fontStyle: "italic" },
-  ".cm-panels": { backgroundColor: "var(--surface)", borderColor: "var(--border)" },
+  ".cm-panels": {
+    backgroundColor: "var(--surface)",
+    borderColor: "var(--border)",
+  },
 });
 
 // --- Commands for the ribbon ----------------------------------------------
 
 export type Mark = "strong" | "emph" | "strike" | "code";
-const markText: Record<Mark, string> = { strong: "**", emph: "*", strike: "~~", code: "`" };
+const markText: Record<Mark, string> = {
+  strong: "**",
+  emph: "*",
+  strike: "~~",
+  code: "`",
+};
 const markNode: Record<Mark, string> = {
   strong: "StrongEmphasis",
   emph: "Emphasis",
@@ -1363,7 +1421,10 @@ export function toggleMark(view: EditorView, mark: Mark): boolean {
       if (word) ({ from, to } = word);
     }
     if (from === to) {
-      return { changes: { from, insert: s + s }, range: EditorSelection.cursor(from + s.length) };
+      return {
+        changes: { from, insert: s + s },
+        range: EditorSelection.cursor(from + s.length),
+      };
     }
     return {
       changes: [
@@ -1424,7 +1485,11 @@ export function setBlockStyle(view: EditorView, style: BlockStyle) {
   const prefix = style === "p" ? "" : style === "quote" ? "> " : "#".repeat(Number(style[1])) + " ";
   const changes = selectedLines(view.state).map((line) => {
     const m = prefixRe.exec(line.text)!;
-    return { from: line.from + m[1].length, to: line.from + m[0].length, insert: prefix };
+    return {
+      from: line.from + m[1].length,
+      to: line.from + m[0].length,
+      insert: prefix,
+    };
   });
   view.dispatch({ changes, userEvent: "input.format" });
   view.focus();
@@ -1437,7 +1502,11 @@ export function toggleList(view: EditorView, kind: "bullet" | "ordered") {
   const changes = lines.map((line, i) => {
     const m = /^(\s*)([-*+]\s+|\d+[.)]\s+)?/.exec(line.text)!;
     const insert = all ? "" : kind === "bullet" ? "- " : `${i + 1}. `;
-    return { from: line.from + m[1].length, to: line.from + m[0].length, insert };
+    return {
+      from: line.from + m[1].length,
+      to: line.from + m[0].length,
+      insert,
+    };
   });
   if (!lines.length) {
     const pos = view.state.selection.main.head;
@@ -1488,7 +1557,11 @@ export function toggleCodeBlock(view: EditorView) {
 export function insertBlock(
   view: EditorView,
   text: string,
-  opts: { replace?: { from: number; to: number }; at?: number; cursorOffset?: number } = {},
+  opts: {
+    replace?: { from: number; to: number };
+    at?: number;
+    cursorOffset?: number;
+  } = {},
 ): number {
   const state = view.state;
   let from: number;
@@ -1677,7 +1750,10 @@ export function revealLine(view: EditorView, n: number) {
   const { from } = view.state.doc.line(n);
   view.dispatch({
     selection: { anchor: from },
-    effects: EditorView.scrollIntoView(from, { y: "start", yMargin: revealMargin }),
+    effects: EditorView.scrollIntoView(from, {
+      y: "start",
+      yMargin: revealMargin,
+    }),
   });
   view.focus();
 }

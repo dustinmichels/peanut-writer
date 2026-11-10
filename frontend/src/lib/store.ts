@@ -17,8 +17,10 @@ type Dialog =
   | { kind: "crossref" }
   | { kind: "link"; text: string }
   | { kind: "properties" }
+  | { kind: "settings" }
   | { kind: "cheatsheet" }
-  | { kind: "recent"; files: RecentFile[] };
+  | { kind: "recent"; files: RecentFile[] }
+  | { kind: "templates" };
 
 interface Toast {
   id: number;
@@ -41,6 +43,7 @@ export const state = reactive({
   warnings: [] as string[],
   rendering: false,
   typstError: "",
+  version: "", // the app's, recorded in the front matter on saving
   outline: [] as Heading[], // the headings, from the latest render
   outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
   currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none

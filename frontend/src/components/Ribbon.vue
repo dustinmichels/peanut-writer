@@ -31,6 +31,7 @@ import {
   SaveAll,
   Search,
   Settings2,
+  SlidersHorizontal,
   Strikethrough,
   Table,
   TableOfContents,
@@ -43,10 +44,10 @@ import {
 import RibbonButton from "./RibbonButton.vue";
 import TableGridPicker from "./TableGridPicker.vue";
 import TemplateGallery from "./TemplateGallery.vue";
-import { DocService } from "../../bindings/peanut-writer";
 import {
   choosePicture,
   choosePictureGrid,
+  customizeTemplate,
   exportDocx,
   exportPdf,
   menu,
@@ -56,7 +57,6 @@ import {
   showRecent,
   save,
   saveAs,
-  setTemplate,
   syncFiles,
   toggleMarkdown,
   toggleOutline,
@@ -72,7 +72,7 @@ import {
   toggleList,
   toggleMark,
 } from "../lib/editor";
-import { canSave, canSync, editor, errorText, state, toast } from "../lib/store";
+import { canSave, canSync, editor, state } from "../lib/store";
 
 type Tab = "file" | "home" | "insert" | "references" | "design" | "view";
 const tab = ref<Tab>("home");
@@ -121,33 +121,6 @@ function link() {
 function pickTable(cols: number, rows: number) {
   tablePicker.value = false;
   state.dialog = { kind: "table", cols, rows };
-}
-
-async function refreshTemplates() {
-  state.templates = (await DocService.Templates()) ?? [];
-}
-
-async function customize() {
-  try {
-    const id = await DocService.CustomizeTemplate(state.template);
-    await refreshTemplates();
-    toast(
-      "Copied the template to your templates folder. Edit it there; changes show up as you work.",
-      "success",
-    );
-    setTemplate(id);
-  } catch (e) {
-    toast(`Customize template: ${errorText(e)}`, "error");
-  }
-}
-
-async function openTemplatesFolder() {
-  try {
-    await DocService.OpenTemplatesFolder();
-    await refreshTemplates();
-  } catch (e) {
-    toast(`Templates folder: ${errorText(e)}`, "error");
-  }
 }
 
 const figures = computed(() => state.items.filter((x) => x.kind === "figure").length);
@@ -228,7 +201,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               label="Sync Files"
               :title="
                 canSync
-                  ? 'Save, then write PDF and Word copies beside the file (⇧⌘Y)'
+                  ? 'Save, then write PDF and Word copies into the out folder (⇧⌘Y)'
                   : 'The PDF and Word copies are up to date'
               "
               :disabled="!canSync"
@@ -489,17 +462,24 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
             />
             <RibbonButton
               big
+              :icon="SlidersHorizontal"
+              label="Settings"
+              title="Document settings: auto format, title case (⌘,)"
+              @click="state.dialog = { kind: 'settings' }"
+            />
+            <RibbonButton
+              big
               :icon="Palette"
               label="Customize"
               title="Make an editable copy of this template"
-              @click="customize"
+              @click="customizeTemplate"
             />
             <RibbonButton
               big
               :icon="FolderCog"
-              label="Templates"
-              title="Open your templates folder"
-              @click="openTemplatesFolder"
+              label="Manage Templates"
+              title="Rename, edit, share, delete and import your templates"
+              @click="state.dialog = { kind: 'templates' }"
             />
           </div>
           <label>Look</label>

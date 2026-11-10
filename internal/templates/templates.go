@@ -10,12 +10,16 @@
 package templates
 
 import (
+	"archive/zip"
+	"cmp"
 	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -176,45 +180,191 @@ func decode(b []byte) (Template, error) {
 
 var safeID = regexp.MustCompile(`[^a-z0-9-]+`)
 
+// slug turns s into a folder name: lowercase letters, digits and dashes.
+func slug(s string) string {
+	return strings.Trim(safeID.ReplaceAllString(strings.ToLower(s), "-"), "-")
+}
+
+// User finds one of the user's templates (not a built-in one) by id.
+func User(id string) (Template, error) {
+	for _, t := range List() {
+		if t.ID == id && !t.Builtin {
+			return t, nil
+		}
+	}
+	return Template{}, fmt.Errorf("there's no template %q in your templates folder", id)
+}
+
+// Dir is the user template's folder; "" for a built-in one.
+func (t Template) Dir() string { return t.dir }
+
 // Customize copies a template into the user's templates folder as a new
 // template named "<name> (custom)", and returns its folder.
 func Customize(id string) (string, error) {
 	t := Get(id)
-	root, err := UserDir()
-	if err != nil {
-		return "", err
-	}
-	base := strings.Trim(safeID.ReplaceAllString(strings.ToLower(t.ID), "-"), "-") + "-custom"
-	newID := base
-	for i := 2; ; i++ {
-		if _, err := os.Stat(filepath.Join(root, newID)); errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-		newID = fmt.Sprintf("%s-%d", base, i)
-	}
-	dir := filepath.Join(root, newID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	src, err := t.Source()
 	if err != nil {
 		return "", err
 	}
+	t.Description = "A copy of " + t.Name + ". Edit template.typ (PDF) and template.json (Word)."
 	t.Name += " (custom)"
-	t.Description = "A copy of " + strings.TrimSuffix(t.Name, " (custom)") + ". Edit template.typ (PDF) and template.json (Word)."
+	return create(slug(t.ID)+"-custom", src, t)
+}
+
+// Rename sets a user template's name and description.
+func Rename(id, name, description string) error {
+	t, err := User(id)
+	if err != nil {
+		return err
+	}
+	if t.Name = strings.TrimSpace(name); t.Name == "" {
+		return errors.New("a template needs a name")
+	}
+	t.Description = strings.TrimSpace(description)
+	return writeMeta(t.dir, t)
+}
+
+// Delete removes a user template's folder.
+func Delete(id string) error {
+	t, err := User(id)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(t.dir)
+}
+
+// Export writes a user template to w as a zip holding its folder, for Import
+// on another computer.
+func Export(id string, w io.Writer) error {
+	t, err := User(id)
+	if err != nil {
+		return err
+	}
+	zw := zip.NewWriter(w)
+	for _, name := range []string{"template.typ", "template.json"} {
+		b, err := os.ReadFile(filepath.Join(t.dir, name))
+		if err != nil {
+			return err
+		}
+		f, err := zw.Create(t.ID + "/" + name)
+		if err != nil {
+			return err
+		}
+		if _, err := f.Write(b); err != nil {
+			return err
+		}
+	}
+	return zw.Close()
+}
+
+// maxImport caps each file read from a zip being imported.
+const maxImport = 8 << 20
+
+// Import adds the template in the zip at p (as Export writes it, or with the
+// files at the top of the zip) to the user's templates folder as a new
+// template, and returns its folder.
+func Import(p string) (string, error) {
+	zr, err := zip.OpenReader(p)
+	if err != nil {
+		return "", fmt.Errorf("%s isn't a template zip: %w", filepath.Base(p), err)
+	}
+	defer zr.Close()
+	var typ, meta *zip.File
+	for _, f := range zr.File {
+		dir, name := path.Split(f.Name)
+		if strings.Count(dir, "/") > 1 || strings.HasPrefix(dir, "__MACOSX/") {
+			continue
+		}
+		switch name {
+		case "template.typ":
+			typ = cmp.Or(typ, f)
+		case "template.json":
+			meta = cmp.Or(meta, f)
+		}
+	}
+	if typ == nil || meta == nil || path.Dir(typ.Name) != path.Dir(meta.Name) {
+		return "", fmt.Errorf("%s doesn't hold a template: it needs template.typ and template.json, side by side", filepath.Base(p))
+	}
+	src, err := readZipped(typ)
+	if err != nil {
+		return "", err
+	}
+	b, err := readZipped(meta)
+	if err != nil {
+		return "", err
+	}
+	t, err := decode(b)
+	if err != nil {
+		return "", err
+	}
+	base := slug(path.Dir(typ.Name))
+	if base == "" {
+		base = slug(strings.TrimSuffix(filepath.Base(p), filepath.Ext(p)))
+	}
+	if t.Name = strings.TrimSpace(t.Name); t.Name == "" {
+		t.Name = cmp.Or(base, "Imported template")
+	}
+	return create(base, src, t)
+}
+
+func readZipped(f *zip.File) ([]byte, error) {
+	r, err := f.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	b, err := io.ReadAll(io.LimitReader(r, maxImport+1))
+	if err == nil && len(b) > maxImport {
+		err = fmt.Errorf("%s is too big for a template", path.Base(f.Name))
+	}
+	return b, err
+}
+
+// create writes a new user template into a new folder named base (or base-2,
+// base-3… if that's taken) and returns the folder.
+func create(base string, src []byte, t Template) (string, error) {
+	root, err := UserDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return "", err
+	}
+	base = cmp.Or(base, "template")
+	id := base
+	for i := 2; ; i++ {
+		// List skips user folders named like a built-in template.
+		if !slices.Contains(builtinOrder, id) {
+			dir := filepath.Join(root, id)
+			err := os.Mkdir(dir, 0o755)
+			if err == nil {
+				if err := os.WriteFile(filepath.Join(dir, "template.typ"), src, 0o644); err != nil {
+					os.RemoveAll(dir)
+					return "", err
+				}
+				if err := writeMeta(dir, t); err != nil {
+					os.RemoveAll(dir)
+					return "", err
+				}
+				return dir, nil
+			}
+			if !errors.Is(err, fs.ErrExist) {
+				return "", err
+			}
+		}
+		id = fmt.Sprintf("%s-%d", base, i)
+	}
+}
+
+// writeMeta writes the template's template.json into dir.
+func writeMeta(dir string, t Template) error {
 	meta, err := json.MarshalIndent(struct {
 		Name        string    `json:"name"`
 		Description string    `json:"description"`
 		Docx        DocxStyle `json:"docx"`
 	}{t.Name, t.Description, t.Docx}, "", "  ")
 	if err != nil {
-		return "", err
+		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "template.typ"), src, 0o644); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "template.json"), append(meta, '\n'), 0o644); err != nil {
-		return "", err
-	}
-	return dir, nil
+	return os.WriteFile(filepath.Join(dir, "template.json"), append(meta, '\n'), 0o644)
 }

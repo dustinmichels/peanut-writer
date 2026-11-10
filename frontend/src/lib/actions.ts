@@ -1,8 +1,9 @@
 // What the menus, the ribbon and the dialogs do to the document.
 
 import { redo, undo } from "@codemirror/commands";
+import { diff } from "@codemirror/merge";
 import { openSearchPanel } from "@codemirror/search";
-import type { ChangeSpec } from "@codemirror/state";
+import { type ChangeSpec, Transaction } from "@codemirror/state";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocInfo } from "../../bindings/peanut-writer/models";
 import { insertBlock, itemsField, replaceDoc, setShowMarkdown } from "./editor";
@@ -11,6 +12,7 @@ import {
   type FigureSpec,
   figureMarkdown,
   figureSpec,
+  isOn,
   type Item,
   type Meta,
   readFrontMatter,
@@ -74,7 +76,7 @@ const autosavedMs = 2500;
 let autosavedTimer: ReturnType<typeof setTimeout> | undefined;
 
 async function autosave() {
-  if (!(await save())) return;
+  if (!(await queueSave())) return;
   state.autosaved = true;
   clearTimeout(autosavedTimer);
   autosavedTimer = setTimeout(() => (state.autosaved = false), autosavedMs);
@@ -94,10 +96,10 @@ async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined>
 // one asks.
 async function ensureSaved(): Promise<boolean> {
   if (!state.dirty) return true;
-  if (state.path) return save();
+  if (state.path) return queueSave();
   const choice = await DocService.ConfirmDiscard(state.name);
   if (choice === "cancel") return false;
-  if (choice === "save") return save();
+  if (choice === "save") return queueSave();
   return true;
 }
 
@@ -145,7 +147,7 @@ function saved(info: DocInfo) {
 // Saves run one at a time, so an autosave and ⌘S can't overlap.
 let saving: Promise<boolean> = Promise.resolve(true);
 
-export function save(): Promise<boolean> {
+function queueSave(): Promise<boolean> {
   clearTimeout(autosaveTimer);
   saving = saving.then(saveNow);
   return saving;
@@ -153,13 +155,52 @@ export function save(): Promise<boolean> {
 
 async function saveNow(): Promise<boolean> {
   if (state.path && !state.dirty) return true;
+  stampVersion();
   const info = await run("Save", () => DocService.Save(state.content));
   if (!info || info.canceled) return false;
   saved(info);
   return true;
 }
 
+// save is the user saving: with Auto Format on, the Markdown is tidied
+// first. Autosaves and saves on the way out don't format, so spaces typed a
+// moment ago aren't trimmed from under the cursor.
+export async function save(): Promise<boolean> {
+  await autoFormat();
+  return queueSave();
+}
+
+// autoFormat formats the Markdown with oxfmt when the document's settings
+// turn Auto Format on, as one undoable edit that keeps the cursor among the
+// text it was in. If the text changes meanwhile, or formatting fails, it's
+// left as it is.
+export async function autoFormat() {
+  const v = editor.value;
+  if (!v) return;
+  const before = v.state.doc.toString();
+  const { meta } = readFrontMatter(before);
+  if (!isOn(meta.autoformat)) return;
+  const after = await run("Auto format", () => DocService.Format(before, isOn(meta.titlecase)));
+  if (after === undefined || after === before || v.state.doc.toString() !== before) return;
+  const changes = diff(before, after).map((c) => ({
+    from: c.fromA,
+    to: c.toA,
+    insert: after.slice(c.fromB, c.toB),
+  }));
+  v.dispatch({ changes, userEvent: "input.format" });
+}
+
+// stampVersion records the app's version in the front matter of a document
+// about to be saved, outside the undo history.
+function stampVersion() {
+  if (!editor.value || !state.version) return;
+  if (readFrontMatter(editor.value.state.doc.toString()).meta["peanut-version"] === state.version) return;
+  setMeta({ "peanut-version": state.version }, false);
+}
+
 export async function saveAs(): Promise<boolean> {
+  await autoFormat();
+  stampVersion();
   const info = await run("Save As", () => DocService.SaveAs(state.content));
   if (!info || info.canceled) return false;
   saved(info);
@@ -179,7 +220,7 @@ async function exported(kind: string, f: () => Promise<string>) {
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
 
-// syncFiles saves the document, then writes its PDF and Word copies beside it.
+// syncFiles saves the document, then writes its PDF and Word copies into its out folder.
 export async function syncFiles() {
   if (!(await save())) return;
   const content = state.content;
@@ -241,6 +282,9 @@ export function menu(action: string) {
       return openWelcome();
     case "cheatsheet":
       state.dialog = { kind: "cheatsheet" };
+      return;
+    case "settings":
+      state.dialog = { kind: "settings" };
       return;
     case "undo":
       if (!fieldEdit("undo") && v && !state.dialog) undo(v);
@@ -448,7 +492,9 @@ export function insertCrossRef(item: Item) {
 
 // --- Document properties and templates ---------------------------------------
 
-export function setMeta(patch: Partial<Meta>) {
+// setMeta changes the document's properties; with history false, as an edit
+// undo skips.
+export function setMeta(patch: Partial<Meta>, history = true) {
   const v = view();
   const text = v.state.doc.toString();
   const fm = readFrontMatter(text);
@@ -456,12 +502,80 @@ export function setMeta(patch: Partial<Meta>) {
   let block = writeFrontMatter(meta, fm.extra);
   // Keep a blank line between the properties and the text.
   if (block && fm.to === 0 && text && !text.startsWith("\n")) block += "\n";
-  v.dispatch({ changes: { from: 0, to: fm.to, insert: block }, userEvent: "input" });
+  v.dispatch({
+    changes: { from: 0, to: fm.to, insert: block },
+    userEvent: "input",
+    annotations: history ? [] : Transaction.addToHistory.of(false),
+  });
 }
 
 export function setTemplate(id: string) {
   setMeta({ template: id === "classic" ? "" : id });
   state.template = id;
+}
+
+export async function refreshTemplates() {
+  state.templates = (await DocService.Templates()) ?? [];
+}
+
+// customizeTemplate makes an editable copy of the document's template and
+// uses it.
+export async function customizeTemplate() {
+  const id = await run("Customize template", () => DocService.CustomizeTemplate(state.template));
+  if (id === undefined) return;
+  await refreshTemplates();
+  toast(
+    "Copied the template to your templates folder. Edit it there; changes show up as you work.",
+    "success",
+  );
+  setTemplate(id);
+}
+
+// renameTemplate reports whether the template was renamed.
+export async function renameTemplate(id: string, name: string, description: string) {
+  const ok = await run("Rename template", async () => {
+    await DocService.RenameTemplate(id, name, description);
+    return true;
+  });
+  if (ok) await refreshTemplates();
+  return ok === true;
+}
+
+export async function editTemplate(id: string) {
+  await run("Edit template", () => DocService.EditTemplate(id));
+}
+
+// deleteTemplate asks, then deletes one of the user's templates. A document
+// using it goes back to Classic.
+export async function deleteTemplate(id: string) {
+  if (!(await run("Delete template", () => DocService.DeleteTemplate(id)))) return;
+  await refreshTemplates();
+  if (state.template === id) setTemplate("classic");
+}
+
+export async function shareTemplate(id: string) {
+  const p = await run("Share template", () => DocService.ShareTemplate(id));
+  if (p)
+    toast(
+      `Saved ${p.split(/[\\/]/).pop()}. Send it on; it's added with Design → Manage Templates → Import.`,
+      "success",
+    );
+}
+
+export async function importTemplate() {
+  const id = await run("Import template", () => DocService.ImportTemplate());
+  if (!id) return;
+  await refreshTemplates();
+  const name = state.templates.find((t) => t.id === id)?.name ?? id;
+  toast(`Added the template “${name}”.`, "success", {
+    label: "Use It",
+    run: () => setTemplate(id),
+  });
+}
+
+export async function openTemplatesFolder() {
+  await run("Templates folder", () => DocService.OpenTemplatesFolder());
+  await refreshTemplates();
 }
 
 // --- View -----------------------------------------------------------------------------

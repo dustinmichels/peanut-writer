@@ -75,6 +75,22 @@ export function CustomizeTemplate(id: string): $CancellablePromise<string> {
 }
 
 /**
+ * DeleteTemplate asks, then deletes one of the user's templates. It reports
+ * whether it did.
+ */
+export function DeleteTemplate(id: string): $CancellablePromise<boolean> {
+    return $Call.ByID(2062462842, id);
+}
+
+/**
+ * EditTemplate shows one of the user's templates' template.typ in Finder,
+ * to open in a text editor.
+ */
+export function EditTemplate(id: string): $CancellablePromise<void> {
+    return $Call.ByID(299874061, id);
+}
+
+/**
  * ExportDOCX asks where to save a Word document and writes it; returns the
  * path, or "" if the user canceled.
  */
@@ -91,6 +107,14 @@ export function ExportPDF(content: string): $CancellablePromise<string> {
 }
 
 /**
+ * Format tidies the document's Markdown with oxfmt and, if titleCase, puts
+ * its headings in title case.
+ */
+export function Format(content: string, titleCase: boolean): $CancellablePromise<string> {
+    return $Call.ByID(1680585180, content, titleCase);
+}
+
+/**
  * ImageURL returns an image the document refers to as a data URL, for the
  * editor to show; "" if there's no such file.
  */
@@ -99,8 +123,17 @@ export function ImageURL(ref: string): $CancellablePromise<string> {
 }
 
 /**
- * NewDocument asks for a name and a place, and starts a blank document in a
- * folder of that name there.
+ * ImportTemplate asks for a shared template .zip and adds it to the user's
+ * templates. It returns the new template's id, or "" if canceled.
+ */
+export function ImportTemplate(): $CancellablePromise<string> {
+    return $Call.ByID(1039486284);
+}
+
+/**
+ * NewDocument asks for a name and a place, and starts a document in a folder
+ * of that name there, its properties titled with the name (in title case),
+ * dated today and marked with the app's version.
  */
 export function NewDocument(): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(1108794262);
@@ -150,6 +183,13 @@ export function RecentFiles(): $CancellablePromise<$models.RecentFile[] | null> 
 }
 
 /**
+ * RenameTemplate sets one of the user's templates' name and description.
+ */
+export function RenameTemplate(id: string, name: string, description: string): $CancellablePromise<void> {
+    return $Call.ByID(224916591, id, name, description);
+}
+
+/**
  * Render renders the document for the preview. A newer call cancels an
  * older one still running.
  */
@@ -187,6 +227,15 @@ export function SetDirty(dirty: boolean): $CancellablePromise<void> {
 }
 
 /**
+ * ShareTemplate asks where to save one of the user's templates as a .zip
+ * (for ImportTemplate on another computer), writes it and shows it in
+ * Finder. It returns the file's path, or "" if canceled.
+ */
+export function ShareTemplate(id: string): $CancellablePromise<string> {
+    return $Call.ByID(365772812, id);
+}
+
+/**
  * Startup opens the welcome guide on the first run, and a blank document
  * (offering the recent ones) after that.
  */
@@ -195,9 +244,9 @@ export function Startup(): $CancellablePromise<$models.StartupInfo> {
 }
 
 /**
- * SyncFiles writes a PDF and a Word copy of the saved document beside its
- * file, under the same name, replacing earlier copies; returns their paths.
- * Neither is written unless both render.
+ * SyncFiles writes a PDF and a Word copy of the saved document into the
+ * "out" folder beside its file, under the same name, replacing earlier
+ * copies; returns their paths. Neither is written unless both render.
  */
 export function SyncFiles(content: string): $CancellablePromise<string[] | null> {
     return $Call.ByID(1439229203, content);

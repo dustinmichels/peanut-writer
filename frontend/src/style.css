@@ -324,7 +324,9 @@ select {
   background: var(--hover);
   color: var(--accent-ink);
 }
-.pw-figure.moving {
+.pw-figure.moving,
+.pw-table.moving,
+.pw-tablebar.moving {
   opacity: 0.45;
 }
 .pw-figure.moving .pw-figure-grip {
@@ -442,6 +444,25 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pw-tablebar-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  margin: -2px -2px -2px -4px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.pw-tablebar-grip:hover {
+  background: var(--hover);
+  color: var(--accent-ink);
+}
+.moving .pw-tablebar-grip {
+  cursor: grabbing;
 }
 .pw-badge {
   flex: none;

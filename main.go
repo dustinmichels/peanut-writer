@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"regexp"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
@@ -12,6 +13,20 @@ import (
 //
 //go:embed all:frontend/dist
 var assets embed.FS
+
+// The build settings the app's bundle info is generated from, for its version.
+//
+//go:embed build/config.yml
+var buildConfig string
+
+// appVersion is the app's version (build/config.yml's info.version).
+var appVersion = func() string {
+	m := regexp.MustCompile(`(?m)^[ \t]+version:[ \t]*"?([^"\s#]+)`).FindStringSubmatch(buildConfig)
+	if m == nil {
+		panic("no info.version in build/config.yml")
+	}
+	return m[1]
+}()
 
 func main() {
 	docs := newDocService()
@@ -93,6 +108,8 @@ func menu(app *application.App, docs *DocService) *application.Menu {
 	file.Add("Export as PDF…").SetAccelerator("CmdOrCtrl+E").OnClick(send("exportPdf"))
 	file.Add("Export as Word…").SetAccelerator("CmdOrCtrl+Shift+E").OnClick(send("exportDocx"))
 	file.Add("Sync Files").SetAccelerator("CmdOrCtrl+Shift+Y").OnClick(send("syncFiles"))
+	file.AddSeparator()
+	file.Add("Document Settings…").SetAccelerator("CmdOrCtrl+,").OnClick(send("settings"))
 
 	edit := m.AddSubmenu("Edit")
 	edit.Add("Undo").SetAccelerator("CmdOrCtrl+Z").OnClick(send("undo"))

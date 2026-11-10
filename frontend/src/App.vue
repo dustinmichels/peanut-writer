@@ -68,6 +68,7 @@ onMounted(async () => {
     const info = await DocService.Startup();
     state.templates = info.templates ?? [];
     state.typstError = info.typstError;
+    state.version = info.version;
     loadDoc(info.document);
     if (info.recent?.length) state.dialog = { kind: "recent", files: info.recent };
   } catch (e) {
