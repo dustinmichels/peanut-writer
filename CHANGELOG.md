@@ -33,6 +33,10 @@
 - Faster on long documents: Markdown parsing (13×), typing (the editor rereads only around each edit: 15× less work
   per keystroke) and cursor moves, and the preview reuses unchanged pages instead of reloading them.
 - Go 1.27.4 and `golang.org/x/mod` v0.42.0.
+- `mise run docs:demo` records a captioned demo video of the app (server mode in WebKit, drawn cursor, title cards)
+  with a generated soundtrack into `demo/` (gitignored; how it's made in `demo/README.md`). The tour starts from a
+  blank saved document, gets a pep talk from Peanut, pastes a table from a spreadsheet, adds the title block late and
+  names a version; `-- <name>` writes `demo/<name>.mp4` beside earlier takes.
 
 ## 2026-11-10
 

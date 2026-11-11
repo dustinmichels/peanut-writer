@@ -90,6 +90,13 @@ run = [
   "cd docs && bun install && bunx playwright install webkit && bun scripts/screenshots.ts",
 ]
 
+[tasks."docs:demo"]
+description = "Record the demo video (server mode, in WebKit, with captions and a generated soundtrack) into demo/peanut-writer-demo.mp4, or demo/<name>.mp4 with `-- <name>`. Needs ffmpeg"
+run = [
+  "wails3 task build:server",
+  "cd docs && bun install && bunx playwright install webkit && bun scripts/demo-video.ts",
+]
+
 # ─── Release ──────────────────────────────────────────────────────────────────
 
 [tasks."release:package"]

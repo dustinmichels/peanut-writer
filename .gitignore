@@ -8,3 +8,7 @@ frontend/node_modules
 docs/node_modules
 docs/.vitepress/cache
 docs/.vitepress/dist
+# Demo video output (mise run docs:demo); demo/README.md is tracked.
+demo/*.mp4
+demo/*.wav
+demo/frames
