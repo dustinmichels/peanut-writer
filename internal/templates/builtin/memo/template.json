@@ -1,0 +1,31 @@
+{
+  "name": "Memo",
+  "description": "An office memo: Helvetica Neue, a From / Date / Re / Subject block between navy rules, a summary bar.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "Helvetica Neue",
+    "headingFont": "Helvetica Neue",
+    "monoFont": "Menlo",
+    "fontSize": 10.5,
+    "lineSpacing": 1.15,
+    "spaceAfter": 8,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "1B1F24",
+    "headingColor": "1F3B5C",
+    "headingSizes": [13, 11, 10.5],
+    "headingBold": true,
+    "numberedHeadings": false,
+    "titleSize": 22,
+    "titleColor": "1F3B5C",
+    "titleAlign": "left",
+    "titleRule": true,
+    "captionSize": 8.5,
+    "captionColor": "555555",
+    "captionItalic": false,
+    "accentColor": "1F3B5C",
+    "tableHeaderFill": "E8EDF3",
+    "pageNumbers": true
+  }
+}

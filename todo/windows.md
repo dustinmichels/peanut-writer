@@ -137,7 +137,7 @@ Mac fonts renders in Libertinus Serif on Windows with a font warning.
   `editorial` headings (Avenir Next, Avenir, Helvetica Neue, …). Add `Segoe UI` before the Libertinus fallbacks.
 - `elegant` falls back through Garamond (only with Office) and `Palatino` (Windows names it `Palatino Linotype`); add it.
 - Monospace everywhere is Menlo → DejaVu Sans Mono (embedded, fine); add `Consolas` first-after-Menlo to match Word.
-- Word: `template.json` fonts (`Menlo`, `Avenir Next`, `Optima`, `Hoefler Text`) are substituted silently by Word on
+- Word: `template.json` fonts (`Menlo`, `Avenir Next`, `Optima`, `Hoefler Text`, `Helvetica Neue`, `PT Sans`) are substituted silently by Word on
   Windows. Decide per template whether `DocxStyle` gets a Windows-safe font or stays as designed.
 - Check: `typst fonts` on the Windows VM, then render every built-in template's sample and look for the font warning in the
   preview's notes.

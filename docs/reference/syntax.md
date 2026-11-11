@@ -116,9 +116,8 @@ hide: subtitle, date
 ---
 ```
 
-`template` is one of `classic` (the default), `wordy`, `academic`, `report`, `minimal`, `manuscript`, `elegant`,
-`editorial`,
-`journal`, `peanut`,
+`template` is one of `classic` (the default), `wordy`, `academic`, `report`, `technical`, `memo`, `minimal`,
+`manuscript`, `book`, `elegant`, `editorial`, `journal`, `peanut`,
 `custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
 [your own templates](./custom-templates).
 

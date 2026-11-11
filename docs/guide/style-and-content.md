@@ -50,8 +50,11 @@ Caption, Quote and so on. Whoever opens the Word file can keep editing it proper
 | **Wordy**      | A fresh Word document: Aptos, blue headings, 1-inch margins.                                    |
 | **Academic**   | A LaTeX article: Computer Modern, numbered sections, justified text, centered title.            |
 | **Report**     | A business report: serif body, crisp sans headings, a teal accent, running headers.             |
+| **Technical**  | Docs and specs: PT Sans, numbered headings in slate blue, code panels, quotes as note callouts. |
+| **Memo**       | An office memo: From / Date / Re / Subject between navy rules, a summary bar, "Page n of N".    |
 | **Minimal**    | Quiet Swiss-style sans: black and grays, generous white space, hairline rules.                  |
 | **Manuscript** | An APA-style paper ready to submit: Times 12 pt, double spaced, indented paragraphs.            |
+| **Book**       | Long writing: Palatino, a title page, each chapter on a new page, indented justified text.      |
 | **Elegant**    | A finely set book page: old-style serif, justified text, small-caps headings, claret.           |
 | **Editorial**  | A modern magazine feature: Iowan Old Style text, Avenir Next headlines, brick red, pull quotes. |
 | **Journal**    | A two-column paper: STIX Two at 10 pt, numbered sections, title and abstract across the top.    |

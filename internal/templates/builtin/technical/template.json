@@ -1,0 +1,31 @@
+{
+  "name": "Technical",
+  "description": "Documentation and specs: PT Sans, numbered headings in slate blue, code panels, block quotes as notes.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "PT Sans",
+    "headingFont": "PT Sans",
+    "monoFont": "Menlo",
+    "fontSize": 10.5,
+    "lineSpacing": 1.15,
+    "spaceAfter": 8,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "1D232B",
+    "headingColor": "17212B",
+    "headingSizes": [16, 12.5, 10.5],
+    "headingBold": true,
+    "numberedHeadings": true,
+    "titleSize": 28,
+    "titleColor": "17212B",
+    "titleAlign": "left",
+    "titleRule": true,
+    "captionSize": 8.5,
+    "captionColor": "505050",
+    "captionItalic": false,
+    "accentColor": "2F5F8F",
+    "tableHeaderFill": "EDF2F7",
+    "pageNumbers": true
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "Book",
+  "description": "Long writing in chapters: Palatino, a title page, each chapter on a new page, indented justified paragraphs.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1.2,
+    "bodyFont": "Palatino Linotype",
+    "headingFont": "Palatino Linotype",
+    "monoFont": "Menlo",
+    "fontSize": 11,
+    "lineSpacing": 1.2,
+    "spaceAfter": 0,
+    "firstLineIndent": 0.2,
+    "justify": true,
+    "textColor": "1A1816",
+    "headingColor": "1A1816",
+    "headingSizes": [24, 13, 10],
+    "headingBold": false,
+    "numberedHeadings": false,
+    "titleSize": 32,
+    "titleColor": "1A1816",
+    "titleAlign": "center",
+    "titleRule": false,
+    "captionSize": 9.5,
+    "captionColor": "4F4A44",
+    "captionItalic": true,
+    "accentColor": "8A6A3B",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}
