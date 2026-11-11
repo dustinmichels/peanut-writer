@@ -9,6 +9,8 @@ mise install       # go, bun, wails3, typst
 mise run dev       # the app with hot reload
 mise run build     # bin/peanut-writer
 mise run package   # bin/peanut-writer.app, with typst inside
+mise run release:package # signed, notarized Peanut-Writer.dmg and .zip in bin/release
+mise run release   # tag and publish a release (see Releasing)
 mise run test      # Go tests
 mise run check     # type-check the editor
 mise run fmt       # gofmt + oxfmt
@@ -17,6 +19,47 @@ mise run docs      # this site, with hot reload
 mise run docs:build # this site, built into docs/.vitepress/dist
 mise run docs:screenshots # the app's screenshots in docs/public/screenshots
 ```
+
+## Releasing
+
+```sh
+mise run release          # patch bump
+mise run release minor    # or major, or an exact X.Y.Z
+```
+
+`mise run release` (`scripts/release.sh`) cuts a release on a Mac, from a clean `main` that's level with `origin/main`.
+It checks that signing, notarization and the Homebrew tap will work, runs the Go tests, builds and notarizes the app
+(`scripts/package.sh`), tags `vX.Y.Z`, publishes a GitHub release, and points the Homebrew cask at it
+(`scripts/update-cask.sh`, which creates `Casks/peanut-writer.rb` in
+[dustinmichels/homebrew-tap](https://github.com/dustinmichels/homebrew-tap) the first time). Nothing is tagged until
+notarization has passed. Versions come from the git tags, linked into the app as `main.buildVersion`; other builds
+report `dev` and never check for updates. If the cask step fails, the release is already out: rerun `mise run cask`.
+
+| Asset               | Holds                                                                                        |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `Peanut-Writer.dmg` | `Peanut Writer.app`: universal (arm64 + x86_64), with the Typst pinned in `mise.toml` inside |
+| `Peanut-Writer.zip` | The same app alone, for the in-app updater                                                   |
+| `checksums.txt`     | SHA-256 of both                                                                              |
+
+The in-app updater (`update.go`, Wails' `pkg/updater`) checks the latest release at launch, daily, and on
+**Peanut Writer → Check for Updates…**, downloads `Peanut-Writer.zip`, checks it against `checksums.txt`, and swaps it
+in for the running app. Keep those asset names and the `vX.Y.Z` tags. The app needs macOS 13 (Go 1.27's minimum), set
+as `LSMinimumSystemVersion` in `build/darwin/Info.plist`; packaging checks the Typst binary against it.
+
+Once per Mac, set up signing:
+
+1. A **Developer ID Application** certificate in the Keychain (developer.apple.com → Certificates, or Xcode → Settings
+   → Accounts → Manage Certificates). `security find-identity -v -p codesigning` lists it.
+2. A notarytool profile: a Keychain entry holding your Apple ID, an
+   [app-specific password](https://support.apple.com/102654) and your team ID, saved under a name of your choosing.
+   The scripts use `peanut-writer`:
+
+   ```sh
+   xcrun notarytool store-credentials peanut-writer --apple-id <apple id> --team-id LLM5F36KYW
+   ```
+
+`CODESIGN_IDENTITY` and `NOTARY_PROFILE` override either. Without the certificate, `mise run release:package` signs the
+app ad hoc and skips notarization: it runs on the Mac that built it, but Gatekeeper blocks it elsewhere.
 
 ## Screenshots
 

@@ -34,7 +34,7 @@ set -euo pipefail
 if [[ "$(uname)" == Darwin ]]; then
   lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
   # Unregister our bundles first so "Open With" and Spotlight stop offering them.
-  for app in "$PWD"/bin/*.app; do
+  for app in "$PWD"/bin/*.app "$PWD"/bin/macos/*.app; do
     if [[ -e "$app" ]]; then
       "$lsregister" -u "$app" || true
       echo "unregistered $app"
@@ -89,3 +89,17 @@ run = [
   "wails3 task build:server",
   "cd docs && bun install && bunx playwright install webkit && bun scripts/screenshots.ts",
 ]
+
+# ─── Release ──────────────────────────────────────────────────────────────────
+
+[tasks."release:package"]
+description = "Build the release files (universal, signed and notarized Peanut-Writer.dmg and .zip, checksums.txt) into bin/release without publishing; optional version arg"
+run = "scripts/package.sh"
+
+[tasks.release]
+description = "Check the tree is clean and level with origin/main, check signing and notarization, test, package, tag, publish a GitHub release (patch by default; or minor, major, X.Y.Z), and update the Homebrew cask"
+run = "scripts/release.sh"
+
+[tasks.cask]
+description = "Point the Homebrew cask in dustinmichels/homebrew-tap at a release (default: the latest), creating it if missing"
+run = "scripts/update-cask.sh"
