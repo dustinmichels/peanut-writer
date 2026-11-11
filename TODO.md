@@ -6,7 +6,7 @@ Things the app doesn't do yet, or does differently in different places. Each ent
 
 - **Figures in footnotes** aren't figures: the image shows inline with its `{#fig:…}` block as text, unnumbered and
   not referable (goldmark adds a backlink to the footnote's last paragraph, so `figure()` rejects it).
-- **Labels must start `fig:` or `tbl:`** to be referable. `{#chart}` is accepted but `@chart` is plain text.
+- **Labels must start `fig:`, `tbl:` or `eq:`** to be referable. `{#chart}` is accepted but `@chart` is plain text.
 - **`\@fig:a` isn't an escape**: it still becomes a reference.
 - **Front matter is flat `key: value`**: no multi-line values (`|`, `>`), no `''` escapes in single quotes; unknown
   keys are dropped silently.
@@ -28,6 +28,11 @@ preview can disagree:
   Go accepts both (the editor writes neither).
 - A 4-backtick fence closed by 3 backticks, and indented code blocks, are handled differently from Go.
 - `parseAttrs` doesn't split quoted values with spaces like Go; `width=50px` is 50 in the editor, 0 in Go.
+- Nothing checks the two agree: `scan` and `doc.Parse` are only kept in step by hand. A shared set of Markdown samples
+  (e.g. `internal/doc/testdata/numbering/*.md`), run through `doc.Parse` in a Go test and `scan` in a `bun test`
+  comparing kind, label and number per item, would catch drift. Samples must avoid the gaps above or they get fixed
+  first. Kept as two implementations because `scan` runs on every keystroke and returns the text offsets the dialogs
+  edit by; Go's model has neither.
 
 Other gaps:
 
@@ -37,8 +42,8 @@ Other gaps:
 - Inserting a divider (`---`) at offset 0 of a document with a later `---` line turns the top into front matter.
 - Dropping a `.md` file on the editor shows an error instead of opening it (only pictures are handled).
 - Menu → Find opens the search panel behind an open dialog; the cheat sheet replaces any open dialog.
-- `TemplateGallery.vue`: preview blob URLs are never revoked, and previews aren't refreshed after a custom template is
-  edited (the Go side caches by source hash, but the gallery never asks again).
+- `TemplateGallery.vue`: preview blob URLs are never revoked, and previews of saved or imported user templates aren't
+  refreshed after one is edited (they're keyed by id and loaded once; only the document's Custom template reloads).
 - ⌘S twice quickly on an untitled document queues a second Save dialog, shown if the first is canceled.
 - Backups started when switching documents run in the background and may be cut short by quitting right after.
 - `FigureDialog.vue` reference count counts `@fig:a` inside `@fig:ab` (only used in a hint).
@@ -59,8 +64,8 @@ Other gaps:
 - Links to `#anchors` are written as plain text; relative file links become external links.
 - Numbered headings number levels 1–3 only; parity with the Typst templates is unchecked.
 - Code block language is ignored (no highlighting).
-- WebP figures and size-less SVGs without `width=` are drawn full width; PNG/JPEG natural size assumes 96 dpi; JPEG
-  EXIF rotation is ignored (rotated photos may be stretched).
+- WebP figures, and SVGs with no `width`, `height` or `viewBox` and no `width=` attribute, are drawn full width;
+  PNG/JPEG natural size assumes 96 dpi; JPEG EXIF rotation is ignored (rotated photos may be stretched).
 - Without Typst, SVG and WebP images become an `[image: name]` placeholder.
 - Math is a picture, not a Word equation (not editable in Word's equation editor), drawn in Typst's default math font
   at the body size (also in footnotes); without Typst it's the LaTeX source in code style. Each formula is a separate
