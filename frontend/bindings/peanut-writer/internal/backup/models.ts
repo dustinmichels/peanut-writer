@@ -11,7 +11,7 @@ export interface Backup {
     "saved": number;
 
     /**
-     * its Markdown copy, or its Word one if it has none
+     * its Markdown copy
      */
     "path": string;
 }

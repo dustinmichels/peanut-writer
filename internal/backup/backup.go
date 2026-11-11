@@ -1,5 +1,5 @@
-// Package backup keeps timestamped copies of a document, as Markdown and as
-// a Word file, in "backups/<datetime>/" folders beside it.
+// Package backup keeps timestamped Markdown copies of a document in
+// "backups/<datetime>/" folders beside it.
 package backup
 
 import (
@@ -23,7 +23,7 @@ const stampLayout = "2006-01-02T15-04-05"
 // Backup is one backup of a document.
 type Backup struct {
 	Saved int64  `json:"saved"` // when it was made, in Unix milliseconds
-	Path  string `json:"path"`  // its Markdown copy, or its Word one if it has none
+	Path  string `json:"path"`  // its Markdown copy
 }
 
 // List returns the document's backups, newest first.
@@ -36,9 +36,6 @@ func List(docPath string) []Backup {
 			continue
 		}
 		p := file(docPath, stamp, ".md")
-		if _, err := os.Stat(p); err != nil {
-			p = file(docPath, stamp, ".docx")
-		}
 		bs = append(bs, Backup{Saved: at.UnixMilli(), Path: p})
 	}
 	return bs
@@ -55,10 +52,9 @@ func Changed(docPath, content string) bool {
 	return err != nil || !bytes.Equal(b, []byte(content))
 }
 
-// Write saves content, and word unless it's nil, as backups of the document
-// at docPath in a folder stamped with at, then removes all but its newest
-// Keep backups.
-func Write(docPath, content string, word []byte, at time.Time) error {
+// Write saves content as a backup of the document at docPath in a folder
+// stamped with at, then removes all but its newest Keep backups.
+func Write(docPath, content string, at time.Time) error {
 	stamp := at.Format(stampLayout)
 	if err := os.MkdirAll(stampDir(docPath, stamp), 0o755); err != nil {
 		return err
@@ -66,13 +62,9 @@ func Write(docPath, content string, word []byte, at time.Time) error {
 	if err := os.WriteFile(file(docPath, stamp, ".md"), []byte(content), 0o644); err != nil {
 		return err
 	}
-	if word != nil {
-		if err := os.WriteFile(file(docPath, stamp, ".docx"), word, 0o644); err != nil {
-			return err
-		}
-	}
 	stamps := list(docPath)
 	for _, old := range stamps[:max(0, len(stamps)-Keep)] {
+		// Older backups also hold a Word copy.
 		for _, ext := range []string{".md", ".docx"} {
 			if err := os.Remove(file(docPath, old, ext)); err != nil && !os.IsNotExist(err) {
 				return err
@@ -113,11 +105,8 @@ func list(docPath string) []string {
 		if !e.IsDir() || !stampRe.MatchString(e.Name()) {
 			continue
 		}
-		for _, ext := range []string{".md", ".docx"} {
-			if _, err := os.Stat(file(docPath, e.Name(), ext)); err == nil {
-				stamps = append(stamps, e.Name())
-				break
-			}
+		if _, err := os.Stat(file(docPath, e.Name(), ".md")); err == nil {
+			stamps = append(stamps, e.Name())
 		}
 	}
 	slices.Sort(stamps)

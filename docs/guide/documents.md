@@ -46,14 +46,14 @@ lists the last 10 documents you opened or saved. In the dialogs, the × beside a
 
 ## Backups
 
-A saved document is copied into a timestamped folder inside `backups/`, as both Markdown and Word:
+A saved document's Markdown is copied into a timestamped folder inside `backups/`:
 
 - when it's opened,
 - every 10 minutes,
 - and when it's closed or replaced,
 
-each time only if it changed since the last backup. The newest 10 are kept. Pictures aren't copied: the Word backup
-embeds them, but the Markdown backup's picture paths point at the document's own `images/` folder.
+each time only if it changed since the last backup. The newest 10 are kept. Pictures aren't copied: the backup's
+picture paths point at the document's own `images/` folder. For Word and PDF copies, save a [version](#versions).
 
 ## Versions
 

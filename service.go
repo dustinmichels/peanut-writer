@@ -626,9 +626,8 @@ func (s *DocService) backupLater(p string) {
 	s.backups.Go(func() { s.backup(p) })
 }
 
-// backup copies the saved file at p into a timestamped backups folder beside it, as
-// Markdown and as Word, unless it hasn't changed since its last backup. The
-// Markdown copy is kept even if the Word one can't be made.
+// backup copies the saved file at p into a timestamped backups folder beside
+// it, unless it hasn't changed since its last backup.
 func (s *DocService) backup(p string) {
 	if p == "" {
 		return
@@ -644,22 +643,8 @@ func (s *DocService) backup(p string) {
 	if !backup.Changed(p, content) {
 		return
 	}
-	d := doc.Parse(content, filepath.Dir(p))
-	tpl, err := s.templateFor(p, d.Meta.Template)
-	if err != nil {
+	if err := backup.Write(p, content, time.Now()); err != nil {
 		s.backupFailed(err)
-		return
-	}
-	word, wordErr := s.docxBytes(d, tpl)
-	if wordErr != nil {
-		word = nil
-	}
-	if err := backup.Write(p, content, word, time.Now()); err != nil {
-		s.backupFailed(err)
-		return
-	}
-	if wordErr != nil {
-		s.backupFailed(fmt.Errorf("Word copy: %w", wordErr))
 	}
 }
 

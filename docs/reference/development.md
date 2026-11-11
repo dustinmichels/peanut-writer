@@ -92,7 +92,7 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/docx`: the model → .docx, written directly (no Word or pandoc needed).
 - `internal/html`: the model → a single self-contained .html page, styled from the template's Word style.
 - `internal/templates`: built-in and user templates, and per-document customization.
-- `internal/backup`: `.md` + `.docx` backups in timestamped `backups/<datetime>/` folders.
+- `internal/backup`: `.md` backups in timestamped `backups/<datetime>/` folders.
 - `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
 - `starter/`: the welcome guide.
