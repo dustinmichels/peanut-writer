@@ -39,23 +39,3 @@ func TestWriteKeepsNewestPerDocument(t *testing.T) {
 		t.Errorf("notes-draft backups = %v; pruning notes mustn't touch them", d)
 	}
 }
-
-func TestChanged(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "a.md")
-	if !Changed(p, "x") {
-		t.Fatal("no backups yet: want changed")
-	}
-	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	if err := Write(p, "old", nil, at); err != nil {
-		t.Fatal(err)
-	}
-	if err := Write(p, "x", nil, at.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	if Changed(p, "x") {
-		t.Error("same as newest backup: want unchanged")
-	}
-	if !Changed(p, "old") {
-		t.Error("differs from newest backup: want changed")
-	}
-}

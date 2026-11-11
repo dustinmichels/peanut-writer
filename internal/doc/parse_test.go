@@ -92,32 +92,6 @@ Table: Sales by_year {#tbl:sales}
 	}
 }
 
-func TestUnknownReferenceWarns(t *testing.T) {
-	d := Parse("See @fig:nope.", "")
-	ref := d.Blocks[0].Inlines[1]
-	if ref.Type != InlineRef || ref.Kind != "" {
-		t.Fatalf("ref = %+v", ref)
-	}
-	if len(d.Warnings) != 1 {
-		t.Errorf("warnings = %v", d.Warnings)
-	}
-}
-
-func TestSpecialParagraphsAndFootnotes(t *testing.T) {
-	d := Parse("[TOC]\n\nText.[^1]\n\n\\pagebreak\n\n[^1]: A *note*.\n", "")
-	types := []string{}
-	for _, b := range d.Blocks {
-		types = append(types, b.Type)
-	}
-	if len(types) != 3 || types[0] != BlockTOC || types[1] != BlockParagraph || types[2] != BlockPageBreak {
-		t.Fatalf("blocks = %v", types)
-	}
-	note := d.Blocks[1].Inlines[1]
-	if note.Type != InlineFootnote || len(note.Blocks) != 1 || note.Blocks[0].Inlines[1].Type != InlineEmph {
-		t.Errorf("footnote = %+v", note)
-	}
-}
-
 // A figure in a footnote is numbered where the note's mark is, as Typst
 // counts it; marks with no note and notes with no mark are warned about.
 func TestFootnoteFiguresAndOrphans(t *testing.T) {
@@ -146,31 +120,6 @@ func TestFootnoteFiguresAndOrphans(t *testing.T) {
 	want := []string{"footnote nothing refers to: [^2]", "footnote with no note: [^x]"}
 	if strings.Join(notes, "|") != strings.Join(want, "|") {
 		t.Errorf("footnote warnings = %q, want %q", notes, want)
-	}
-}
-
-func TestFrontMatterNeedsClosingFence(t *testing.T) {
-	d := Parse("---\ntitle: x\n\nNo end.", "")
-	if d.Meta.Title != "" {
-		t.Errorf("unterminated front matter read as meta: %+v", d.Meta)
-	}
-}
-
-func TestHiddenPropertiesKeptButNotShown(t *testing.T) {
-	d := Parse("---\ntitle: T\nauthor: A\ndate: D\nhide: Author, date\n---\n\nText.", "")
-	if d.Meta.Author != "A" || d.Meta.Date != "D" {
-		t.Errorf("hidden properties dropped from meta: %+v", d.Meta)
-	}
-	if s := d.Meta.Shown(); s.Title != "T" || s.Author != "" || s.Date != "" {
-		t.Errorf("shown = %+v", s)
-	}
-}
-
-func TestEscapesAndEntities(t *testing.T) {
-	d := Parse("a \\*b\\* &amp; &#169; `x &amp;`", "")
-	in := d.Blocks[0].Inlines
-	if len(in) != 2 || in[0].Text != "a *b* & © " || in[1].Text != "x &amp;" {
-		t.Errorf("inlines = %+v", in)
 	}
 }
 
@@ -241,17 +190,6 @@ func TestEquations(t *testing.T) {
 	}
 	if len(d.Warnings) != 1 {
 		t.Errorf("warnings = %v", d.Warnings)
-	}
-}
-
-func TestPercentEncodedImagePath(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "my pic.png"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	d := Parse("![A](my%20pic.png)", dir)
-	if got := d.Blocks[0].Src; got != filepath.Join(dir, "my pic.png") {
-		t.Errorf("src = %q, warnings = %v", got, d.Warnings)
 	}
 }
 

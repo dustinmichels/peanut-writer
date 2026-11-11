@@ -160,27 +160,14 @@ func TestUnreadableMathFallsBack(t *testing.T) {
 	}
 }
 
-// An empty heading (`#` just typed) has no inlines in doc.json.
-func TestEmptyHeadingRenders(t *testing.T) {
+// Half-typed Markdown (`#` or `$$` just typed) has empty headings and math
+// in doc.json; the preview must still render.
+func TestHalfTypedRenders(t *testing.T) {
 	ty, err := Find()
 	if err != nil {
 		t.Skip(err)
 	}
-	for _, src := range []string{"#", "## ", "- #", "> #"} {
-		d := doc.Parse(src, t.TempDir())
-		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
-			t.Errorf("%q: %v", src, err)
-		}
-	}
-}
-
-// Empty math (`$$` just typed opens an equation) has no text in doc.json.
-func TestEmptyMathRenders(t *testing.T) {
-	ty, err := Find()
-	if err != nil {
-		t.Skip(err)
-	}
-	for _, src := range []string{"$$", "$$\n$$ {#eq:a}", "a $$$$ b"} {
+	for _, src := range []string{"#", "## ", "- #", "> #", "$$", "$$\n$$ {#eq:a}", "a $$$$ b"} {
 		d := doc.Parse(src, t.TempDir())
 		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
 			t.Errorf("%q: %v", src, err)

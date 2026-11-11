@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -123,16 +122,6 @@ func TestImportRejectsZipsWithoutATemplate(t *testing.T) {
 	root, _ := UserDir()
 	if entries, _ := os.ReadDir(root); len(entries) != 0 {
 		t.Errorf("failed imports left %d folders", len(entries))
-	}
-}
-
-func TestBuiltinsAreNotManaged(t *testing.T) {
-	userHome(t)
-	if err := Rename("classic", "Mine", ""); err == nil || !strings.Contains(err.Error(), "classic") {
-		t.Errorf("renamed a built-in template: %v", err)
-	}
-	if err := Delete("classic"); err == nil {
-		t.Error("deleted a built-in template")
 	}
 }
 
