@@ -23,11 +23,13 @@ import { refCompletions } from "./completion";
 import { decorations, lineStyles } from "./decorations";
 import {
   bodyHint,
+  equationsField,
   footnotesField,
   frontMatterEnd,
   itemsField,
   showMarkdown,
   startSelection,
+  typedEquation,
 } from "./fields";
 import { followFootnotes, followLabels, guardProperties } from "./filters";
 import { focusField, focusGuard, focusKeymap } from "./focus";
@@ -58,6 +60,8 @@ export function createEditor(
 
   const extensions: Extension[] = [
     itemsField,
+    equationsField,
+    typedEquation,
     footnotesField,
     frontMatterEnd,
     history(),

@@ -3,6 +3,7 @@
 // over it.
 import FigureDialog from "./FigureDialog.vue";
 import TableDialog from "./TableDialog.vue";
+import EquationDialog from "./EquationDialog.vue";
 import PasteTableDialog from "./PasteTableDialog.vue";
 import CrossRefDialog from "./CrossRefDialog.vue";
 import LinkDialog from "./LinkDialog.vue";
@@ -32,7 +33,7 @@ function closeCheatSheet() {
 </script>
 
 <template>
-  <!-- Keyed by item so a new figure or table gets a fresh dialog. -->
+  <!-- Keyed by item so a new figure, table or equation gets a fresh dialog. -->
   <template v-if="state.dialog">
     <FigureDialog
       v-if="state.dialog.kind === 'figure'"
@@ -47,6 +48,14 @@ function closeCheatSheet() {
       :cols="state.dialog.cols"
       :rows="state.dialog.rows"
       :table="state.dialog.table"
+      @close="close"
+    />
+    <EquationDialog
+      v-else-if="state.dialog.kind === 'equation'"
+      :key="state.dialog.eq?.from ?? -1"
+      :eq="state.dialog.eq"
+      :tex="state.dialog.tex"
+      :replace="state.dialog.replace"
       @close="close"
     />
     <PasteTableDialog v-else-if="state.dialog.kind === 'pasteTable'" @close="close" />

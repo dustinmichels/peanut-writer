@@ -10,12 +10,14 @@ import type { Heading } from "@bindings/peanut-writer/internal/doc/models";
 import type { Version } from "@bindings/peanut-writer/internal/versions/models";
 import type { Backup } from "@bindings/peanut-writer/internal/backup/models";
 import type { BlockStyle, Mark } from "@/lib/editor";
-import type { Item, RefAt, Table } from "@/lib/markdown";
+import type { DisplayEquation, Item, RefAt, Table } from "@/lib/markdown";
 import type { Toast } from "./toasts";
 
 export type Dialog =
   | { kind: "figure"; item: Item }
   | { kind: "table"; item?: Item; cols?: number; rows?: number; table?: Table }
+  // An equation to edit, or (none) a new one, maybe of the lines in replace.
+  | { kind: "equation"; eq?: DisplayEquation; tex?: string; replace?: { from: number; to: number } }
   | { kind: "pasteTable" }
   | { kind: "crossref"; at?: RefAt }
   | { kind: "link"; text: string }

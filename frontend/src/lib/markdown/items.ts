@@ -304,3 +304,33 @@ export function captionMarkdown(caption: string, label: string): string {
     ": {",
   );
 }
+
+// A display equation at the top level of the document, which the editor
+// shows as a block: its TeX, and its label (`eq:` ones only, as internal/doc
+// reads them).
+export interface DisplayEquation {
+  from: number; // its opening `$$` line
+  to: number; // the end of its closing `$$` line
+  tex: string;
+  label: string;
+}
+
+// displayEquations finds the closed display equations outside lists, quotes
+// and footnotes, labelled or not.
+export function displayEquations(text: string): DisplayEquation[] {
+  const out: DisplayEquation[] = [];
+  if (!text.includes("$$")) return out;
+  const root = readBlocks(text, readFrontMatter(text).to);
+  for (const b of root.children) {
+    if (b.type !== "equation" || !b.closed) continue;
+    const id = parseAttrs(b.attrs || undefined).id;
+    out.push({ from: b.from, to: b.to, tex: b.tex.trim(), label: id.startsWith("eq:") ? id : "" });
+  }
+  return out;
+}
+
+// equationMarkdown writes a display equation on lines of its own, its label
+// after the closing `$$`.
+export function equationMarkdown(tex: string, label: string): string {
+  return `$$\n${tex.trim()}\n$$${label ? ` {#${label}}` : ""}`;
+}

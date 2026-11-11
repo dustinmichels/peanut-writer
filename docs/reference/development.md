@@ -97,7 +97,7 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
 - `starter/`: the welcome guide.
 - `frontend/`: the editor. Under `src/`:
-  - `lib/editor/`: CodeMirror, with the figure, table, reference and properties widgets in `widgets/`.
+  - `lib/editor/`: CodeMirror, with the figure, table, equation, reference and properties widgets in `widgets/`.
   - `lib/markdown/`: reading and writing the Markdown (front matter, figures, tables, footnotes, numbering).
   - `lib/actions/`: what the menus, ribbon and dialogs do; `lib/store/`: shared state, toasts, preview rendering.
   - `components/`: `layout/`, `ribbon/` (a component per tab), `panes/`, `dialogs/` and shared `ui/` pieces;

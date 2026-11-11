@@ -1,5 +1,5 @@
 // Editing commands for the ribbon and the keyboard: inline styles, block
-// styles, lists, code blocks, and inserting blocks, footnotes and equations.
+// styles, lists, code blocks, and inserting blocks, footnotes and inline math.
 
 import { syntaxTree } from "@codemirror/language";
 import { ChangeSet, EditorSelection, EditorState, type Line } from "@codemirror/state";
@@ -360,28 +360,22 @@ function addNote(view: EditorView, label: string, pos: number, mark: boolean, te
   view.focus();
 }
 
-// insertEquation wraps text selected within a line as inline math ($…$), or
-// else puts a display equation on lines of its own, the cursor between its
-// `$$` lines (and the selected lines there, if any).
-export function insertEquation(view: EditorView) {
+// inlineMath wraps text selected within a line as math ($…$), and tells
+// whether it did: with no such selection, nothing happens.
+export function inlineMath(view: EditorView): boolean {
   const { from, to } = view.state.selection.main;
   const doc = view.state.doc;
   const text = doc.sliceString(from, to);
   const tex = text.trim();
-  if (tex && doc.lineAt(from).number === doc.lineAt(to).number) {
-    // Math can't start or end with a space: keep any outside the dollars.
-    const lead = text.indexOf(tex);
-    const start = from + lead + 1;
-    view.dispatch({
-      changes: { from: from + lead, to: from + lead + tex.length, insert: `$${tex}$` },
-      selection: { anchor: start, head: start + tex.length },
-      userEvent: "input",
-    });
-    view.focus();
-    return;
-  }
-  insertBlock(view, `$$\n${tex}\n$$`, {
-    replace: tex ? { from, to } : undefined,
-    cursorOffset: 3 + tex.length,
+  if (!tex || doc.lineAt(from).number !== doc.lineAt(to).number) return false;
+  // Math can't start or end with a space: keep any outside the dollars.
+  const lead = text.indexOf(tex);
+  const start = from + lead + 1;
+  view.dispatch({
+    changes: { from: from + lead, to: from + lead + tex.length, insert: `$${tex}$` },
+    selection: { anchor: start, head: start + tex.length },
+    userEvent: "input",
   });
+  view.focus();
+  return true;
 }

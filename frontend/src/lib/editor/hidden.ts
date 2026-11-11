@@ -19,7 +19,7 @@ import {
   WidgetType,
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { fenceRe, frontMatterEnd, itemsField, showMarkdown } from "./fields";
+import { fenceRe, frontMatterEnd, itemsField, showMarkdown, shownEquations } from "./fields";
 import { BulletWidget, FenceWidget, HeadingMarkWidget, RuleWidget } from "./widgets/marks";
 import { tocRe } from "./widgets/toc";
 
@@ -86,14 +86,17 @@ function deadLine(state: EditorState, line: Line): "block" | "fence" | null {
   return null;
 }
 
-// covered tells whether pos is in the front matter or a figure or table
-// shown as a widget, which stands in for its Markdown whole.
+// covered tells whether pos is in the front matter or a figure, table or
+// display equation shown as a widget, which stands in for its Markdown whole.
 function covered(state: EditorState, pos: number): boolean {
   return (
     pos < state.field(frontMatterEnd) ||
     state
       .field(itemsField)
-      .some((x) => x.kind !== "equation" && x.prefix === undefined && pos >= x.from && pos <= x.to)
+      .some(
+        (x) => x.kind !== "equation" && x.prefix === undefined && pos >= x.from && pos <= x.to,
+      ) ||
+    shownEquations(state).some((x) => pos >= x.from && pos <= x.to)
   );
 }
 

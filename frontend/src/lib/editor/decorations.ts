@@ -1,5 +1,6 @@
 // The decorations standing in for Markdown: the properties card, figures,
-// tables, cross-references and footnotes, and the block styles of lines.
+// tables, equations, cross-references and footnotes, and the block styles of
+// lines.
 
 import { syntaxTree } from "@codemirror/language";
 import {
@@ -23,8 +24,17 @@ import {
   parseTable,
   readFrontMatter,
 } from "@/lib/markdown";
-import { crossRefs, footnotesField, frontMatterEnd, itemsField, showMarkdown } from "./fields";
+import {
+  crossRefs,
+  footnotesField,
+  frontMatterEnd,
+  itemsField,
+  showMarkdown,
+  shownEquations,
+  typedEquation,
+} from "./fields";
 import type { Handlers } from "./types";
+import { EquationWidget } from "./widgets/equation";
 import { FigureWidget } from "./widgets/figure";
 import { FootnoteMarkWidget, NoteHeadWidget } from "./widgets/footnotes";
 import { PropertiesCard } from "./widgets/properties";
@@ -90,10 +100,10 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     });
   }
 
-  // Figures and tables replace their Markdown; nothing else is decorated
-  // inside them. Equations stay as their TeX, and figures and tables in lists
-  // and quotes as their Markdown.
-  const hidden: Item[] = [];
+  // Figures, tables and display equations replace their Markdown; nothing
+  // else is decorated inside them. Those in lists and quotes stay as their
+  // Markdown.
+  const hidden: { from: number; to: number }[] = [];
   for (const it of items) {
     if (it.kind === "equation" || it.prefix !== undefined) continue;
     hidden.push(it);
@@ -116,6 +126,16 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
         atomic: true,
       });
     }
+  }
+  for (const eq of shownEquations(state)) {
+    hidden.push(eq);
+    const n = items.find((x) => x.kind === "equation" && x.from === eq.from)?.number ?? 0;
+    ranges.push({
+      from: eq.from,
+      to: eq.to,
+      deco: Decoration.replace({ widget: new EquationWidget(eq, n, handlers), block: true }),
+      atomic: true,
+    });
   }
   for (const t of tocBlocks(state)) {
     if (t.from < fm.to) continue;
@@ -206,6 +226,7 @@ export function decorations(handlers: Handlers): Extension {
     update: (d, tr: Transaction) =>
       tr.docChanged ||
       syntaxTree(tr.state) !== syntaxTree(tr.startState) ||
+      tr.state.field(typedEquation) !== tr.startState.field(typedEquation) ||
       tr.state.facet(showMarkdown) !== tr.startState.facet(showMarkdown)
         ? buildDecorations(tr.state, handlers)
         : d,

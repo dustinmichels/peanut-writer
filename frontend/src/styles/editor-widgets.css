@@ -8,8 +8,36 @@
 .pw-figure-block {
   padding: 4px 0 14px;
 }
-.pw-table {
+.pw-table,
+.pw-equation {
   padding: 10px 0 14px;
+}
+/* A display equation: drawn, centered, its number at the right; its TeX
+   until it's drawn, or when it can't be. */
+.pw-equation-body {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 36px;
+  padding: 10px 48px 4px;
+}
+.pw-equation-body img {
+  display: block;
+  max-width: 100%;
+}
+.pw-equation-tex {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  white-space: pre-wrap;
+  color: var(--quote);
+}
+.pw-equation-body.unreadable .pw-equation-tex {
+  color: var(--danger);
+}
+.pw-equation-number {
+  position: absolute;
+  right: 8px;
 }
 .pw-toc-block {
   padding: 4px 0 10px;
@@ -106,6 +134,7 @@
 }
 .pw-figure.moving,
 .pw-table.moving,
+.pw-equation.moving,
 .pw-tablebar.moving {
   opacity: 0.45;
 }

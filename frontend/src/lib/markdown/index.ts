@@ -15,6 +15,9 @@ export {
 export { type Meta, readFrontMatter, writeFrontMatter } from "./frontMatter";
 export {
   captionMarkdown,
+  type DisplayEquation,
+  displayEquations,
+  equationMarkdown,
   type FigureSpec,
   figureMarkdown,
   figureSpec,

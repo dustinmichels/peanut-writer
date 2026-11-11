@@ -2,11 +2,12 @@
 // find, and word of each change.
 
 import { EditorState } from "@codemirror/state";
-import type { Item, RefAt } from "@/lib/markdown";
+import type { DisplayEquation, Item, RefAt } from "@/lib/markdown";
 
 export interface Handlers {
   editFigure(item: Item): void;
   editTable(item: Item): void;
+  editEquation(eq: DisplayEquation): void;
   editProperties(): void;
   editRef(at: RefAt): void;
   // A footnote mark was clicked: open its note to edit (or write, if none).
@@ -14,5 +15,7 @@ export interface Handlers {
   // Dropped files arrive through Wails (see EditorPane), not DOM drop events.
   pasteImages(files: File[], pos: number): void;
   imageURL(src: string): Promise<string>;
+  // A display equation drawn, as a data URL; "" when it can't be.
+  equationURL(tex: string): Promise<string>;
   changed(state: EditorState, docChanged: boolean): void;
 }

@@ -12,6 +12,7 @@ export {
   openWelcome,
   showRecent,
 } from "./documents";
+export { applyEquation, equationURL, newEquation } from "./equations";
 export {
   exportDocx,
   exportHtml,

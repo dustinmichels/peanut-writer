@@ -87,6 +87,10 @@ $$ {#eq:euler}
 
 - Only named equations are numbered. A name must start `eq:`.
 - A short equation can be one line: `$$ E = mc^2 $$`.
+- In the editor an equation on lines of its own is a block drawn as it will print: **Edit equation** (or a double
+  click) opens its LaTeX and name, and its grip (⠿) moves it. **Insert → Equation** asks for a new one; with text
+  selected in a line, it makes that text math in the sentence instead. One being typed stays as its Markdown until
+  the cursor leaves it.
 - Dollar signs in ordinary text stay as they are: math must start right after its `$` (no space) and end right before
   a `$` that isn't followed by a digit, with no other `$` in between. So "$5 or $10" and "from $5–$10" are text. To be
   sure, write `\$`.

@@ -19,8 +19,14 @@ import {
 import RibbonButton from "./RibbonButton.vue";
 import TableGridPicker from "./TableGridPicker.vue";
 import { withView } from "./withView";
-import { choosePicture, choosePictureGrid, editLink, newFootnote } from "@/lib/actions";
-import { insertBlock, insertDivider, insertEquation, toggleCodeBlock } from "@/lib/editor";
+import {
+  choosePicture,
+  choosePictureGrid,
+  editLink,
+  newEquation,
+  newFootnote,
+} from "@/lib/actions";
+import { insertBlock, insertDivider, toggleCodeBlock } from "@/lib/editor";
 import { state } from "@/lib/store";
 
 const tablePicker = ref(false);
@@ -77,7 +83,7 @@ function pickTable(cols: number, rows: number) {
         :icon="Sigma"
         label="Equation"
         title="Insert an equation (selected text becomes inline math)"
-        @click="withView(insertEquation)"
+        @click="newEquation"
       />
     </div>
     <label>Text</label>

@@ -114,6 +114,15 @@ export function EditTemplate(id: string): $CancellablePromise<void> {
 }
 
 /**
+ * Equations draws display equations for the editor to show, each as an SVG
+ * data URL in texs' order: "" for one that can't be drawn, and for all of them
+ * when Typst can't run.
+ */
+export function Equations(texs: string[] | null): $CancellablePromise<string[] | null> {
+    return $Call.ByID(2143077366, texs);
+}
+
+/**
  * ExportDOCX asks where to save a Word document and writes it; returns the
  * path, or "" if the user canceled.
  */

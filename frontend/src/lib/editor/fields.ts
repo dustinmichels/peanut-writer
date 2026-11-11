@@ -6,12 +6,47 @@ import { syntaxTree } from "@codemirror/language";
 import { EditorState, Facet, StateField } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import type { SyntaxNode, Tree } from "@lezer/common";
-import { type Footnotes, type Item, readFrontMatter, scan, scanFootnotes } from "@/lib/markdown";
+import {
+  type DisplayEquation,
+  displayEquations,
+  type Footnotes,
+  type Item,
+  readFrontMatter,
+  scan,
+  scanFootnotes,
+} from "@/lib/markdown";
 
 export const itemsField = StateField.define<Item[]>({
   create: (s) => scan(s.doc.toString()),
   update: (items, tr) => (tr.docChanged ? scan(tr.state.doc.toString()) : items),
 });
+
+// The display equations at the top level.
+export const equationsField = StateField.define<DisplayEquation[]>({
+  create: (s) => displayEquations(s.doc.toString()),
+  update: (eqs, tr) => (tr.docChanged ? displayEquations(tr.state.doc.toString()) : eqs),
+});
+
+// The start of the display equation being typed, -1 for none. Typing its
+// closing `$$` would otherwise turn it into a block under the cursor, before
+// its label is typed; it stays as its Markdown until the cursor leaves it.
+export const typedEquation = StateField.define<number>({
+  create: () => -1,
+  update(at, tr) {
+    const head = tr.state.selection.main.head;
+    const eq = tr.state.field(equationsField).find((x) => head > x.from && head <= x.to);
+    if (!eq) return -1;
+    const held = at >= 0 && tr.changes.mapPos(at) === eq.from;
+    return held || tr.isUserEvent("input.type") ? eq.from : -1;
+  },
+});
+
+// shownEquations are the display equations shown as blocks: all but the one
+// being typed.
+export function shownEquations(state: EditorState): DisplayEquation[] {
+  const typed = state.field(typedEquation);
+  return state.field(equationsField).filter((x) => x.from !== typed);
+}
 
 // Where the front matter ends (0 without one).
 export const frontMatterEnd = StateField.define<number>({

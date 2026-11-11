@@ -2,10 +2,15 @@
 
 ## 2026-11-11
 
+- **Equations are blocks** in the editor, like figures and tables: drawn by Typst, numbered when named, moved by their
+  grip, and edited (LaTeX and reference name, with a live drawing and buttons for fractions, roots, sums, Greek
+  letters and symbols) in a dialog from **Edit equation** or a double click. **Insert → Equation** opens that dialog
+  for a new one; selected text in a line still becomes inline math.
 - Command palette: **Toggle Focus on Section** (View), dimmed while the document has no headings.
 - View ribbon: the Markdown toggle gets its own **Markdown** group; Outline, Preview and Versions sit under **Panes**.
   **Restore Defaults** (also in the command palette) hides the Markdown and versions, shows the outline and preview
   at an even split, leaves section focus and fits the preview's zoom.
+- **Auto format** on save is on by default.
 
 ## 2026-11-10
 

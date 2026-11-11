@@ -109,7 +109,7 @@ export async function formatAndSave(): Promise<boolean> {
 // defaultSettings is what a setting neither the document nor the user sets
 // comes to.
 export const defaultSettings = {
-  autoFormat: false,
+  autoFormat: true,
   headingCase: "none",
   peanut: true,
   syncOnSave: false,

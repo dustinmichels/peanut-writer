@@ -888,6 +888,30 @@ func (s *DocService) ImageURL(ref string) string {
 	return "data:" + typ + ";base64," + base64.StdEncoding.EncodeToString(b)
 }
 
+// equationPt is the text size the editor's equations are drawn at.
+const equationPt = 13
+
+// Equations draws display equations for the editor to show, each as an SVG
+// data URL in texs' order: "" for one that can't be drawn, and for all of them
+// when Typst can't run.
+func (s *DocService) Equations(texs []string) []string {
+	out := make([]string, len(texs))
+	if s.typstErr != nil || len(texs) == 0 {
+		return out
+	}
+	ms := make([]doc.Math, len(texs))
+	for i, tex := range texs {
+		ms[i] = doc.Math{TeX: tex, Display: true}
+	}
+	pics, _ := s.typst.Equations(context.Background(), ms, equationPt, "svg")
+	for i, p := range pics {
+		if p != nil {
+			out[i] = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(p)
+		}
+	}
+	return out
+}
+
 // --- Rendering and export ----------------------------------------------------
 
 // Render renders the document for the preview. A newer call cancels an

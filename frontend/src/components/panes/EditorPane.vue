@@ -5,6 +5,7 @@ import { DocService } from "@bindings/peanut-writer";
 import { X } from "lucide-vue-next";
 import {
   contentChanged,
+  equationURL,
   insertImageFiles,
   insertImages,
   openRecent,
@@ -44,11 +45,13 @@ onMounted(() => {
     {
       editFigure: (item) => (state.dialog = { kind: "figure", item }),
       editTable: (item) => (state.dialog = { kind: "table", item }),
+      editEquation: (eq) => (state.dialog = { kind: "equation", eq }),
       editProperties: () => (state.dialog = { kind: "properties" }),
       editRef: (at) => (state.dialog = { kind: "crossref", at }),
       editNote: (label) => (state.dialog = { kind: "footnote", label }),
       pasteImages: insertImages,
       imageURL: (src) => DocService.ImageURL(src),
+      equationURL,
       changed(s, docChanged) {
         if (docChanged) contentChanged(s.doc.toString());
         state.marks = activeMarks(s);
