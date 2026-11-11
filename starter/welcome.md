@@ -40,11 +40,9 @@ Drag an image onto the editor, paste one, or use **Insert → Picture**. Give it
 
 ![Peanut, the mascot, ready to help.](images/peanut.svg){#fig:peanut width=28%}
 
-Charts are just pictures too. @fig:harvest is set to 70% of the text width; @fig:fields is a little narrower.
+Charts are just pictures too. @fig:harvest is set to 70% of the text width.
 
 ![Peanut harvest, by quarter.](images/chart.svg){#fig:harvest width=70%}
-
-![The fields where the peanuts grow.](images/landscape.svg){#fig:fields width=60%}
 
 ## Picture grids
 

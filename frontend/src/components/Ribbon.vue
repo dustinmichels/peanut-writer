@@ -582,7 +582,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
               big
               :icon="FileClock"
               label="All Versions"
-              title="List every named version beside the editor"
+              title="List every named version and backup beside the editor"
               :active="state.versionsOpen"
               @click="toggleVersions"
             />

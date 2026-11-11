@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { FolderSearch, PanelLeftClose, RotateCcw } from "lucide-vue-next";
 import { DocService } from "../../bindings/peanut-writer";
-import { loadVersion, saveVersion, toggleVersions } from "../lib/actions";
+import { loadBackup, loadVersion, saveVersion, toggleVersions } from "../lib/actions";
 import { state } from "../lib/store";
 
 const name = ref("");
@@ -40,30 +40,49 @@ const when = (ms: number) =>
         {{ busy ? "Saving…" : "Save Version" }}
       </button>
     </form>
-    <ul v-if="state.versions.length">
-      <li v-for="v in state.versions" :key="v.name">
-        <div class="info" :title="v.name">
-          <span class="name">{{ v.name }}</span>
-          <span class="when">{{ when(v.saved) }}</span>
-        </div>
-        <button title="Open this version" @click="loadVersion(v.name)">
-          <RotateCcw :size="14" />
-        </button>
-        <button
-          title="Show its Markdown, Word and PDF in Finder"
-          @click="DocService.Reveal(v.path)"
-        >
-          <FolderSearch :size="14" />
-        </button>
-      </li>
-    </ul>
-    <p v-else class="empty">
-      {{
-        state.path
-          ? "Name the document as it is now to keep it, with Word and PDF copies, and come back to it later."
-          : "Saving a version saves the document first."
-      }}
-    </p>
+    <div class="list">
+      <ul v-if="state.versions.length">
+        <li v-for="v in state.versions" :key="v.name">
+          <div class="info" :title="v.name">
+            <span class="name">{{ v.name }}</span>
+            <span class="when">{{ when(v.saved) }}</span>
+          </div>
+          <button title="Open this version" @click="loadVersion(v.name)">
+            <RotateCcw :size="14" />
+          </button>
+          <button
+            title="Show its Markdown, Word and PDF in Finder"
+            @click="DocService.Reveal(v.path)"
+          >
+            <FolderSearch :size="14" />
+          </button>
+        </li>
+      </ul>
+      <p v-else class="empty">
+        {{
+          state.path
+            ? "Name the document as it is now to keep it, with Word and PDF copies, and come back to it later."
+            : "Saving a version saves the document first."
+        }}
+      </p>
+      <template v-if="state.backups.length">
+        <hr />
+        <ul>
+          <li v-for="b in state.backups" :key="b.path">
+            <div class="info">
+              <span class="name">{{ when(b.saved) }}</span>
+              <span class="when">Auto backup</span>
+            </div>
+            <button title="Open this backup" @click="loadBackup(b.path)">
+              <RotateCcw :size="14" />
+            </button>
+            <button title="Show it in Finder" @click="DocService.Reveal(b.path)">
+              <FolderSearch :size="14" />
+            </button>
+          </li>
+        </ul>
+      </template>
+    </div>
   </aside>
 </template>
 
@@ -130,12 +149,20 @@ form button {
 form button:disabled {
   opacity: 0.5;
 }
-ul {
+.list {
   flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+ul {
   margin: 0;
   padding: 6px 0;
-  overflow: auto;
   list-style: none;
+}
+hr {
+  margin: 4px 10px;
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 li {
   display: flex;
