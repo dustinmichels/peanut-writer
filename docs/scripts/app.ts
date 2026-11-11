@@ -26,8 +26,11 @@ async function freePort(): Promise<number> {
 }
 
 // startApp runs the server-mode app in a throwaway home folder, resolving once
-// it answers.
-export async function startApp(): Promise<App> {
+// it answers. prepare may put files in that home (and the app's config folder
+// in it) before the app starts.
+export async function startApp(
+  prepare?: (home: string, config: string) => Promise<void>,
+): Promise<App> {
   if (!(await Bun.file(server).exists())) {
     console.error(`${server} is missing; build it with \`wails3 task build:server\``);
     process.exit(1);
@@ -42,6 +45,7 @@ export async function startApp(): Promise<App> {
     join(config, "Peanut Writer/settings.json"),
     JSON.stringify({ author: "Peanut" }),
   );
+  await prepare?.(home, join(config, "Peanut Writer"));
   const port = await freePort();
   const app = spawn(server, [], {
     env: {

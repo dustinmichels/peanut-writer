@@ -1,7 +1,8 @@
 // A narrated-by-captions demo video of the app, with an original soundtrack,
-// written to demo/peanut-writer-demo.mp4 (see demo/README.md).
+// written to demo/<name>.mp4 (see demo/README.md).
 //
-//   mise run docs:demo
+//   mise run docs:demo                 # demo/peanut-writer-demo.mp4
+//   mise run docs:demo -- <name>       # demo/<name>.mp4, leaving that one be
 //
 // Runs the app in Wails server mode (see app.ts) and drives it in WebKit like a
 // person would: a drawn cursor glides to each button, text is typed at a human
@@ -12,19 +13,21 @@
 
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { webkit, type Locator, type Page } from "playwright";
+import { webkit, type Locator, type Page, type Route } from "playwright";
 import { root, startApp } from "./app";
 
 const outDir = join(root, "demo");
 const framesDir = join(outDir, "frames");
-const video = join(outDir, "peanut-writer-demo.mp4");
+const name = process.argv[2] ?? "peanut-writer-demo";
+const video = join(outDir, `${name}.mp4`);
+const music = join(outDir, `${name}-soundtrack.wav`);
 
 // 1536×864 CSS pixels at 1.25× is 1920×1080: 16:9, and close to the app's
 // default 1440×900 window.
 const viewport = { width: 1536, height: 864 };
 const deviceScaleFactor = 1.25;
 
-// ─── Overlay: cursor, captions, keycaps, title cards and zoom ───────────────
+// ─── Overlay: cursor, captions, keycaps, spreadsheet, cards and zoom ────────
 
 // Lives outside #app so zooming the app doesn't move it.
 const overlayCss = `
@@ -67,6 +70,34 @@ const overlayCss = `
 #demo-card .small { font-size: 19px; color: #8a7663; margin-top: 30px; line-height: 1.7; }
 #demo-card code { font-family: var(--mono); font-size: 18px; background: #f6e3cc; color: #8b5528;
   padding: 4px 10px; border-radius: 8px; }
+#demo-key { position: absolute; left: 50%; bottom: 150px; display: flex; gap: 10px; opacity: 0;
+  transform: translate(-50%, 14px) scale(.92); transition: opacity 250ms, transform 300ms cubic-bezier(.2,.8,.2,1); }
+#demo-key.on { opacity: 1; transform: translate(-50%, 0); }
+#demo-key kbd { font: 650 30px/1 var(--ui); min-width: 30px; padding: 12px 16px 14px; text-align: center;
+  color: #2b2118; background: #fffdf9; border: 1px solid #d8c8b4; border-bottom-width: 4px; border-radius: 12px;
+  box-shadow: 0 14px 30px -10px rgba(43,33,24,.45); }
+/* A stand-in spreadsheet window to copy cells from. */
+#demo-sheet { position: absolute; right: 64px; top: 190px; width: 660px; border-radius: 12px; overflow: hidden;
+  background: #fff; color: #202124; font-family: -apple-system, "Helvetica Neue", sans-serif;
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.1);
+  opacity: 0; transform: translateX(90px); transition: opacity 500ms, transform 650ms cubic-bezier(.2,.8,.2,1); }
+#demo-sheet.on { opacity: 1; transform: none; }
+#demo-sheet .bar { display: flex; align-items: center; gap: 12px; padding: 11px 14px; font-size: 14px;
+  background: #f1f3f4; color: #3c4043; border-bottom: 1px solid #dadce0; }
+#demo-sheet .dots { display: flex; gap: 7px; margin-right: 6px; }
+#demo-sheet .dots i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; }
+#demo-sheet .dots i + i { background: #febc2e; }
+#demo-sheet .dots i + i + i { background: #28c840; }
+#demo-sheet .icon { width: 16px; height: 20px; border-radius: 3px; background: #1e8e3e; }
+#demo-sheet table { border-collapse: collapse; width: 100%; table-layout: fixed; font-size: 15px; }
+#demo-sheet th { height: 24px; font-size: 12px; font-weight: 500; color: #5f6368; background: #f8f9fa;
+  border: 1px solid #e0e3e7; }
+#demo-sheet th:first-child { width: 42px; }
+#demo-sheet td { height: 36px; padding: 0 10px; border: 1px solid #e0e3e7; white-space: nowrap; overflow: hidden;
+  transition: background 120ms; }
+#demo-sheet tr:nth-child(2) td { font-weight: 600; }
+#demo-sheet td.sel { background: #e8f0fe; }
+#demo-sheet.copied td.sel { box-shadow: inset 0 0 0 1px #1a73e8; }
 `;
 
 const cursorSvg = `<svg width="28" height="28" viewBox="0 0 28 28"><path d="M4 2.5 L4 22 L9.2 17.4 L12.6 25.2
@@ -84,7 +115,7 @@ class Demo {
       const layer = document.createElement("div");
       layer.id = "demo";
       layer.innerHTML = `<div id="demo-card"></div><div id="demo-caption"></div>
-        <div id="demo-cursor">${cursor}</div>`;
+        <div id="demo-sheet"></div><div id="demo-key"></div><div id="demo-cursor">${cursor}</div>`;
       document.documentElement.append(layer);
     }, cursorSvg);
   }
@@ -127,6 +158,69 @@ class Demo {
   async hideCard() {
     await this.page.evaluate(() => document.getElementById("demo-card")!.classList.remove("on"));
     await this.wait(900);
+  }
+
+  // keys shows a keyboard shortcut for a moment, for keys pressed off screen.
+  async keys(...keys: string[]) {
+    await this.page.evaluate((keys) => {
+      const k = document.getElementById("demo-key")!;
+      k.innerHTML = keys.map((c) => `<kbd>${c}</kbd>`).join("");
+      k.classList.add("on");
+      setTimeout(() => k.classList.remove("on"), 1300);
+    }, keys);
+    await this.wait(400);
+  }
+
+  // sheet slides in a spreadsheet window holding rows; sheet() slides it away.
+  async sheet(title: string, rows?: string[][]) {
+    await this.page.evaluate(
+      ([title, rows]) => {
+        const s = document.getElementById("demo-sheet")!;
+        if (!rows) {
+          s.classList.remove("on");
+          return;
+        }
+        const letters = rows[0].map((_, c) => `<th>${String.fromCharCode(65 + c)}</th>`).join("");
+        const body = rows
+          .map(
+            (row, r) =>
+              `<tr><th>${r + 1}</th>${row.map((v, c) => `<td data-rc="${r}:${c}">${v}</td>`).join("")}</tr>`,
+          )
+          .join("");
+        s.innerHTML = `<div class="bar"><span class="dots"><i></i><i></i><i></i></span>
+          <span class="icon"></span>${title}</div><table><tr><th></th>${letters}</tr>${body}</table>`;
+        s.classList.remove("copied");
+        s.classList.add("on");
+      },
+      [title, rows ?? null] as const,
+    );
+    await this.wait(800);
+  }
+
+  // selectCells drags across the spreadsheet from A1 to the cell at row r,
+  // column c, highlighting the cells as it goes.
+  async selectCells(r: number, c: number) {
+    const cell = (r: number, c: number) => this.page.locator(`#demo-sheet td[data-rc="${r}:${c}"]`);
+    const highlight = (r: number, c: number) =>
+      this.page.evaluate(
+        ([r, c]) => {
+          for (const td of document.querySelectorAll<HTMLElement>("#demo-sheet td")) {
+            const [tr, tc] = td.dataset.rc!.split(":").map(Number);
+            td.classList.toggle("sel", tr <= r && tc <= c);
+          }
+        },
+        [r, c],
+      );
+    await this.point(cell(0, 0), 800);
+    await this.wait(150);
+    await highlight(0, 0);
+    const steps = Math.max(r, c);
+    for (let i = 1; i <= steps; i++) {
+      const [ri, ci] = [Math.round((i * r) / steps), Math.round((i * c) / steps)];
+      await this.point(cell(ri, ci), 170);
+      await highlight(ri, ci);
+    }
+    await this.wait(300);
   }
 
   private async center(target: Locator | { x: number; y: number }) {
@@ -281,6 +375,25 @@ class Recorder {
 
 // ─── The script ──────────────────────────────────────────────────────────────
 
+// The tour's document: saved, empty, before the recording, so it has a file
+// for versions and backups, with the backups an afternoon's writing would leave.
+const docName = "Peanut Field Guide";
+
+async function prepare(home: string, config: string) {
+  const md = join(home, "Documents", `${docName}.peanut`, `${docName}.md`);
+  await Bun.write(md, "");
+  const drafts = ["# Peanuts\n", "# Peanuts\n\nNotes for the guide.\n", "# Why Peanuts Matter\n"];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = (d: Date) =>
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T` +
+    `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  for (const [i, text] of drafts.entries()) {
+    const at = new Date(Date.now() - (drafts.length - i) * 37 * 60_000);
+    await Bun.write(join(md, "..", "backups", stamp(at), `${docName}.md`), text);
+  }
+  await Bun.write(join(config, "state.json"), JSON.stringify({ recent: [md] }));
+}
+
 async function perform(page: Page, d: Demo) {
   const tab = async (name: string) => {
     const t = page.locator("button.tab", { hasText: new RegExp(`^\\s*${name}\\s*$`) });
@@ -301,24 +414,35 @@ async function perform(page: Page, d: Demo) {
     await page.keyboard.press("Meta+ArrowDown");
   };
 
-  // Title card over the start dialog.
+  // Saving fills in the title, author and date a document lacks (fillProperties
+  // in service.go). Until the header step gives them, saves hand the editor
+  // back what it sent, so the page starts bare; the file still gets them.
+  const saveID = 925905422; // DocService.Save, in frontend/bindings
+  const keepBare = async (route: Route) => {
+    const call = route.request().postDataJSON()?.args;
+    if (call?.methodID !== saveID) return route.continue();
+    const response = await route.fetch();
+    const info = await response.json();
+    await route.fulfill({ response, json: { ...info, content: call.args[0] } });
+  };
+  await page.route("**/wails/runtime", keepBare);
+
+  // Title card, with the document opened behind it.
   await d.card(`<img src="/peanut.svg" alt=""><h1>Peanut Writer</h1>
     <p>The word processor that writes Markdown</p>
     <p class="small">Figures, tables and equations that number themselves · PDF, Word and web export</p>`);
-  await d.wait(3600);
+  await d.wait(1200);
+  await page.locator(".modal button.open", { hasText: docName }).click();
+  await modal.waitFor({ state: "detached" });
+  await d.wait(2400);
   await d.hideCard();
-
-  await d.caption("Start a document", "Create one, open one, or begin with a blank page.");
-  await d.point(page.locator(".modal button", { hasText: "Open Sample" }), 900);
-  await d.wait(300);
-  await d.click(page.locator(".modal button", { hasText: "Blank Document" }));
-  await d.wait(500);
 
   await d.caption(
     "Type on the left, see the page on the right",
     "The preview is the real typeset page — the same one your PDF will be.",
   );
-  await d.click(page.getByText("Begin typing"));
+  await d.click(page.locator(".cm-line").last());
+  await editorEnd();
   await d.type(
     "# Why Peanuts Matter\n\nPeanuts are **legumes**, not nuts. They flower above ground, then bury their pods in the soil to ripen.\n\n",
   );
@@ -328,66 +452,88 @@ async function perform(page: Page, d: Demo) {
   await d.zoom();
 
   await d.caption(
-    "Format from the ribbon — or just type Markdown",
-    "Select a word and click Italic, or wrap it in underscores.",
+    "Stuck? Click Peanut for a pep talk",
+    "Your writing buddy sits by the ribbon tabs and cheers you on whenever you ask.",
   );
-  // Double-click "soil" to select it.
-  const soil = await page.evaluate(() => {
-    for (const el of document.querySelectorAll(".cm-line")) {
-      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
-        const i = n.nodeValue!.indexOf("soil");
-        if (i < 0) continue;
-        const r = document.createRange();
-        r.setStart(n, i);
-        r.setEnd(n, i + 4);
-        const b = r.getBoundingClientRect();
-        return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
-      }
-    }
-    throw new Error("no “soil” in the editor");
-  });
-  await d.click(soil, 800, 2);
-  await d.wait(400);
-  await d.click(page.locator('.ribbon button[title^="Italic"]'));
-  await d.wait(900);
+  // He's drawn in 3D: click his body, a little above the middle of his stage.
+  const stage = page.locator(".buddy .stage");
+  const b = (await stage.boundingBox())!;
+  // He picks a cheer at random; with Math.random at 0 it's "You can do it!".
+  await page.evaluate(() =>
+    addEventListener(
+      "pointerdown",
+      () => {
+        const random = Math.random;
+        Math.random = () => 0;
+        setTimeout(() => (Math.random = random));
+      },
+      { capture: true, once: true },
+    ),
+  );
+  await d.click({ x: b.x + b.width / 2, y: b.y + b.height * 0.4 }, 800);
+  await page.locator(".buddy .speech").waitFor({ state: "attached" });
+  await d.zoom({ x: b.x - 330, y: b.y - 50, width: b.width + 660, height: b.height + 120 }, 2.6);
+  await d.wait(1900);
+  await d.zoom();
   await editorEnd();
   await d.type("## Varieties\n\n", 1.2);
   await d.wait(400);
 
   await d.caption(
     "Insert a table — it numbers itself",
-    "Give it a caption and it becomes Table 1, in the right style for every template.",
+    "Pick a size and fill in the cells. A caption makes it Table 1.",
   );
   await tab("Insert");
   await d.click(ribbon("Table"));
   const cell = (c: number, r: number) => page.locator(".popover .grid span").nth(r * 8 + c);
   for (const [c, r] of [
     [0, 0],
-    [1, 0],
     [1, 1],
-    [2, 1],
     [2, 2],
+    [2, 4],
   ])
-    await d.point(cell(c, r), 160);
-  await d.click(cell(2, 2), 150);
+    await d.point(cell(c, r), 140);
+  await d.click(cell(2, 4), 150);
   await modal.waitFor();
-  await d.wait(500);
-  await d.click(field("Caption"));
-  await d.type("Peanut varieties", 1.4);
-  const cells = [
+  await d.wait(400);
+  await d.click(modal.locator('[data-cell="-1:0"]'), 450);
+  for (const [i, text] of ["Variety", "Grown in"].entries()) {
+    if (i) await page.keyboard.press("Tab");
+    await d.type(text, 1.6);
+  }
+  await d.wait(300);
+
+  const rows = [
     ["Variety", "Grown in", "Best for"],
     ["Runner", "Georgia", "Peanut butter"],
-    ["Virginia", "Virginia", "Roasting"],
+    ["Virginia", "Virginia", "Roasting in the shell"],
+    ["Spanish", "Oklahoma", "Candy and snacks"],
+    ["Valencia", "New Mexico", "Boiled peanuts"],
   ];
-  await d.click(modal.locator('[data-cell="-1:0"]'), 450);
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      if (r || c) await page.keyboard.press("Tab");
-      await page.keyboard.press("Meta+a");
-      await d.type(cells[r][c], 2);
-    }
-  }
+  await d.caption(
+    "Already in a spreadsheet? Paste it",
+    "Copy cells from Excel, Numbers or Google Sheets — Paste Table turns them into a table.",
+  );
+  await d.click(modal.locator("button", { hasText: "Cancel" }), 600);
+  await d.wait(300);
+  await d.click(ribbon("Paste Table"));
+  await modal.waitFor();
+  await d.wait(400);
+  await d.sheet("Peanut varieties — Google Sheets", rows);
+  await d.selectCells(rows.length - 1, rows[0].length - 1);
+  await d.keys("⌘", "C");
+  await page.evaluate(() => document.getElementById("demo-sheet")!.classList.add("copied"));
+  await d.wait(900);
+  await d.sheet("");
+  await d.click(modal.locator("textarea"), 600);
+  await d.keys("⌘", "V");
+  await page.keyboard.insertText(rows.map((r) => r.join("\t")).join("\n"));
+  await d.wait(1600);
+  await d.click(modal.locator("button[type=submit]"));
+  await modal.locator('[data-cell="3:2"]').waitFor();
+  await d.wait(700);
+  await d.click(field("Caption"), 500);
+  await d.type("Peanut varieties", 1.4);
   await d.wait(600);
   await d.click(modal.locator("button[type=submit]"));
   await d.wait(1600);
@@ -418,9 +564,6 @@ async function perform(page: Page, d: Demo) {
   await d.wait(900);
   await d.click(modal.locator("button[type=submit]"));
   await d.wait(1500);
-  await d.zoom(await previewTop(330), 1.9);
-  await d.wait(2200);
-  await d.zoom();
 
   await d.caption(
     "Add a title, author and abstract",
@@ -430,16 +573,15 @@ async function perform(page: Page, d: Demo) {
   await modal.waitFor();
   await d.click(field("Title"), 500);
   await d.type("A Field Guide to Peanuts", 1.4);
-  await d.click(field("Subtitle"), 450);
-  await d.type("Small legume, big ideas", 1.6);
   await d.click(field("Author"), 450);
-  await page.keyboard.press("Meta+a");
   await d.type("Peanut", 1.6);
   await d.click(field("Abstract"), 450);
   await d.type("Where peanuts grow, which kinds we eat, and how much a field yields.", 2);
   await d.wait(500);
+  // From here saves fill in what's missing (the date) as they would.
+  await page.unroute("**/wails/runtime", keepBare);
   await d.click(modal.locator("button[type=submit]"));
-  await d.wait(1500);
+  await d.wait(2600);
   await d.zoom(await previewTop(300), 2);
   await d.wait(2200);
   await d.zoom();
@@ -469,10 +611,42 @@ async function perform(page: Page, d: Demo) {
   );
   await tab("Design");
   await d.wait(900);
-  for (const name of ["Academic", "Report", "Elegant", "Journal", "Peanut", "Classic"]) {
+  for (const name of ["Academic", "Report", "Elegant", "Peanut", "Classic"]) {
     await d.click(ribbon(name), 650);
     await d.wait(name === "Classic" ? 1200 : 1900);
   }
+
+  await d.caption(
+    "Name a version to come back to",
+    "New Version keeps the document as it is now, with Word and PDF copies beside it.",
+  );
+  await tab("Versions");
+  await d.wait(800);
+  await d.click(ribbon("New Version"));
+  const naming = page.locator(".name-version");
+  await naming.locator("input").waitFor();
+  await d.type("First full draft", 1.4);
+  await d.wait(400);
+  await d.click(naming.locator("button[type=submit]"), 500);
+  await naming.waitFor({ state: "detached", timeout: 60_000 });
+  await d.wait(1200);
+  await d.point(page.locator(".ribbon button.card", { hasText: "First full draft" }), 600);
+  await d.wait(1800);
+
+  await d.caption(
+    "Backups keep themselves",
+    "It saves as you type and backs up every few minutes. Open any backup to go back.",
+  );
+  const backups = page.locator('.ribbon button.card[title="Open this backup"]');
+  for (let i = 0; i < Math.min(3, await backups.count()); i++) await d.point(backups.nth(i), 500);
+  await d.wait(900);
+  await d.click(ribbon("All Versions"));
+  await d.wait(1200);
+  const listed = page.locator(".versions li");
+  for (let i = 0; i < Math.min(4, await listed.count()); i++) await d.point(listed.nth(i), 450);
+  await d.wait(1500);
+  await d.click(ribbon("All Versions"));
+  await d.wait(600);
 
   await d.caption(
     "It's plain Markdown underneath",
@@ -486,15 +660,6 @@ async function perform(page: Page, d: Demo) {
   await d.wait(2200);
   await d.click(ribbon("Markdown"));
   await d.wait(600);
-
-  await d.caption("Jump around with the outline", "The editor and the preview scroll together.");
-  const outline = page.locator("nav.outline button");
-  await d.click(outline.filter({ hasText: "Methods" }).first());
-  await d.wait(1800);
-  await d.click(outline.filter({ hasText: "Conclusion" }).first());
-  await d.wait(1800);
-  await d.click(outline.filter({ hasText: "Why Peanuts Matter" }).first());
-  await d.wait(1500);
 
   await d.caption(
     "Export to PDF, Word or a web page",
@@ -520,7 +685,7 @@ async function perform(page: Page, d: Demo) {
 await rm(framesDir, { recursive: true, force: true });
 await mkdir(framesDir, { recursive: true });
 
-const app = await startApp();
+const app = await startApp(prepare);
 const browser = await webkit.launch();
 let seconds: number;
 try {
@@ -538,6 +703,10 @@ try {
   recorder.start();
   try {
     await perform(page, demo);
+  } catch (e) {
+    // What the app said may explain a step that never finished.
+    for (const t of await page.locator(".toast .text").allTextContents()) console.error(`  toast: ${t}`);
+    throw e;
   } finally {
     seconds = await recorder.stop();
   }
@@ -547,7 +716,6 @@ try {
   await app.stop();
 }
 
-const music = join(outDir, "soundtrack.wav");
 const run = async (cmd: string[]) => {
   const p = Bun.spawn(cmd, { stdout: "inherit", stderr: "inherit" });
   if ((await p.exited) !== 0) throw new Error(`${cmd[0]} failed`);

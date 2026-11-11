@@ -18,7 +18,9 @@
 - The preview gets a header with a hide button, like the outline's. A hidden outline or preview leaves a thin
   labelled rail at its edge; click it to show the pane again.
 - `mise run docs:demo` records a captioned demo video of the app (server mode in WebKit, drawn cursor, title cards)
-  with a generated soundtrack into `demo/` (gitignored; how it's made in `demo/README.md`).
+  with a generated soundtrack into `demo/` (gitignored; how it's made in `demo/README.md`). The tour starts from a
+  blank saved document, gets a pep talk from Peanut, pastes a table from a spreadsheet, adds the title block late and
+  names a version; `-- <name>` writes `demo/<name>.mp4` beside earlier takes.
 
 ## 2026-11-10
 

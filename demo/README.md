@@ -1,30 +1,39 @@
 # Demo video
 
-`mise run docs:demo` writes two files here, both gitignored:
+`mise run docs:demo` writes two files here, both gitignored. `mise run docs:demo -- <name>` names them `<name>` instead,
+so a new take doesn't replace an earlier one.
 
-| File                     | What                                                           |
-| ------------------------ | -------------------------------------------------------------- |
-| `peanut-writer-demo.mp4` | The demo: 1920×1080, 30 fps, H.264 + AAC, about 2¾ minutes     |
-| `soundtrack.wav`         | Its music on its own: 48 kHz stereo, original and royalty-free |
+| File                                     | What                                                           |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `peanut-writer-demo.mp4`                 | The demo: 1920×1080, 30 fps, H.264 + AAC, about 3 minutes      |
+| `peanut-writer-demo-soundtrack.wav`      | Its music on its own: 48 kHz stereo, original and royalty-free |
 
 Nothing in the video is edited by hand. Re-run the task whenever the UI changes; it takes about four minutes.
 
 ## The tour
 
-A title card, then twelve numbered captions, then an end card:
+Before recording, the app's home folder gets a saved, empty document, `Peanut Field Guide`, with three backups from
+earlier in the day and a place on the recent list, so versions and backups have something to show. It's opened behind
+the title card, so the tour starts from a blank page. Saving fills in a title, author and date a document lacks; until
+the header step, the tour hands the editor back what it saved (a Playwright route on `DocService.Save`), so no title
+shows before it's added.
 
-1. **Start a document**: the start dialog, then Blank Document.
-2. **Type on the left, see the page on the right**: a heading and a paragraph typed out, then a zoom into the preview.
-3. **Format from the ribbon**: double-click a word, click Italic.
-4. **Insert a table**: Insert → Table, the grid picker, the table dialog with a caption, which becomes Table 1.
+A title card, then numbered captions, then an end card:
+
+1. **Type on the left, see the page on the right**: a heading and a paragraph typed out, then a zoom into the preview.
+2. **Click Peanut for a pep talk**: Peanut is clicked once, zoomed in so “You can do it!” can be read.
+3. **Insert a table**: Insert → Table, the grid picker, two header cells typed into the table dialog...
+4. **Already in a spreadsheet? Paste it**: ...then Cancel, Insert → Paste Table, and a stand-in spreadsheet window
+   slides in; its cells are selected, ⌘C, ⌘V into the dialog, Continue, a caption, and it becomes Table 1.
 5. **Cross-references keep up**: type `@`, pick the table from the suggestions.
-6. **Write math in LaTeX**: Insert → Equation, with its live drawing and a reference name; zoom into the result.
+6. **Write math in LaTeX**: Insert → Equation, with its live drawing and a reference name.
 7. **Add a title, author and abstract**: Edit header, then a zoom into the title block.
 8. **Find any command in the palette**: Lorem Ipsum fills the document with figures and tables.
-9. **Pick a look on the Design tab**: Academic, Report, Elegant, Journal, Peanut, back to Classic.
-10. **It's plain Markdown underneath**: View → Markdown on and off.
-11. **Jump around with the outline**: the editor and preview scroll together.
-12. **Export to PDF, Word or a web page**: the Export menu and Sync files.
+9. **Pick a look on the Design tab**: Academic, Report, Elegant, Peanut, back to Classic.
+10. **Name a version**: Versions → New Version, named “First full draft”, saved with Word and PDF copies.
+11. **Backups keep themselves**: the backup cards, then All Versions lists named versions and backups.
+12. **It's plain Markdown underneath**: View → Markdown on and off.
+13. **Export to PDF, Word or a web page**: the Export menu and Sync files.
 
 The end card has the Homebrew command and the docs URL.
 
@@ -47,9 +56,9 @@ flowchart LR
   macOS app renders with.
 - **The window** is 1536×864 CSS pixels at 1.25× scale, which is exactly 1920×1080, close to the app's default window.
 - **The overlay** is injected into the page, outside `#app`: a drawn cursor that glides to each target (CSS transitions)
-  with a ripple on clicks, the caption pill, and the title and end cards. Zooms are a CSS transform on `#app`, so the
-  overlay stays put while the app eases in and out. Because it's all in the page, it's in every frame; there is no
-  compositing afterwards.
+  with a ripple on clicks, the caption pill, keycaps for shortcuts pressed off screen, the stand-in spreadsheet window,
+  and the title and end cards. Zooms are a CSS transform on `#app`, so the overlay stays put while the app eases in and
+  out. Because it's all in the page, it's in every frame; there is no compositing afterwards.
 - **Human pacing**: text is typed a character at a time with random gaps, longer after spaces, punctuation and new
   lines. After each new line the editor scrolls so the cursor stays clear of the caption.
 - **Frames** are screenshots taken in a loop alongside the actions (about 30 per second), each with the time it was
@@ -60,11 +69,13 @@ flowchart LR
   afterwards.
 
 To change the tour, edit `perform` in `demo-video.ts`. The helpers on `Demo` are `caption`, `click`, `point`, `type`,
-`zoom`, `card` and `wait`.
+`zoom`, `card`, `keys`, `sheet`, `selectCells` and `wait`. The document it opens is made by `prepare`.
 
 Limits of server mode: native menus and keyboard shortcuts handled by them (⌘/, ⇧⌘P) don't exist, so the tour uses
 the ribbon and toolbar buttons instead. Export and Create New open native save dialogs, so the tour only shows the
-Export menu and starts from Blank Document.
+Export menu and opens a document saved beforehand. There's no real clipboard either: the spreadsheet is drawn in the
+overlay and its cells are typed into Paste Table as one insertion, under a ⌘V keycap. Opening a version or backup asks
+in a native dialog, so the tour only points at them.
 
 ### Soundtrack: `docs/scripts/demo-music.ts`
 
