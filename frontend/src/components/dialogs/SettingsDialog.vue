@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref } from "vue";
 import { RotateCcw } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { DocService } from "../../../bindings/peanut-writer";
@@ -58,11 +58,32 @@ const doc = reactive<Settings>({});
 const userValues = user as Record<Key, Value | null | undefined>;
 const docValues = doc as Record<Key, Value | null | undefined>;
 
+// The filter box is focused once the settings are shown, so typing narrows them.
+const query = ref("");
+const filterInput = ref<HTMLInputElement>();
+// matches says whether every word typed appears in text.
+const matches = (text: string) => {
+  const t = text.toLowerCase();
+  return query.value
+    .toLowerCase()
+    .split(/\s+/)
+    .every((w) => t.includes(w));
+};
+const shown = computed(() =>
+  fields.filter((f) =>
+    matches([f.label, f.hint, ...(f.options ?? []).map((o) => o.label)].join(" ")),
+  ),
+);
+const authorShown = computed(() =>
+  matches("Default author Put in the properties of each new document user name"),
+);
+
 DocService.Settings()
   .then((i) => {
     info.value = i;
     Object.assign(user, i.user);
     Object.assign(doc, i.document);
+    nextTick(() => filterInput.value?.focus());
   })
   .catch((e) => {
     toast(`Settings: ${errorText(e)}`, "error");
@@ -117,6 +138,13 @@ async function submit() {
 <template>
   <Modal title="Settings" @close="emit('close')" @submit="submit">
     <template v-if="info">
+      <input
+        ref="filterInput"
+        v-model="query"
+        type="search"
+        placeholder="Filter settings"
+        aria-label="Filter settings"
+      />
       <div class="scopes" role="tablist">
         <button
           type="button"
@@ -139,7 +167,7 @@ async function submit() {
       </div>
 
       <div
-        v-for="f in fields"
+        v-for="f in shown"
         :key="f.key"
         class="field"
         :class="{ off: f.options && !value('autoFormat') }"
@@ -182,8 +210,12 @@ async function submit() {
         >
       </div>
 
+      <p v-if="!shown.length && !(scope === 'user' && authorShown)" class="hint">
+        No settings match “{{ query.trim() }}”.
+      </p>
+
       <template v-if="scope === 'user'">
-        <div class="field">
+        <div v-if="authorShown" class="field">
           <label
             >Default author
             <input v-model="user.author" placeholder="None" />
