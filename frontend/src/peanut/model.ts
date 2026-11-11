@@ -12,7 +12,13 @@ import {
   createContactShadowTexture,
   type CorduroyTextureBundle,
 } from "./textureGenerator";
-import { createBirthdayHat, createCowboyHat, createHeadphones, type HatKind } from "./hats";
+import {
+  createBirthdayHat,
+  createCowboyHat,
+  createHeadphones,
+  type HatHandle,
+  type HatKind,
+} from "./hats";
 
 export interface PeanutModelHandle {
   group: THREE.Group;
@@ -34,6 +40,9 @@ export interface PeanutModelHandle {
   walk: (direction: -1 | 0 | 1) => void;
   // Pop a hat on (swapping out any other) or, with null, take it off.
   setHat: (kind: HatKind | null) => void;
+  // Reach behind his back with his screen-right hand, pull out a hat and put
+  // it on (swapping out any other), PULL_MS long.
+  pullOutHat: (kind: HatKind) => void;
   // Nod, sway and tap along to the beat, one hand on his headphones.
   setJamming: (jamming: boolean) => void;
   // Leap for joy (JUMP_MS long), arms flung up; twirl spins him round in the air.
@@ -45,6 +54,10 @@ export interface PeanutModelHandle {
   // Hop and reach up and out to screen-right with the arm on that side, to
   // prod whatever's above him there (POKE_MS long, touching it POKE_TOUCH_MS in).
   poke: () => void;
+  // Crouch, leap up to grip the top of the stage (where hanging is set
+  // HANG_CROUCH_MS and HANG_LEAP_MS later) and dangle, kicking; false lets go,
+  // dropping him back down in HANG_FALL_MS.
+  setHanging: (hanging: boolean) => void;
   dispose: () => void;
 }
 
@@ -61,12 +74,29 @@ const ARMS_LINGER_S = 0.4;
 export const JUMP_MS = JUMP_S * 1000;
 export const POKE_MS = POKE_S * 1000;
 export const POKE_TOUCH_MS = POKE_S * POKE_TOUCH * 1000;
+const PULL_S = 1.8;
+export const PULL_MS = PULL_S * 1000;
+// Hanging: a crouch, a leap up, and a drop back down when he lets go
+const HANG_CROUCH_S = 0.25;
+const HANG_LEAP_S = 0.35;
+const HANG_FALL_S = 0.35;
+export const HANG_CROUCH_MS = HANG_CROUCH_S * 1000;
+export const HANG_LEAP_MS = HANG_LEAP_S * 1000;
+export const HANG_FALL_MS = HANG_FALL_S * 1000;
+// Hanging, his arms reach nearly straight up, stretched (plush is forgiving)
+// so his hands clear his head.
+const HANG_SPLAY = Math.PI - 0.2;
+const HANG_STRETCH = 2.2;
 const INSPECT_TURN = 0.45; // how far he turns toward screen-right to inspect
 const BEAT_HZ = 2; // 120 bpm in his headphones
 
 // The shoulder socket on the x > 0 side, in bodyContainer space: at the top
 // of the lower bulb, a little forward. The other is its mirror image.
 const SHOULDER = new THREE.Vector3(0.76, 1.86, 0.08);
+// Where he holds a hat he's pulled out (its base, from his hand, in the
+// body's space): by the brim, the crown behind his middle, so it stays within
+// the stage.
+const HAT_GRIP = new THREE.Vector3(-0.6, 0, -0.2);
 
 // Standing & perched pose transform definitions. Perched, the bottom of the
 // body (local y 0.75, squashed to ~0.71) rests on the ledge.
@@ -479,24 +509,60 @@ function createCorduroyMaterial(corduroyTextures: CorduroyTextureBundle): THREE.
   });
 }
 
-// One stubby corduroy arm hanging from its shoulder pivot (side +1 or -1:
-// the side of the body it's on), ending in a round mitten. Its rotation is
-// its pose: x pitches it forward (negative) or back, then z splays it out.
-function createArm(side: 1 | -1, material: THREE.Material): THREE.Group {
+// Arm proportions: the sleeve hangs from the shoulder pivot, the mitten at its end.
+const SLEEVE_RADIUS = 0.078;
+const SLEEVE_LENGTH = 0.5;
+const MITTEN_RADIUS = 0.118;
+// The sleeve's centre and the mitten's, below the shoulder, at full length
+const SLEEVE_Y = -0.3;
+const MITTEN_Y = -0.66;
+// How far above his feet his hands' tops reach when he hangs
+const HANG_HAND_TOP =
+  SHOULDER.y + (-MITTEN_Y * HANG_STRETCH + MITTEN_RADIUS) * -Math.cos(HANG_SPLAY);
+
+interface Arm {
+  side: 1 | -1; // the side of the body it's on
+  // Its rotation is its pose: x pitches it forward (negative) or back, then
+  // z splays it out.
+  shoulder: THREE.Group;
+  // Lengthen the sleeve by a factor (1 is its own length).
+  stretch: (factor: number) => void;
+  // Where the mitten's centre is, in the body's space, as last posed.
+  hand: (target: THREE.Vector3) => THREE.Vector3;
+}
+
+// One stubby corduroy arm hanging from its shoulder pivot, ending in a round
+// mitten.
+function createArm(side: 1 | -1, material: THREE.Material): Arm {
   const shoulder = new THREE.Group();
   shoulder.position.set(side * SHOULDER.x, SHOULDER.y, SHOULDER.z);
   shoulder.rotation.order = "ZXY";
-  const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.078, 0.5, 6, 20), material);
-  sleeve.position.y = -0.3;
-  const mitten = new THREE.Mesh(new THREE.SphereGeometry(0.118, 24, 16), material);
+  const sleeve = new THREE.Mesh(
+    new THREE.CapsuleGeometry(SLEEVE_RADIUS, SLEEVE_LENGTH, 6, 20),
+    material,
+  );
+  sleeve.position.y = SLEEVE_Y;
+  const mitten = new THREE.Mesh(new THREE.SphereGeometry(MITTEN_RADIUS, 24, 16), material);
   mitten.scale.set(1, 0.92, 1.08);
-  mitten.position.y = -0.66;
+  mitten.position.y = MITTEN_Y;
   for (const m of [sleeve, mitten]) {
     m.castShadow = true;
     m.receiveShadow = true;
     shoulder.add(m);
   }
-  return shoulder;
+  return {
+    side,
+    shoulder,
+    stretch(factor) {
+      sleeve.scale.y = factor;
+      sleeve.position.y = SLEEVE_Y * factor;
+      mitten.position.y = MITTEN_Y * factor;
+    },
+    hand(target) {
+      shoulder.updateMatrix();
+      return target.copy(mitten.position).applyMatrix4(shoulder.matrix);
+    },
+  };
 }
 
 // Create one ribbed corduroy leg and authentic plush bootie foot
@@ -576,8 +642,9 @@ function createCorduroyLeg(
   return { legGroup, footGroup };
 }
 
-// Assemble complete Peanut character model
-export function createPeanutModel(): PeanutModelHandle {
+// Assemble complete Peanut character model. ceiling is how far above his feet
+// his hands grip when he hangs.
+export function createPeanutModel(ceiling: number): PeanutModelHandle {
   const rootGroup = new THREE.Group();
   rootGroup.name = "PeanutCharacterRoot";
 
@@ -643,11 +710,10 @@ export function createPeanutModel(): PeanutModelHandle {
 
   // 5. Stubby corduroy arms, riding on the body so they sway and squash with it
   const armMaterial = createCorduroyMaterial(corduroyTextures);
-  const arms = [
-    [createArm(1, armMaterial), 1],
-    [createArm(-1, armMaterial), -1],
-  ] as const;
-  for (const [arm] of arms) bodyContainer.add(arm);
+  const arms = [createArm(1, armMaterial), createArm(-1, armMaterial)];
+  // The x > 0 arm, on screen-right when he faces the camera, fetches hats.
+  const hatArm = arms[0];
+  for (const arm of arms) bodyContainer.add(arm.shoulder);
 
   const shadowMat = new THREE.MeshBasicMaterial({
     map: shadowTexture,
@@ -681,6 +747,15 @@ export function createPeanutModel(): PeanutModelHandle {
   let pokeStart = -1;
   let armsNeededAt = -Infinity; // when a move last needed his arms
   let armsOut = 0.0; // 0 tucked away, 1 out
+  // Pulling out a hat, and the hat in his hand until he lets go of it
+  let pullStart = -1;
+  let pullHat: HatHandle | null = null;
+  const hand = new THREE.Vector3();
+  const hatAt = new THREE.Vector3();
+  const hatToRest = new THREE.Vector3();
+  // Hanging, and when he last grabbed on or let go
+  let hanging = false;
+  let hangChangedAt = -Infinity;
 
   function setSitting(sitting: boolean) {
     isSitting = sitting;
@@ -691,9 +766,21 @@ export function createPeanutModel(): PeanutModelHandle {
   }
 
   function setHat(kind: HatKind | null) {
+    letGoOfHat();
     hats.cowboy.setVisible(kind === "cowboy");
     hats.birthday.setVisible(kind === "birthday");
     hats.headphones.setVisible(kind === "headphones");
+  }
+
+  function letGoOfHat() {
+    pullHat?.carry(null);
+    pullHat = null;
+  }
+
+  function pullOutHat(kind: HatKind) {
+    setHat(null);
+    pullStart = clock;
+    pullHat = hats[kind];
   }
 
   function setJamming(on: boolean) {
@@ -715,6 +802,12 @@ export function createPeanutModel(): PeanutModelHandle {
 
   function setFacingAway(away: boolean) {
     facingAway = away;
+  }
+
+  function setHanging(on: boolean) {
+    if (on === hanging) return;
+    hanging = on;
+    hangChangedAt = clock;
   }
 
   function animate(
@@ -788,8 +881,57 @@ export function createPeanutModel(): PeanutModelHandle {
       }
     }
 
-    // Arms sprout for jamming, inspecting, poking and jumping, and tuck away after
-    if (jamming || inspecting || jumpStart >= 0 || pokeStart >= 0) armsNeededAt = time;
+    // Pulling out a hat: reach behind his back, rummage, swing it up over his
+    // head and let go (at 0.8), then lower his arm
+    let pullP = -1;
+    let pullReach = 0;
+    let pullUp = 0;
+    if (pullStart >= 0) {
+      pullP = (time - pullStart) / PULL_S;
+      if (pullP >= 1 || pullP < 0) {
+        pullStart = -1;
+        pullP = -1;
+        letGoOfHat();
+      } else {
+        pullReach = smoothstep(0, 0.3, pullP) * (1 - smoothstep(0.8, 1, pullP));
+        pullUp = smoothstep(0.45, 0.8, pullP);
+      }
+    }
+
+    // Hanging: crouch, leap (easing out) up to the ceiling and dangle there;
+    // let go and fall (easing in), landing with a squash
+    let hangCrouch = 0;
+    let up = 0;
+    let hangLand = 0;
+    let reachUp = 0; // arms raised toward the ceiling
+    const sinceHang = time - hangChangedAt;
+    if (hanging) {
+      if (sinceHang < HANG_CROUCH_S) {
+        hangCrouch = Math.sin(((sinceHang / HANG_CROUCH_S) * Math.PI) / 2);
+      }
+      const leap = Math.min(1, Math.max(0, (sinceHang - HANG_CROUCH_S) / HANG_LEAP_S));
+      up = 1 - (1 - leap) * (1 - leap);
+      reachUp = smoothstep(0, HANG_CROUCH_S + HANG_LEAP_S, sinceHang);
+    } else if (sinceHang < HANG_FALL_S) {
+      const fall = sinceHang / HANG_FALL_S;
+      up = 1 - fall * fall;
+      reachUp = up;
+    } else if (sinceHang < HANG_FALL_S + 0.25) {
+      hangLand = Math.sin(((sinceHang - HANG_FALL_S) / 0.25) * Math.PI);
+    }
+
+    // Arms sprout for the moves that need them, and tuck away after
+    if (
+      jamming ||
+      inspecting ||
+      hanging ||
+      reachUp > 0 ||
+      jumpStart >= 0 ||
+      pokeStart >= 0 ||
+      pullStart >= 0
+    ) {
+      armsNeededAt = time;
+    }
     const armsWanted = time - armsNeededAt < ARMS_LINGER_S;
     armsOut = armsWanted
       ? Math.min(1, armsOut + deltaSeconds * 5)
@@ -808,9 +950,6 @@ export function createPeanutModel(): PeanutModelHandle {
     const eyeScaleY = 1.0 - 0.9 * Math.sin(blinkProgress * Math.PI);
     leftEye.scale.y = eyeScaleY;
     rightEye.scale.y = eyeScaleY;
-    hats.cowboy.update(deltaSeconds);
-    hats.birthday.update(deltaSeconds);
-    hats.headphones.update(deltaSeconds);
 
     const s = sitProgress * sitProgress * (3 - 2 * sitProgress); // smoothstep
 
@@ -830,7 +969,7 @@ export function createPeanutModel(): PeanutModelHandle {
     const seatSquashXZ = lerp(1.0, 1.03, s);
 
     // Contact shadow on the floor while standing; perched there's no floor below
-    shadowMat.opacity = lerp(0.85, 0, s);
+    shadowMat.opacity = lerp(0.85, 0, s) * (1 - up);
 
     // Legs swing from standing to dangling in sync with the body's descent
     const rotS = Math.min(1.0, Math.pow(s, 0.75));
@@ -842,7 +981,9 @@ export function createPeanutModel(): PeanutModelHandle {
     // Dangling feet kick out of step (to the beat when jamming); walking legs
     // stride out of step; jumping legs both tuck back
     const kick =
-      Math.sin(time * 2.4) * 0.16 * s * (1 - j) + Math.sin(beat * Math.PI) * 0.22 * s * j;
+      Math.sin(time * 2.4) * 0.16 * s * (1 - j) +
+      Math.sin(beat * Math.PI) * 0.22 * s * j +
+      Math.sin(time * 9) * 0.5 * up; // hanging, he kicks hard
     const stride = Math.sin(walkPhase) * 0.5 * w;
     tempBounceQuat.setFromEuler(tempBounceEuler.set(kick + stride + tuck * 0.25, 0, 0));
     rightLeg.quaternion.multiply(tempBounceQuat);
@@ -873,9 +1014,11 @@ export function createPeanutModel(): PeanutModelHandle {
       tempBounceQuat.setFromEuler(tempBounceEuler.set(-bounceSwing, 0, -bounceKick));
       rightLeg.quaternion.multiply(tempBounceQuat);
     }
-    squashY *= (1 - 0.16 * crouch) * (1 + 0.1 * stretch) * (1 - 0.14 * land);
-    squashXZ *= (1 + 0.09 * crouch) * (1 - 0.05 * stretch) * (1 + 0.08 * land);
-    rootGroup.position.y = bounceLift + jumpLift + jab * POKE_HOP;
+    const squat = crouch + hangCrouch;
+    const thud = land + hangLand;
+    squashY *= (1 - 0.16 * squat) * (1 + 0.1 * stretch) * (1 - 0.14 * thud);
+    squashXZ *= (1 + 0.09 * squat) * (1 - 0.05 * stretch) * (1 + 0.08 * thud);
+    rootGroup.position.y = bounceLift + jumpLift + jab * POKE_HOP + up * (ceiling - HANG_HAND_TOP);
     shadowMesh.position.y = 0.002 - rootGroup.position.y;
     shadowMesh.scale.setScalar(1 - jumpLift * 0.3);
 
@@ -886,20 +1029,24 @@ export function createPeanutModel(): PeanutModelHandle {
       breatheScaleXZ * seatSquashXZ * squashXZ,
     );
     // Jamming he sways a beat each way and nods on every one; inspecting he
-    // leans back to look up, tilting his head this way and that
+    // leans back to look up, tilting his head this way and that. Hanging, he
+    // holds still and level (his hands grip a level edge); only his legs kick.
+    const tiltable = 1 - up;
     bodyContainer.rotation.z =
-      swayTiltZ +
-      wiggleZ +
-      Math.sin(beat * Math.PI) * 0.08 * j +
-      Math.sin(time * 1.3) * 0.07 * insp;
-    bodyContainer.rotation.x = seatTiltX + swayTiltX + nod * 0.12 * j - 0.1 * insp;
+      (swayTiltZ +
+        wiggleZ +
+        Math.sin(beat * Math.PI) * 0.08 * j +
+        Math.sin(time * 1.3) * 0.07 * insp) *
+      tiltable;
+    bodyContainer.rotation.x = (seatTiltX + swayTiltX + nod * 0.12 * j - 0.1 * insp) * tiltable;
 
     // Arms hang loose, swinging opposite the legs when walking, hands in his
     // lap when perched, flapping when he bounces. Facing the camera, the
     // x > 0 arm is the one on screen-right.
     const swing = Math.sin(walkPhase) * 0.45 * w;
     const flap = bounceProgress > 0 ? Math.sin(bounceProgress * Math.PI) * 0.5 : 0;
-    for (const [arm, side] of arms) {
+    for (const arm of arms) {
+      const side = arm.side;
       let pitch = lerp(-0.12, -0.5, s) - side * swing;
       let splay = lerp(0.55, 0.42, s) + flap;
       // Jamming: one hand holds his headphones, the other pumps the beat
@@ -922,10 +1069,35 @@ export function createPeanutModel(): PeanutModelHandle {
       // Jumping: swung back in the crouch, flung up and waving in the air
       pitch = lerp(lerp(pitch, 0.55, crouch), -0.2, armsUp);
       splay = lerp(lerp(splay, 0.3, crouch), 2.5 + Math.sin(time * 18 + side) * 0.15, armsUp);
-      arm.rotation.set(pitch, 0, side * splay);
-      arm.visible = armsOut > 0;
-      arm.scale.setScalar(Math.max(0.001, smoothstep(0, 1, armsOut)));
+      // Pulling out a hat: behind his back, rummaging, then up over his head
+      if (arm === hatArm) {
+        const behind = 1.3 + Math.sin(time * 14) * 0.12 * (1 - pullUp);
+        pitch = lerp(pitch, lerp(behind, 2.75, pullUp), pullReach);
+        splay = lerp(splay, lerp(0.45, 0.55, pullUp), pullReach);
+      }
+      // Hanging: both reach straight up, stretching to grip the ceiling
+      pitch = lerp(pitch, 0, reachUp);
+      splay = lerp(splay, HANG_SPLAY, reachUp);
+      arm.stretch(lerp(1, HANG_STRETCH, up));
+      arm.shoulder.rotation.set(pitch, 0, side * splay);
+      arm.shoulder.visible = armsOut > 0;
+      arm.shoulder.scale.setScalar(Math.max(0.001, smoothstep(0, 1, armsOut)));
     }
+
+    // The hat in his hand: held by the brim, drifting from beside his hand
+    // onto his head as he swings it up, and let go there
+    if (pullHat && pullP >= 0.3) {
+      if (pullP >= 0.8) letGoOfHat();
+      else {
+        hatArm.hand(hand);
+        hatToRest.copy(pullHat.rest).sub(hand);
+        hatAt.copy(HAT_GRIP).lerp(hatToRest, pullUp).add(hand);
+        pullHat.carry(hatAt, -0.3 * (1 - pullUp));
+      }
+    }
+    hats.cowboy.update(deltaSeconds);
+    hats.birthday.update(deltaSeconds);
+    hats.headphones.update(deltaSeconds);
 
     // Dynamically compute leg positions attached to hip sockets, in the root
     // group's space (the legs' parent), so a lift or turn isn't applied twice
@@ -983,6 +1155,8 @@ export function createPeanutModel(): PeanutModelHandle {
     setInspecting,
     poke,
     setFacingAway,
+    pullOutHat,
+    setHanging,
     dispose,
   };
 }

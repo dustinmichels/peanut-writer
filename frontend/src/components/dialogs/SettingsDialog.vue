@@ -11,10 +11,23 @@ const emit = defineEmits<{ close: [] }>();
 
 type Key = "autoFormat" | "headingCase" | "syncOnSave" | "syncOnQuit" | "peanut" | "peanutActivity";
 type Value = boolean | string;
+type Section = "Auto format" | "Sync files" | "Peanut";
+// The fields are shown under these headings, in this order, after the hint
+// their fields share; the default author, set only globally, comes last
+// under "Other".
+const sections: { name: Section; hint?: string }[] = [
+  { name: "Auto format" },
+  {
+    name: "Sync files",
+    hint: "Writes the PDF and Word copies beside the document, as Sync Files does, if it changed since they were last written.",
+  },
+  { name: "Peanut" },
+];
 // A field is a checkbox, or a choice among options: radio buttons, or a
 // segmented toggle. One that needs another checkbox is dimmed while it's off.
 const fields: {
   key: Key;
+  section: Section;
   label: string;
   hint: string;
   options?: { value: string; label: string }[];
@@ -23,11 +36,13 @@ const fields: {
 }[] = [
   {
     key: "autoFormat",
+    section: "Auto format",
     label: "Auto format on save",
     hint: "Saving (⌘S, Save As, Sync Files) tidies the Markdown with oxfmt: blank lines, list markers, table columns, trailing spaces. Autosaves don't.",
   },
   {
     key: "headingCase",
+    section: "Auto format",
     label: "Auto format headings",
     hint: "When auto formatting. NASA, iPhone and code are left alone; sentence case lowercases names like “London” too.",
     options: [
@@ -39,21 +54,25 @@ const fields: {
   },
   {
     key: "syncOnSave",
+    section: "Sync files",
     label: "Sync files on save",
-    hint: "Saving (⌘S, Save As) also writes the PDF and Word copies beside the document, as Sync Files does, if it changed since they were last written. Autosaves don't.",
+    hint: "On ⌘S and Save As. Autosaves don't.",
   },
   {
     key: "syncOnQuit",
+    section: "Sync files",
     label: "Sync files on quit",
-    hint: "Quitting and opening another document also write the PDF and Word copies beside the document, if it changed since they were last written.",
+    hint: "On quitting, and on opening another document.",
   },
   {
     key: "peanut",
+    section: "Peanut",
     label: "Show Peanut",
     hint: "Peanut keeps you company beside the ribbon tabs.",
   },
   {
     key: "peanutActivity",
+    section: "Peanut",
     label: "Peanut's activity level",
     hint: "Chill: he gets up to something every half minute or so. Busy: every few seconds, and more often his tricks: jamming in his headphones, jumping for joy, inspecting the Commands button.",
     options: [
@@ -84,13 +103,28 @@ const matches = (text: string) => {
     .split(/\s+/)
     .every((w) => t.includes(w));
 };
+const sectionHint = (s: Section) => sections.find((x) => x.name === s)?.hint ?? "";
 const shown = computed(() =>
   fields.filter((f) =>
-    matches([f.label, f.hint, ...(f.options ?? []).map((o) => o.label)].join(" ")),
+    matches(
+      [
+        f.section,
+        sectionHint(f.section),
+        f.label,
+        f.hint,
+        ...(f.options ?? []).map((o) => o.label),
+      ].join(" "),
+    ),
   ),
 );
+// The sections with a field shown, and those fields.
+const groups = computed(() =>
+  sections
+    .map((s) => ({ ...s, fields: shown.value.filter((f) => f.section === s.name) }))
+    .filter((g) => g.fields.length),
+);
 const authorShown = computed(() =>
-  matches("Default author Put in the properties of each new document user name"),
+  matches("Other Default author Put in the properties of each new document user name"),
 );
 
 DocService.Settings()
@@ -186,89 +220,96 @@ async function submit() {
         </button>
       </div>
 
-      <div
-        v-for="f in shown"
-        :key="f.key"
-        class="field"
-        :class="{ off: f.needs && !value(f.needs) }"
-      >
-        <div class="head">
-          <label v-if="!f.options" class="check"
-            ><input
-              type="checkbox"
-              :checked="value(f.key) === true"
-              @change="set(f.key, ($event.target as HTMLInputElement).checked)"
-            />
-            {{ f.label }}</label
-          >
-          <span v-else :id="`${f.key}-label`">{{ f.label }}</span>
-          <button
-            v-if="scope === 'document' && overridden(f.key)"
-            type="button"
-            class="btn icon"
-            :title="`Back to the global setting (${describe(f.key, globalValue(f.key))})`"
-            @click="docValues[f.key] = null"
-          >
-            <RotateCcw :size="14" />
-          </button>
-        </div>
+      <section v-for="g in groups" :key="g.name">
+        <h3>{{ g.name }}</h3>
+        <p v-if="g.hint" class="hint">{{ g.hint }}</p>
         <div
-          v-if="f.toggle"
-          class="segmented toggle"
-          role="radiogroup"
-          :aria-labelledby="`${f.key}-label`"
+          v-for="f in g.fields"
+          :key="f.key"
+          class="field"
+          :class="{ off: f.needs && !value(f.needs) }"
         >
-          <button
-            v-for="o in f.options"
-            :key="o.value"
-            type="button"
-            role="radio"
-            :aria-checked="value(f.key) === o.value"
-            :class="{ on: value(f.key) === o.value }"
-            :disabled="f.needs && !value(f.needs)"
-            @click="set(f.key, o.value)"
+          <div class="head">
+            <label v-if="!f.options" class="check"
+              ><input
+                type="checkbox"
+                :checked="value(f.key) === true"
+                @change="set(f.key, ($event.target as HTMLInputElement).checked)"
+              />
+              {{ f.label }}</label
+            >
+            <span v-else :id="`${f.key}-label`">{{ f.label }}</span>
+            <button
+              v-if="scope === 'document' && overridden(f.key)"
+              type="button"
+              class="btn icon"
+              :title="`Back to the global setting (${describe(f.key, globalValue(f.key))})`"
+              @click="docValues[f.key] = null"
+            >
+              <RotateCcw :size="14" />
+            </button>
+          </div>
+          <div
+            v-if="f.toggle"
+            class="segmented toggle"
+            role="radiogroup"
+            :aria-labelledby="`${f.key}-label`"
           >
-            {{ o.label }}
-          </button>
-        </div>
-        <div
-          v-else-if="f.options"
-          class="choices"
-          role="radiogroup"
-          :aria-labelledby="`${f.key}-label`"
-        >
-          <label v-for="o in f.options" :key="o.value" class="check"
-            ><input
-              type="radio"
-              :name="f.key"
-              :checked="value(f.key) === o.value"
+            <button
+              v-for="o in f.options"
+              :key="o.value"
+              type="button"
+              role="radio"
+              :aria-checked="value(f.key) === o.value"
+              :class="{ on: value(f.key) === o.value }"
               :disabled="f.needs && !value(f.needs)"
-              @change="set(f.key, o.value)"
-            />
-            {{ o.label }}</label
+              @click="set(f.key, o.value)"
+            >
+              {{ o.label }}
+            </button>
+          </div>
+          <div
+            v-else-if="f.options"
+            class="choices"
+            role="radiogroup"
+            :aria-labelledby="`${f.key}-label`"
+          >
+            <label v-for="o in f.options" :key="o.value" class="check"
+              ><input
+                type="radio"
+                :name="f.key"
+                :checked="value(f.key) === o.value"
+                :disabled="f.needs && !value(f.needs)"
+                @change="set(f.key, o.value)"
+              />
+              {{ o.label }}</label
+            >
+          </div>
+          <span class="hint">{{ f.hint }}</span>
+          <span v-if="scope === 'user' && overridden(f.key)" class="hint override"
+            >This document overrides it: {{ describe(f.key, docValues[f.key]) }}.</span
           >
         </div>
-        <span class="hint">{{ f.hint }}</span>
-        <span v-if="scope === 'user' && overridden(f.key)" class="hint override"
-          >This document overrides it: {{ describe(f.key, docValues[f.key]) }}.</span
-        >
-      </div>
+      </section>
 
       <p v-if="!shown.length && !(scope === 'user' && authorShown)" class="hint">
         No settings match “{{ query.trim() }}”.
       </p>
 
       <template v-if="scope === 'user'">
-        <div v-if="authorShown" class="field">
-          <label
-            >Default author
-            <input v-model="user.author" placeholder="None" />
-          </label>
-          <span class="hint"
-            >Put in the properties of each new document, and of any saved without an author. Starts
-            as this computer's user name.</span
-          >
-        </div>
+        <section v-if="authorShown">
+          <h3>Other</h3>
+          <div class="field">
+            <label
+              >Default author
+              <input v-model="user.author" placeholder="None" />
+            </label>
+            <span class="hint"
+              >Put in the properties of each new document, and of any saved without an author.
+              Starts as this computer's user name.</span
+            >
+          </div>
+        </section>
         <p class="hint">For every document. Kept in {{ info.userFile }}</p>
       </template>
       <p v-else class="hint">
@@ -322,6 +363,23 @@ async function submit() {
   flex: none;
   height: 24px;
   padding: 0 14px;
+}
+section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+section + section {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+h3 {
+  margin: 4px 0 -4px;
+  color: var(--quote);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 .check {
   display: flex;

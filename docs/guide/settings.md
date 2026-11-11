@@ -2,7 +2,8 @@
 
 Open settings from the settings button in the top bar, **Home → Settings**, or **File → Settings…** (⌘,). **Global** settings apply
 to every document; **This Document** overrides them for the open one. A setting that differs from the global value has
-a reset button (↺).
+a reset button (↺). Settings are grouped under **Auto format**, **Sync files**, **Peanut** and **Other** (the default
+author).
 
 ![The Settings dialog's Global pane](/screenshots/settings.png)
 

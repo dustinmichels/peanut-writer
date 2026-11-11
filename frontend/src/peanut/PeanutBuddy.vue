@@ -2,17 +2,26 @@
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { state } from "@/lib/store";
 import type { HatKind } from "./hats";
-import { JUMP_MS, POKE_MS, POKE_TOUCH_MS } from "./model";
+import {
+  HANG_CROUCH_MS,
+  HANG_FALL_MS,
+  HANG_LEAP_MS,
+  JUMP_MS,
+  POKE_MS,
+  POKE_TOUCH_MS,
+  PULL_MS,
+} from "./model";
 import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "./stage";
 
 // Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
 // the edge of the tab row with his legs dangling over the ribbon; now and
 // then he stands up, strolls a little way left or right and comes back to
-// his spot, or puts on a cowboy or party hat. Less often he jams in his
-// headphones, jumps for joy, or goes up to the Commands button for a closer
-// look and knocks it crooked. Busy (Settings), he's up to something every few
-// seconds. He breathes and blinks, and says a word of encouragement only when
-// you click him. What he says fades away slowly.
+// his spot, shows off his back, or puts on a party hat or pulls a cowboy hat
+// out from behind his back. Less often he jams in his headphones, jumps for
+// joy, hangs from the top of the window, or goes up to the Commands button
+// for a closer look and knocks it crooked. Busy (Settings), he's up to
+// something every few seconds. He breathes and blinks, and says a word of
+// encouragement only when you click him. What he says fades away slowly.
 
 const CHEERS = [
   "You can do it!",
@@ -103,7 +112,12 @@ let mouthX = STAGE_W / 2;
 let mouthUp = STAGE_ABOVE / 2;
 function onMouth(x: number, y: number) {
   mouthX = x;
-  mouthUp = STAGE_ABOVE - y;
+  // Hanging, the stage itself is raised (or on its way up or down).
+  const raised =
+    lifting && stageEl.value
+      ? -new DOMMatrixReadOnly(getComputedStyle(stageEl.value).transform).m42
+      : 0;
+  mouthUp = STAGE_ABOVE - y + raised;
   if (message.value) drawTail();
   // The notes rise from beside his head.
   if (notesEl.value) {
@@ -228,15 +242,23 @@ async function stroll() {
   perch(true);
 }
 
+// The cowboy hat he pulls out from behind his back; the others pop on.
+async function putOn(kind: HatKind | null) {
+  if (kind === "cowboy") {
+    stage?.pullOutHat(kind);
+    await pause(PULL_MS);
+  } else stage?.setHat(kind);
+}
+
 let hat: HatKind | null = null;
-function changeHat() {
+async function changeHat() {
   if (hat) {
     hat = null;
     stage?.setHat(null);
     return;
   }
   hat = Math.random() < 0.5 ? "cowboy" : "birthday";
-  stage?.setHat(hat);
+  await putOn(hat);
 }
 
 // Put on headphones (swapping out any hat) and jam for a while, then put the
@@ -250,7 +272,44 @@ async function jam() {
   stage?.setJamming(false);
   jamming.value = false;
   await pause(500);
-  stage?.setHat(hat);
+  await putOn(hat);
+}
+
+// The stage is raised by lift px (to hang from the top of the window), moving
+// there as liftTransition says; lifting while it's raised or on its way.
+const lift = ref(0);
+const liftTransition = ref("");
+let lifting = false;
+function raise(px: number, ms: number, easing: string) {
+  liftTransition.value = `transform ${ms}ms ${easing}`;
+  lift.value = px;
+}
+
+// His back to the room, a leap up to grab the top of the window, a dangle
+// with his feet kicking, then a drop back down. His stage rises with him, the
+// same way he does, until its top meets the window's.
+async function hang() {
+  const wasPerched = perched;
+  if (perched) {
+    perch(false);
+    await pause(700);
+  }
+  stage?.setFacingAway(true);
+  await pause(1100);
+  stage?.setHanging(true);
+  await pause(HANG_CROUCH_MS);
+  lifting = true;
+  const easeOut = "cubic-bezier(0.25, 0.46, 0.45, 0.94)"; // his leap's ease-out
+  raise(stageEl.value!.getBoundingClientRect().top, HANG_LEAP_MS, easeOut);
+  await pause(HANG_LEAP_MS + rand(3000, 5000));
+  stage?.setHanging(false);
+  raise(0, HANG_FALL_MS, "cubic-bezier(0.55, 0.085, 0.68, 0.53)"); // his fall's ease-in
+  await pause(HANG_FALL_MS);
+  lifting = false;
+  await pause(500);
+  stage?.setFacingAway(false);
+  await pause(900);
+  if (wasPerched) perch(true);
 }
 
 // Two hops for joy, the second with a twirl; perched, he stands up for them
@@ -359,6 +418,7 @@ const activities: [number, number, () => unknown][] = [
   [0.6, 1.5, jumpForJoy],
   [0.5, 1.5, inspect],
   [1.2, 2, showBack],
+  [0.6, 1.5, hang],
 ];
 
 // Never the same thing twice running, so a busy Peanut keeps changing it up.
@@ -444,7 +504,16 @@ onBeforeUnmount(() => {
           <svg class="tail front" aria-hidden="true"><path ref="tailFrontEl" /></svg>
         </div>
       </Transition>
-      <div ref="stageEl" class="stage" role="img" aria-label="Peanut, your writing buddy" />
+      <div
+        ref="stageEl"
+        class="stage"
+        role="img"
+        aria-label="Peanut, your writing buddy"
+        :style="{
+          transform: lift ? `translateY(${-lift}px)` : undefined,
+          transition: liftTransition,
+        }"
+      />
       <div v-if="jamming" ref="notesEl" class="notes" aria-hidden="true">
         <span>♪</span><span>♫</span><span>♪</span>
       </div>

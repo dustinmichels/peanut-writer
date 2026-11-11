@@ -3,9 +3,10 @@
 ## 2026-11-11
 
 - **Peanut** has new tricks: he jams in headphones (notes floating up), jumps for joy, walks a few steps to show off
-  his back, and pokes the Commands button crooked and back. Arms sprout only for the moves that need them. A new
-  **Peanut's activity level** setting picks **Chill** (the default, every half minute or so) or **Busy** (every few
-  seconds, never the same thing twice running).
+  his back, pulls his cowboy hat out from behind his back, hangs from the top of the window kicking his feet, and
+  pokes the Commands button crooked and back. Arms sprout only for the moves that need them. A new **Peanut's
+  activity level** setting picks **Chill** (the default, every half minute or so) or **Busy** (every few seconds,
+  never the same thing twice running).
 - Three new built-in templates: **Technical** (docs and specs: numbered headings, code panels, note callouts),
   **Memo** (From / Date / Re / Subject block, summary bar) and **Book** (title page, "Chapter n" openings on new
   pages, running heads).
@@ -18,6 +19,7 @@
   **Restore Defaults** (also in the command palette) hides the Markdown and versions, shows the outline and preview
   at an even split, leaves section focus and fits the preview's zoom.
 - **Auto format** on save is on by default. Figure dialog: **Go to** puts the cursor on the figure in the text.
+  Settings are grouped under **Auto format**, **Sync files**, **Peanut** and **Other**.
 - The preview gets a header with a hide button, like the outline's. A hidden outline or preview leaves a thin
   labelled rail at its edge; click it to show the pane again.
 - **Highlight** (`==text==`, ⇧⌘H, Home tab): yellow in the editor, preview, PDF, Word and web page. Quote lines show

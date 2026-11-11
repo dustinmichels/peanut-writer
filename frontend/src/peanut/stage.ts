@@ -19,11 +19,13 @@ export interface PeanutStage {
   setSitting: (sitting: boolean) => void;
   walk: (direction: -1 | 0 | 1) => void;
   setHat: (kind: HatKind | null) => void;
+  pullOutHat: (kind: HatKind) => void;
   setJamming: (jamming: boolean) => void;
   jump: (twirl: boolean) => void;
   setInspecting: (inspecting: boolean) => void;
   poke: () => void;
   setFacingAway: (away: boolean) => void;
+  setHanging: (hanging: boolean) => void;
   hits: (clientX: number, clientY: number) => boolean;
   dispose: () => void;
 }
@@ -76,7 +78,7 @@ export function createPeanutStage(
     far: 14,
     left: -2.5,
     right: 2.5,
-    top: 4,
+    top: 5, // room for him hanging from the top of the stage
     bottom: -1,
   });
   key.shadow.bias = -0.0003;
@@ -90,7 +92,12 @@ export function createPeanutStage(
   const hemi = new THREE.HemisphereLight(0xfff7ed, 0xdfd8ce, 0.85);
   scene.add(key, fill, rim, bounceLight, hemi);
 
-  const peanut = createPeanutModel();
+  // His ceiling: how high, straight above him, the top edge of the stage is.
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(0, 1), camera);
+  const { origin, direction } = raycaster.ray;
+  const ceiling = origin.y - (origin.z / direction.z) * direction.y;
+  const peanut = createPeanutModel(ceiling);
   scene.add(peanut.group);
 
   let bounceStart = 0;
@@ -123,7 +130,6 @@ export function createPeanutStage(
   }
   frame = requestAnimationFrame(loop);
 
-  const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
 
   return {
@@ -132,11 +138,13 @@ export function createPeanutStage(
     setSitting: peanut.setSitting,
     walk: peanut.walk,
     setHat: peanut.setHat,
+    pullOutHat: peanut.pullOutHat,
     setJamming: peanut.setJamming,
     jump: peanut.jump,
     setInspecting: peanut.setInspecting,
     poke: peanut.poke,
     setFacingAway: peanut.setFacingAway,
+    setHanging: peanut.setHanging,
     hits(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
       if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {

@@ -10,7 +10,12 @@ export type HatKind = "cowboy" | "birthday" | "headphones";
 
 export interface HatHandle {
   group: THREE.Group;
+  // Where it sits on his head, in its parent's space.
+  rest: THREE.Vector3;
   setVisible: (visible: boolean) => void;
+  // Hold it at `at` (in its parent's space), tipped forward by tilt, in place
+  // of popping on; null lets go, leaving it on his head.
+  carry: (at: THREE.Vector3 | null, tilt?: number) => void;
   update: (deltaSeconds: number) => void;
   dispose: () => void;
 }
@@ -34,15 +39,28 @@ function easeOutBack(x: number): number {
 }
 
 // A hidden group resting on his head that drops on with a springy overshoot
-// and lifts off the same way; disposeExtra frees what the meshes don't own.
+// and lifts off the same way, or is carried there; disposeExtra frees what
+// the meshes don't own.
 function hat(name: string, rest: Rest, disposeExtra: () => void): HatHandle {
   const group = new THREE.Group();
   group.name = name;
   group.visible = false;
   let visible = false;
   let progress = 0; // 0 off, 1 fully on
+  let carried = false;
+  const carriedAt = new THREE.Vector3();
+  let carriedTilt = 0;
 
   function update(deltaSeconds: number) {
+    if (carried) {
+      progress = 1;
+      group.visible = true;
+      group.scale.setScalar(1);
+      group.position.copy(carriedAt);
+      group.rotation.x = rest.rotX + carriedTilt;
+      group.rotation.z = rest.rotZ;
+      return;
+    }
     const dt = Math.min(deltaSeconds, 0.1);
     progress = visible
       ? Math.min(1, progress + dt * POP_SPEED)
@@ -58,7 +76,15 @@ function hat(name: string, rest: Rest, disposeExtra: () => void): HatHandle {
 
   return {
     group,
+    rest: new THREE.Vector3(0, rest.y, rest.z),
     setVisible: (v) => (visible = v),
+    carry(at, tilt = 0) {
+      carried = at !== null;
+      if (!at) return;
+      carriedAt.copy(at);
+      carriedTilt = tilt;
+      visible = true;
+    },
     update,
     dispose() {
       group.traverse((o) => {
