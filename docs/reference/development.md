@@ -18,6 +18,7 @@ mise run cleanup   # delete build output, unregister stale .app bundles
 mise run docs      # this site, with hot reload
 mise run docs:build # this site, built into docs/.vitepress/dist
 mise run docs:screenshots # the app's screenshots in docs/public/screenshots
+mise run docs:demo # a captioned demo video in demo/ (gitignored; see demo/README.md)
 ```
 
 ## Releasing
@@ -68,6 +69,9 @@ WebKit with Playwright (`docs/scripts/screenshots.ts`). Each scene starts the ap
 default settings, opens the sample from the start dialog, then clicks its way to what the picture shows. Pages use them as
 `/screenshots/<name>.png`. Name scenes to redo only those: `mise run docs:screenshots -- settings outline`. To add one,
 add a scene to the `scenes` list.
+
+`mise run docs:demo` drives the same server-mode app through a scripted tour (`docs/scripts/demo-video.ts`) and writes
+`demo/peanut-writer-demo.mp4` with a generated soundtrack. How it works is in `demo/README.md`.
 
 ## How a document becomes pages
 
