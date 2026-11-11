@@ -18,9 +18,9 @@ import {
   scanItems,
 } from "@/lib/markdown";
 
-// textOf is doc as a string, made once for all the fields.
+// textOf is doc as a string, made once for all the fields and filters.
 const texts = new WeakMap<Text, string>();
-function textOf(doc: Text): string {
+export function textOf(doc: Text): string {
   let s = texts.get(doc);
   if (s === undefined) texts.set(doc, (s = doc.toString()));
   return s;
@@ -128,7 +128,14 @@ export function startSelection(doc: string): { anchor: number } | undefined {
 }
 
 const refRe = /(^|[^\w])@((?:fig|tbl|eq):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
-const codeNodes = new Set(["InlineCode", "FencedCode", "CodeBlock", "InlineMath", "BlockMath"]);
+// Code and math: text read as written, no Markdown inside.
+export const codeNodes = new Set([
+  "InlineCode",
+  "FencedCode",
+  "CodeBlock",
+  "InlineMath",
+  "BlockMath",
+]);
 
 interface RefSpan {
   from: number;

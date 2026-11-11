@@ -18,10 +18,17 @@ export class TableBar extends WidgetType {
     super();
   }
   eq(o: TableBar) {
+    // Not by JSON: every table's widget is compared on each keystroke.
+    const same = <T>(a: T[], b: T[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+    const a = o.table;
+    const b = this.table;
     return (
       o.item.number === this.item.number &&
       o.item.caption === this.item.caption &&
-      JSON.stringify(o.table) === JSON.stringify(this.table)
+      same(a.align, b.align) &&
+      same(a.header, b.header) &&
+      a.rows.length === b.rows.length &&
+      a.rows.every((r, i) => same(r, b.rows[i]))
     );
   }
   toDOM(view: EditorView) {

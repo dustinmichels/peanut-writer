@@ -494,10 +494,11 @@ func TestNumberedItemsInFootnotes(t *testing.T) {
 	}
 }
 
-// footnotesXML is word/footnotes.xml of src written in the first template.
-func footnotesXML(t *testing.T, src string) string {
+// partXML is the part name (word/footnotes.xml, …) of src, with pictures
+// in dir, written in the first template.
+func partXML(t *testing.T, src, dir, name string) string {
 	t.Helper()
-	out, err := Write(doc.Parse(src, ""), templates.List()[0].Docx, Options{})
+	out, err := Write(doc.Parse(src, dir), templates.List()[0].Docx, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +506,7 @@ func footnotesXML(t *testing.T, src string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, err := z.Open("word/footnotes.xml")
+	f, err := z.Open(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -518,7 +519,7 @@ func footnotesXML(t *testing.T, src string) string {
 // them too, not in the first cell or item.
 func TestFootnoteMarkBeforeQuotedBlocks(t *testing.T) {
 	for _, note := range []string{"> | A |\n    > |---|\n    > | 1 |\n", "> - item\n"} {
-		_, first, _ := strings.Cut(footnotesXML(t, "Text.[^n]\n\n[^n]: "+note), `<w:footnote w:id="1">`)
+		_, first, _ := strings.Cut(partXML(t, "Text.[^n]\n\n[^n]: "+note, "", "word/footnotes.xml"), `<w:footnote w:id="1">`)
 		if !strings.HasPrefix(first, `<w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>`+footnoteMark+`</w:p>`) {
 			t.Errorf("%q: the note doesn't start with its mark on its own: %.300s", note, first)
 		}
@@ -526,12 +527,47 @@ func TestFootnoteMarkBeforeQuotedBlocks(t *testing.T) {
 }
 
 // A note within a note keeps all its text, in brackets: its list items,
-// code and quotes too, not just its paragraphs.
+// code and quotes too, not just its paragraphs, and a figure's picture. Its
+// numbered figure is counted where the outer note's mark is, so Word
+// doesn't renumber the figures after it.
 func TestNoteWithinNote(t *testing.T) {
-	notes := footnotesXML(t, "Text.[^a]\n\n[^a]: See.[^b]\n\n[^b]: - one\n\n    ```\n    two\n    ```\n\n    > three\n")
-	for _, want := range []string{">one<", ">two<", ">three<"} {
+	dir := t.TempDir()
+	writeFixtures(t, dir)
+	src := "Text.[^a]\n\n![Body](dot.png)\n\n[^a]: See.[^b]\n\n[^b]: - one\n\n    ```\n    two\n    ```\n\n    > three\n\n    ![Inner](dot.png)\n"
+	notes := partXML(t, src, dir, "word/footnotes.xml")
+	for _, want := range []string{">one<", ">two<", ">three<", "<w:drawing>", ">Figure <", ">Inner<"} {
 		if !strings.Contains(notes, want) {
 			t.Errorf("the note within a note lost %s: %s", want, notes)
+		}
+	}
+	if n := strings.Count(partXML(t, src, dir, "word/document.xml"), "SEQ Figure"); n != 2 {
+		t.Errorf("document has %d SEQ Figure fields, want 2 (the inner note's, hidden, and Body's)", n)
+	}
+}
+
+// With a first-line indent (Academic), only a paragraph after a paragraph
+// is indented, as in the PDF: not the first, nor one after a heading or list.
+func TestFirstLineIndentOnlyAfterParagraph(t *testing.T) {
+	out, err := Write(doc.Parse("One.\n\nTwo.\n\n# H\n\nThree.\n\n- item\n\nFour.\n", ""), templates.Get("academic").Docx, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := z.Open("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(f)
+	f.Close()
+	first := `<w:pPr><w:pStyle w:val="FirstParagraph"/></w:pPr>`
+	for text, want := range map[string]bool{"One.": true, "Two.": false, "Three.": true, "Four.": true} {
+		p, _, _ := strings.Cut(string(b), `<w:t xml:space="preserve">`+text)
+		p = p[strings.LastIndex(p, "<w:p>"):]
+		if strings.Contains(p, first) != want {
+			t.Errorf("%s: First Paragraph style %v, want %v: %s", text, !want, want, p)
 		}
 	}
 }

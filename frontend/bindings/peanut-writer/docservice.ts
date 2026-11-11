@@ -328,11 +328,12 @@ export function SetDirty(dirty: boolean): $CancellablePromise<void> {
 }
 
 /**
- * SetDocumentSettings sets the open document's settings; an untitled
- * document's are written beside it when it's first saved.
+ * SetDocumentSettings sets the open document's settings named by keys, as
+ * SetUserSettings does; an untitled document's are written beside it when
+ * it's first saved.
  */
-export function SetDocumentSettings($set: $models.Settings): $CancellablePromise<void> {
-    return $Call.ByID(1322207221, $set);
+export function SetDocumentSettings($set: $models.Settings, keys: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(1322207221, $set, keys);
 }
 
 /**
@@ -360,10 +361,12 @@ export function SetUnsynced(unsynced: boolean): $CancellablePromise<void> {
 }
 
 /**
- * SetUserSettings sets the user's settings.
+ * SetUserSettings sets the user's settings named by keys (as kept in the
+ * file: "autoFormat", say) to set's; nil removes one. Settings not named, as
+ * a hand edit made meanwhile, are left as they are.
  */
-export function SetUserSettings($set: $models.Settings): $CancellablePromise<void> {
-    return $Call.ByID(3937766603, $set);
+export function SetUserSettings($set: $models.Settings, keys: string[] | null): $CancellablePromise<void> {
+    return $Call.ByID(3937766603, $set, keys);
 }
 
 /**

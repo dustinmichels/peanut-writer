@@ -4,7 +4,7 @@ import Modal from "@/components/ui/Modal.vue";
 import EyeToggle from "@/components/ui/EyeToggle.vue";
 import { setMeta } from "@/lib/actions";
 import { readFrontMatter } from "@/lib/markdown";
-import { state } from "@/lib/store";
+import { docTemplates, state } from "@/lib/store";
 
 // The properties the document can show; `hide` names those it doesn't.
 const showable: readonly string[] = [
@@ -115,7 +115,7 @@ function submit() {
     <label class="field">
       Template
       <select v-model="meta.template">
-        <option v-for="t in state.templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+        <option v-for="t in docTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
       </select>
     </label>
     <template #footer>

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -261,12 +262,30 @@ func (u *updates) removeAbandoned() {
 	if err != nil {
 		return
 	}
-	staged, _ := filepath.Glob(filepath.Join(filepath.Dir(bundle), "wails-update-*", filepath.Base(bundle)))
-	for _, p := range staged {
-		if err := os.RemoveAll(filepath.Dir(p)); err != nil {
+	for _, dir := range abandonedUpdates(bundle) {
+		if err := os.RemoveAll(dir); err != nil {
 			log.Printf("removing an abandoned update: %v", err)
 		} else {
-			log.Printf("removed an abandoned update: %s", filepath.Dir(p))
+			log.Printf("removed an abandoned update: %s", dir)
 		}
 	}
+}
+
+// abandonedUpdates lists the folders beside bundle the updater downloaded a
+// copy of it into (wails-update-*/Name.app). Not filepath.Glob: the path may
+// hold pattern characters, like "[".
+func abandonedUpdates(bundle string) []string {
+	parent := filepath.Dir(bundle)
+	entries, _ := os.ReadDir(parent)
+	var dirs []string
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), "wails-update-") {
+			continue
+		}
+		dir := filepath.Join(parent, e.Name())
+		if _, err := os.Lstat(filepath.Join(dir, filepath.Base(bundle))); err == nil {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }

@@ -109,9 +109,16 @@ func TestImportNamesAfterTheZipAndAvoidsBuiltins(t *testing.T) {
 
 func TestImportWindowsZipAndLongNames(t *testing.T) {
 	userHome(t)
-	p := writeZip(t, map[string]string{`Thesis\template.typ`: "#let template(meta, body) = body", `Thesis\template.json`: `{}`})
+	typ := "#let template(meta, body) = body"
+	p := writeZip(t, map[string]string{`Thesis\template.typ`: typ, `Thesis\template.json`: `{}`})
 	if dir, err := Import(p); err != nil || filepath.Base(dir) != "thesis" {
 		t.Errorf("zip with backslashes: %q, %v", dir, err)
+	}
+	// Names starting ./ (as some zippers write them), and a stray
+	// template.json beside the template's folder.
+	p = writeZip(t, map[string]string{"./Paper/template.typ": typ, "./Paper/template.json": `{}`, "Old/template.json": `{}`})
+	if dir, err := Import(p); err != nil || filepath.Base(dir) != "paper" {
+		t.Errorf("zip with ./ and a stray file: %q, %v", dir, err)
 	}
 	// A folder name over 255 bytes can't be made.
 	id, err := Save(Custom{Base: "classic"}, strings.Repeat("Long name ", 30), "")

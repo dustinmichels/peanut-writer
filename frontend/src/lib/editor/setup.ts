@@ -75,7 +75,13 @@ export function createEditor(
     hiddenKeymap,
     focusKeymap,
     formatting,
-    keymap.of([...markdownKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+    // Not ⌘/ (toggleComment, `<!-- -->`): that's View → Markdown, the menu's.
+    keymap.of([
+      ...markdownKeymap,
+      ...defaultKeymap.filter((b) => b.key !== "Mod-/"),
+      ...historyKeymap,
+      ...searchKeymap,
+    ]),
     autocompletion({ override: [refCompletions], icons: false }),
     decorations(handlers),
     lineStyles,

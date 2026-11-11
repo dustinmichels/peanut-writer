@@ -4,6 +4,7 @@
 import { syntaxTree } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { EditorView, WidgetType } from "@codemirror/view";
+import { textOf } from "@/lib/editor/fields";
 import { type Span, startMove } from "@/lib/editor/move";
 import { block } from "./block";
 import { gripIcon } from "./icons";
@@ -14,8 +15,13 @@ export const tocRe = /^\[(TOC|toc)\]$/;
 // the table of contents.
 export function tocBlocks(state: EditorState): Span[] {
   const out: Span[] = [];
+  const text = textOf(state.doc);
   for (let n = syntaxTree(state).topNode.firstChild; n; n = n.nextSibling)
-    if (n.name === "Paragraph" && tocRe.test(state.sliceDoc(n.from, n.to).trim()))
+    if (
+      n.name === "Paragraph" &&
+      text[n.from] === "[" &&
+      tocRe.test(text.slice(n.from, n.to).trim())
+    )
       out.push({ from: n.from, to: n.to });
   return out;
 }

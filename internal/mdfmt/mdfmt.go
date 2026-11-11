@@ -248,7 +248,9 @@ var (
 	// reference labels, attribute blocks, cross-references, footnotes,
 	// autolinks, URLs, entities and escapes.
 	protected = regexp.MustCompile("`+[^`]*`+|\\$\\$?(?:\\\\.|[^$\\\\])+\\$\\$?|\\]\\((?:[^()]|\\([^()]*\\))*\\)|\\]\\([^)]*\\)|\\]\\[[^\\]]*\\]|\\{[^}]*\\}|@[\\w:.-]+|\\[\\^[^\\]]*\\]|<[^>]*>|https?://\\S+|&#?\\w+;|\\\\.")
-	word      = regexp.MustCompile(`[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*`)
+	// A word: letters and digits with their accents (decomposed ones too),
+	// joined by apostrophes and dots (don't, Node.js, U.S).
+	word = regexp.MustCompile(`[\p{L}\p{N}][\p{L}\p{M}\p{N}]*(?:['’.][\p{L}\p{N}][\p{L}\p{M}\p{N}]*)*`)
 )
 
 // minor words stay lowercase in a title unless they start or end it, or
@@ -358,10 +360,11 @@ func eachWord(text string, recase func(w string, first, last bool, before string
 	return b.String()
 }
 
-// capitalize puts w's first letter in upper case.
+// capitalize puts w's first letter in title case (upper case, except for
+// digraphs like ǆ, which become ǅ).
 func capitalize(w string) string {
 	r, n := utf8.DecodeRuneInString(w)
-	return string(unicode.ToUpper(r)) + w[n:]
+	return string(unicode.ToTitle(r)) + w[n:]
 }
 
 // keepAsIs reports whether w has a digit, or a capital after its first

@@ -19,18 +19,17 @@
 - **Highlight** (`==text==`, ⇧⌘H, Home tab): yellow in the editor, preview, PDF, Word and web page. Quote lines show
   their `>` in the editor. **Tab / ⇧Tab on a list item** (bulleted or numbered) nests it under the item above or lifts
   it out, with its sub-items, numbering the sub-list from 1.
-- Refine pass (details in `refine.md`): fixed a crash on self-marking footnotes, an editor crash loop on links split
+- Refine passes (details in `refine.md`): fixed a crash on self-marking footnotes, an editor crash loop on links split
   across lines, `javascript:` links in web pages, and data-loss paths (New Document over the open file, saving with a
-  dialog open, restores after a failed backup, concurrent `state.json` writes, silent export overwrites, BOM files).
-  A `.peanut` given on the command line while the app runs now opens. Auto format no longer rewrites code samples,
-  and leaves the text as written wherever formatting would change what the document says. The figure and link
-  dialogs keep math and code in captions and link text as written; `$\|x\|$` in a table cell draws |x|. Later
-  fixes: a quick document switch after a Customize change no longer writes one document's style into the other; Save
-  As under a differently-cased name no longer deletes the document's own settings; non-UTF-8 files are refused
-  instead of saved with �; odd hand-edited template styles no longer produce Word files Word rejects; the ribbon no
-  longer widens the window past its edge.
-- One unreadable picture, an empty link, code fence or quote, or a page break (or Book chapter heading) in a quote,
-  list or note no longer stops the whole preview and PDF.
+  dialog open, failed backups before restores, backups pruned after the clock went back, concurrent `state.json`
+  writes, silent export overwrites, Save As under another case, a Customize change landing in the next document,
+  non-UTF-8 and BOM files). Auto format no longer rewrites code samples or changes what a document says. Styling a
+  Select All no longer copies or breaks the front matter; Bold across paragraphs styles each one; Clear Formatting
+  leaves code and math alone; heading styles convert underlined headings. Properties with emoji or escapes save and
+  read back the same in the app and the PDF, and the editor numbers figures and notes as the PDF does.
+- The preview and PDF no longer fail on one unreadable picture, an empty link, code fence or quote, a page break (or
+  Book chapter heading) in a quote, list or note, or deeply nested quotes and lists; overlong words and URLs break
+  instead of running off the page. Word keeps figure numbers in notes within notes on Update Fields.
 - Faster on long documents: Markdown parsing (13×), typing (the editor rereads only around each edit: 15× less work
   per keystroke) and cursor moves, and the preview reuses unchanged pages instead of reloading them.
 

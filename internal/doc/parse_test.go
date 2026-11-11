@@ -188,6 +188,34 @@ func TestLineBreaks(t *testing.T) {
 	}
 }
 
+// Front matter values read and write alike here, in the editor
+// (frontMatter.ts, markdown.test.ts reads the same cases) and in service.go:
+// YAML's double-quoted escapes, a value with a bad one taken as written. A
+// flag emoji written `\U…` used to keep its backslashes in the editor.
+func TestFrontMatterValues(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "frontmatter.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases struct{ Read, Write [][2]string }
+	if err := json.Unmarshal(b, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases.Read {
+		if m, _ := splitFrontMatter("---\ntitle: " + c[0] + "\n---\n"); m.Title != c[1] {
+			t.Errorf("read %q: %q, want %q", c[0], m.Title, c[1])
+		}
+	}
+	for _, c := range cases.Write {
+		if got := FrontMatterValue(c[0]); got != c[1] {
+			t.Errorf("write %q: %s, want %s", c[0], got, c[1])
+		}
+		if m, _ := splitFrontMatter("---\ntitle: " + c[1] + "\n---\n"); m.Title != c[0] {
+			t.Errorf("%s reads %q", c[1], m.Title)
+		}
+	}
+}
+
 // mathIn is a paragraph's text with its math as "[tex]" ("$$tex$$" for
 // display math).
 func mathIn(xs []Inline) string {

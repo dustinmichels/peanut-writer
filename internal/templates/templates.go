@@ -452,21 +452,30 @@ func Import(p string) (string, error) {
 		return "", fmt.Errorf("%s isn't a template zip: %w", filepath.Base(p), err)
 	}
 	defer zr.Close()
-	var typ, meta *zip.File
+	files := map[string]*zip.File{}
 	for _, f := range zr.File {
-		f.Name = strings.ReplaceAll(f.Name, `\`, "/") // as some Windows zippers write it
+		// As some zippers write it: with `\` (Windows), or `./` or `/` first.
+		f.Name = strings.TrimPrefix(path.Clean("/"+strings.ReplaceAll(f.Name, `\`, "/")), "/")
 		dir, name := path.Split(f.Name)
-		if strings.Count(dir, "/") > 1 || strings.HasPrefix(dir, "__MACOSX/") {
+		if strings.Count(dir, "/") > 1 || strings.HasPrefix(dir, "__MACOSX/") || (name != "template.typ" && name != "template.json") {
 			continue
 		}
-		switch name {
-		case "template.typ":
-			typ = cmp.Or(typ, f)
-		case "template.json":
-			meta = cmp.Or(meta, f)
+		if files[f.Name] == nil {
+			files[f.Name] = f
 		}
 	}
-	if typ == nil || meta == nil || path.Dir(typ.Name) != path.Dir(meta.Name) {
+	// The first folder holding both: the zip may hold another template, or
+	// a stray template.json.
+	var typ, meta *zip.File
+	for _, f := range zr.File {
+		if path.Base(f.Name) == "template.typ" && files[f.Name] == f {
+			if meta = files[path.Join(path.Dir(f.Name), "template.json")]; meta != nil {
+				typ = f
+				break
+			}
+		}
+	}
+	if typ == nil {
 		return "", fmt.Errorf("%s doesn't hold a template: it needs template.typ and template.json, side by side", filepath.Base(p))
 	}
 	src, err := readZipped(typ)

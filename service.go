@@ -16,10 +16,10 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -214,7 +214,7 @@ func (s *DocService) NewDocument() (DocInfo, error) {
 		return DocInfo{Canceled: true}, err
 	}
 	name := docName(p)
-	content := fillProperties("---\npeanut-version: "+frontMatterValue(appVersion)+"\n---\n\n", name)
+	content := fillProperties("---\npeanut-version: "+doc.FrontMatterValue(appVersion)+"\n---\n\n", name)
 	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
@@ -224,17 +224,6 @@ func (s *DocService) NewDocument() (DocInfo, error) {
 	s.remember(p)
 	return DocInfo{Path: p, Name: name, Content: content}, nil
 }
-
-// frontMatterValue quotes v when it would otherwise read differently in front
-// matter (as the editor's writeFrontMatter does).
-func frontMatterValue(v string) string {
-	if frontMatterQuote.MatchString(v) {
-		return strconv.Quote(v)
-	}
-	return v
-}
-
-var frontMatterQuote = regexp.MustCompile("^[\\s\"'\\[{>|*&!%@`#-]|:\\s|\\s$|#")
 
 // fillProperties gives content the core properties it lacks, as a new
 // document starts with them: a title (name, in title case), the default
@@ -286,7 +275,7 @@ func fillProperties(content, name string) string {
 		if v == "" {
 			continue
 		}
-		line := f.key + ": " + frontMatterValue(v)
+		line := f.key + ": " + doc.FrontMatterValue(v)
 		changed = true
 		if i >= 0 {
 			lines[i] = line
@@ -329,6 +318,9 @@ func shownPath(p string) string {
 // package was renamed). A package's Markdown file mustn't be a symlink: one
 // from elsewhere could otherwise show (and save over) any file.
 func docFile(p string) (string, error) {
+	if p != "" {
+		p = filepath.Clean(p) // "Name.peanut/", as shells complete it, is Name's package
+	}
 	if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
 		if real, err := filepath.EvalSymlinks(p); err == nil {
 			p = real
@@ -338,9 +330,12 @@ func docFile(p string) (string, error) {
 		return p, err
 	}
 	md := filepath.Join(p, docName(p)+".md")
-	if _, err := os.Lstat(md); err != nil {
+	if _, err := os.Lstat(md); errors.Is(err, fs.ErrNotExist) {
 		// Not filepath.Glob: p may hold pattern characters, like "[".
-		entries, _ := os.ReadDir(p)
+		entries, err := os.ReadDir(p)
+		if err != nil {
+			return "", err
+		}
 		var found []string
 		for _, e := range entries {
 			// Not hidden files, like the "._Name.md" macOS writes beside
@@ -349,8 +344,11 @@ func docFile(p string) (string, error) {
 				found = append(found, e.Name())
 			}
 		}
-		if len(found) != 1 {
+		switch {
+		case len(found) == 0:
 			return "", fmt.Errorf("%s holds no document", filepath.Base(p))
+		case len(found) > 1:
+			return "", fmt.Errorf("%s holds %d documents (%s) and none is named %s.md: rename the package after the one to open", filepath.Base(p), len(found), strings.Join(found, ", "), docName(p))
 		}
 		md = filepath.Join(p, found[0])
 	}
@@ -686,7 +684,13 @@ func (s *DocService) backup(p string) error {
 	if !backup.Changed(p, content) {
 		return nil
 	}
-	return backup.Write(p, content, time.Now())
+	if err := backup.Write(p, content, time.Now()); err != nil {
+		return err
+	}
+	if s.app != nil {
+		s.app.Event.Emit("backedUp", p) // the Versions pane lists it
+	}
+	return nil
 }
 
 // backupFailed tells the editor about a failed backup, if err is one.
@@ -1811,28 +1815,36 @@ func (s *DocService) Settings() (SettingsInfo, error) {
 	return info, err
 }
 
-// SetUserSettings sets the user's settings.
-func (s *DocService) SetUserSettings(set Settings) error {
+// SetUserSettings sets the user's settings named by keys (as kept in the
+// file: "autoFormat", say) to set's; nil removes one. Settings not named, as
+// a hand edit made meanwhile, are left as they are.
+func (s *DocService) SetUserSettings(set Settings, keys []string) error {
 	p, err := configPath("settings.json")
 	if err != nil {
 		return err
 	}
-	return writeSettings(p, set)
+	return writeSettings(p, set, keys)
 }
 
-// SetDocumentSettings sets the open document's settings; an untitled
-// document's are written beside it when it's first saved.
-func (s *DocService) SetDocumentSettings(set Settings) error {
+// SetDocumentSettings sets the open document's settings named by keys, as
+// SetUserSettings does; an untitled document's are written beside it when
+// it's first saved.
+func (s *DocService) SetDocumentSettings(set Settings, keys []string) error {
 	s.mu.Lock()
 	p := s.path
 	if p == "" {
-		s.untitled = set
-	}
-	s.mu.Unlock()
-	if p == "" {
+		defer s.mu.Unlock()
+		for _, k := range keys {
+			i, err := settingIndex(k)
+			if err != nil {
+				return err
+			}
+			reflect.ValueOf(&s.untitled).Elem().Field(i).Set(reflect.ValueOf(set).Field(i))
+		}
 		return nil
 	}
-	return writeSettings(documentSettingsPath(p), set)
+	s.mu.Unlock()
+	return writeSettings(documentSettingsPath(p), set, keys)
 }
 
 // carrySettings gives the document saved as to the settings of the one it
@@ -1849,7 +1861,7 @@ func (s *DocService) carrySettings(from, to string) error {
 		s.mu.Lock()
 		set := s.untitled
 		s.mu.Unlock()
-		return writeSettings(dst, set)
+		return writeSettings(dst, set, settingKeys)
 	}
 	b, err := os.ReadFile(documentSettingsPath(from))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -1861,51 +1873,93 @@ func (s *DocService) carrySettings(from, to string) error {
 	return atomicfile.Write(dst, b, 0o644)
 }
 
-// readSettings reads a settings file; one that isn't there sets nothing.
+// settingKeys are the keys a settings file keeps Settings' fields under, in
+// order.
+var settingKeys = func() []string {
+	t := reflect.TypeFor[Settings]()
+	keys := make([]string, t.NumField())
+	for i := range keys {
+		keys[i], _, _ = strings.Cut(t.Field(i).Tag.Get("json"), ",")
+	}
+	return keys
+}()
+
+// settingIndex is the index in Settings of the field kept under key.
+func settingIndex(key string) (int, error) {
+	if i := slices.Index(settingKeys, key); i >= 0 {
+		return i, nil
+	}
+	return 0, fmt.Errorf("there's no setting %q", key)
+}
+
+// readSettings reads a settings file; one that isn't there sets nothing. A
+// setting of the wrong type (a hand edit, say) reads as not set rather than
+// spoiling the others, and setting it replaces it.
 func readSettings(p string) (Settings, error) {
 	var set Settings
-	b, err := os.ReadFile(p)
-	if errors.Is(err, fs.ErrNotExist) {
-		return set, nil
-	}
-	if err == nil && len(bytes.TrimSpace(b)) > 0 { // an empty file sets nothing too
-		err = json.Unmarshal(b, &set)
-	}
+	m, err := settingsKeys(p)
 	if err != nil {
-		return set, fmt.Errorf("%s: %w", p, err)
+		return set, err
+	}
+	v := reflect.ValueOf(&set).Elem()
+	for i, key := range settingKeys {
+		if raw, ok := m[key]; ok && json.Unmarshal(raw, v.Field(i).Addr().Interface()) != nil {
+			v.Field(i).SetZero()
+		}
 	}
 	return set, nil
 }
 
-// writeSettings writes set to a settings file, keeping any other keys it
-// has. A file left empty is removed.
-func writeSettings(p string, set Settings) error {
-	m := map[string]json.RawMessage{}
+// settingsKeys reads a settings file's keys: none if it isn't there, is
+// empty, or holds JSON other than an object. A file that isn't JSON is an
+// error, so a mistyped hand edit is reported rather than lost. A byte order
+// mark (some editors write one) is skipped.
+func settingsKeys(p string) (map[string]json.RawMessage, error) {
 	b, err := os.ReadFile(p)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return err
+		return nil, err
 	}
-	if len(bytes.TrimSpace(b)) > 0 { // an empty file has nothing to keep
-		if err := json.Unmarshal(b, &m); err != nil {
-			return fmt.Errorf("%s: %w", p, err)
+	b = bytes.TrimPrefix(b, []byte("\ufeff"))
+	var m map[string]json.RawMessage
+	if len(bytes.TrimSpace(b)) > 0 {
+		var typ *json.UnmarshalTypeError
+		if err := json.Unmarshal(b, &m); err != nil && !errors.As(err, &typ) {
+			return nil, fmt.Errorf("%s: %w", p, err)
 		}
 	}
-	on, none := true, ""
-	all, _ := json.Marshal(Settings{AutoFormat: &on, HeadingCase: &none, Author: &none, Peanut: &on, SyncOnSave: &on, SyncOnQuit: &on})
-	var keys map[string]json.RawMessage
-	json.Unmarshal(all, &keys)
-	for k := range keys {
-		delete(m, k)
+	if m == nil {
+		m = map[string]json.RawMessage{}
 	}
-	b, _ = json.Marshal(set)
-	json.Unmarshal(b, &m) // adds set's keys to m
+	return m, nil
+}
+
+// writeSettings sets the settings named by keys in a settings file to set's
+// (nil removes one), keeping every other key it has, as read now. A file left
+// empty is removed.
+func writeSettings(p string, set Settings, keys []string) error {
+	m, err := settingsKeys(p)
+	if err != nil {
+		return err
+	}
+	v := reflect.ValueOf(set)
+	for _, k := range keys {
+		i, err := settingIndex(k)
+		if err != nil {
+			return err
+		}
+		if f := v.Field(i); f.IsNil() {
+			delete(m, k)
+		} else {
+			m[k], _ = json.Marshal(f.Interface())
+		}
+	}
 	if len(m) == 0 {
 		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 		return nil
 	}
-	b, _ = json.MarshalIndent(m, "", "  ")
+	b, _ := json.MarshalIndent(m, "", "  ")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}

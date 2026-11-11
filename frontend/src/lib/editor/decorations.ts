@@ -32,6 +32,7 @@ import {
   showMarkdown,
   shownEquations,
   typedEquation,
+  textOf,
 } from "./fields";
 import { coverage } from "./hidden";
 import type { Handlers } from "./types";
@@ -74,7 +75,8 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     atomic?: boolean;
   }[] = [];
 
-  const fm = readFrontMatter(doc.toString());
+  const text = textOf(doc);
+  const fm = readFrontMatter(text);
   if (fm.to === 0) {
     // No properties yet (a new document, or one on the default template):
     // the card still sits on top, so they can be added.
@@ -114,7 +116,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
         atomic: true,
       });
     } else {
-      const table = parseTable(doc.sliceString(it.tableFrom!, it.tableTo!));
+      const table = parseTable(text.slice(it.tableFrom!, it.tableTo!));
       ranges.push({
         from: it.from,
         to: it.to,
@@ -126,8 +128,10 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       });
     }
   }
+  const numbers = new Map<number, number>();
+  for (const x of items) if (x.kind === "equation") numbers.set(x.from, x.number);
   for (const eq of shownEquations(state)) {
-    const n = items.find((x) => x.kind === "equation" && x.from === eq.from)?.number ?? 0;
+    const n = numbers.get(eq.from) ?? 0;
     ranges.push({
       from: eq.from,
       to: eq.to,

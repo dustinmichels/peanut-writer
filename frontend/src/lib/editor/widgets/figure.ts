@@ -90,8 +90,11 @@ export class FigureWidget extends WidgetType {
   eq(o: FigureWidget) {
     const a = this.item;
     const b = o.item;
+    const pa = a.pictures ?? [];
+    const pb = b.pictures ?? [];
     return (
-      JSON.stringify(a.pictures) === JSON.stringify(b.pictures) &&
+      pa.length === pb.length &&
+      pa.every((p, i) => p.src === pb[i].src && p.alt === pb[i].alt) &&
       a.columns === b.columns &&
       a.number === b.number &&
       a.caption === b.caption &&

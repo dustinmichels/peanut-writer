@@ -24,7 +24,12 @@
   set page(
     paper: "us-letter",
     margin: 1in,
-    header: context grid(columns: (1fr, auto), get("header"), counter(page).display()),
+    // At the body size, but no bigger than 18pt: at a large custom size the
+    // running head would run off the page.
+    header: context {
+      set text(size: calc.min(size, 18pt))
+      grid(columns: (1fr, auto), get("header"), counter(page).display())
+    },
   )
   set text(font: font, size: size, fill: ink, lang: "en")
   // Double spacing: the gap between paragraphs is the gap between lines.

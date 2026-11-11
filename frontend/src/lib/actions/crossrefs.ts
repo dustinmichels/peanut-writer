@@ -68,7 +68,13 @@ export function insertCrossRef(item: Item, at?: RefAt) {
   changes.push({ from, to, insert: text });
   const set = v.state.changes(changes);
   // The cursor goes after the reference, wherever the other changes put it.
-  v.dispatch({ changes: set, selection: { anchor: set.mapPos(to, 1) }, userEvent: "input" });
+  // Past the focus guard: the item may be outside the section shown.
+  v.dispatch({
+    changes: set,
+    selection: { anchor: set.mapPos(to, 1) },
+    userEvent: "input",
+    filter: false,
+  });
   v.focus();
 }
 

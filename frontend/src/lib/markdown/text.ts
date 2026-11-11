@@ -4,15 +4,20 @@
 import { blockStart } from "./footnotes";
 import { readFrontMatter } from "./frontMatter";
 
+// Word's count: each Chinese or Japanese character is a word, and a
+// hyphenated word (`self-driving`) is one.
+const cjk = /[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}ー]/gu;
+
 export function wordCount(text: string): number {
-  const body = text.slice(readFrontMatter(text).to);
-  const words = body
+  const body = text
+    .slice(readFrontMatter(text).to)
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!\[[^\]]*\]\([^)]*\)(\{[^}]*\})?/g, " ")
     .replace(/\{#[^}]*\}/g, " ")
-    .replace(/[#>*_`~|:-]+/g, " ")
-    .match(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu);
-  return words ? words.length : 0;
+    .replace(/[#>*_`~|:]+/g, " ");
+  let n = 0;
+  const rest = body.replace(cjk, () => (n++, " "));
+  return n + (rest.match(/[\p{L}\p{N}][\p{L}\p{N}'’]*(?:-[\p{L}\p{N}][\p{L}\p{N}'’]*)*/gu)?.length ?? 0);
 }
 
 // plain strips Markdown inline marks, for showing captions in lists.

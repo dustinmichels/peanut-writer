@@ -23,6 +23,9 @@ func TestTitleCase(t *testing.T) {
 		"*what* is *the* point":              "*What* Is *the* Point",
 		"the $\\sin x$ of a wave":            "The $\\sin x$ of a Wave",
 		"the $a \\$ b$ of it":                "The $a \\$ b$ of It",
+		"re\u0301sume\u0301 tips":            "Re\u0301sume\u0301 Tips", // decomposed accents
+		"getting started with node.js":       "Getting Started With Node.js",
+		"e.g. the config.yaml file":          "E.g. the Config.yaml File",
 	} {
 		if got := TitleCase(in); got != want {
 			t.Errorf("TitleCase(%q) = %q, want %q", in, got, want)
@@ -39,6 +42,7 @@ func TestSentenceCase(t *testing.T) {
 		"Using `The_API` In Go":              "Using `The_API` in go",
 		"See @fig:The-Chart For More":        "See @fig:The-Chart for more",
 		"*What* Is *The* Point":              "*What* is *the* point",
+		"The U.S. Economy":                   "The U.S. economy",
 	} {
 		if got := SentenceCase(in); got != want {
 			t.Errorf("SentenceCase(%q) = %q, want %q", in, got, want)

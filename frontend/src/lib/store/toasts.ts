@@ -11,6 +11,10 @@ export interface Toast {
 
 let toastId = 0;
 export function toast(text: string, tone: Toast["tone"] = "info", action?: Toast["action"]) {
+  // The same message again (a change failing each time it's saved, say)
+  // replaces the one shown rather than stacking up over the window.
+  const same = state.toasts.findIndex((t) => t.text === text && t.tone === tone);
+  if (same >= 0) state.toasts.splice(same, 1);
   const t = { id: ++toastId, text, tone, action };
   state.toasts.push(t);
   setTimeout(() => dismiss(t.id), action ? 8000 : 4000);

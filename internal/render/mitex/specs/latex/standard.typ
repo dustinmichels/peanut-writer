@@ -81,11 +81,18 @@
   subsection: define-cmd(1, alias: "#heading(level: 2)"),
   subsubsection: define-cmd(1, alias: "#heading(level: 3)"),
   footnote: define-cmd(1, alias: "#footnote"),
-  cite: define-cmd(1, alias: "#mitexcite", handle: it => cite(label(get-tex-str(it)))),
+  // Peanut Writer: a document has no bibliography, and math may refer to a
+  // label it doesn't hold; either would stop the whole document (at layout,
+  // past the check that finds unreadable math). A citation is its key in
+  // brackets, a missing reference ??, as in LaTeX.
+  cite: define-cmd(1, alias: "#mitexcite", handle: it => "[" + get-tex-str(it) + "]"),
   emph: define-cmd(1, alias: "#emph"),
   label: define-cmd(1, alias: "mitexlabel", handle: ignore-me),
   tag: define-cmd(1, alias: "mitexlabel", handle: ignore-me),
-  ref: define-cmd(1, alias: "#mitexref", handle: it => ref(label(get-tex-str(it)))),
+  ref: define-cmd(1, alias: "#mitexref", handle: it => {
+    let l = label(get-tex-str(it))
+    context if query(l).len() == 1 { ref(l) } else { text(weight: "bold", "??") }
+  }),
   eqref: define-cmd(1, alias: "#mitexref"),
   item: ignore-sym,
   // environments for text mode

@@ -106,6 +106,7 @@ type writer struct {
 	prefix string // runs that start the next paragraph (a footnote's mark)
 
 	paraStyle  string        // style of body paragraphs here: "" (Normal), Quote, FootnoteText
+	afterPara  bool          // the block being written follows a paragraph
 	indent     int           // twips in from the left margin the blocks being written start: in list items and quotes
 	right      int           // and from the right margin: in quotes
 	ordered    []orderedList // ordered list numbering instances

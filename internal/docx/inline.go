@@ -166,6 +166,9 @@ func (w *writer) link(sb *strings.Builder, x doc.Inline, p runProps) {
 // may be saved elsewhere: it becomes a file: URL to where the file is.
 func (w *writer) linkTarget(target string) string {
 	u, err := url.Parse(target)
+	if err != nil { // a % that escapes nothing, as in a path like 100%.pdf
+		u, err = url.Parse(strings.ReplaceAll(target, "%", "%25"))
+	}
 	if err != nil || u.Scheme != "" || u.Host != "" || u.Path == "" || w.dir == "" {
 		return strings.ReplaceAll(target, " ", "%20")
 	}
@@ -177,7 +180,7 @@ func (w *writer) linkTarget(target string) string {
 	if !strings.HasPrefix(p, "/") {
 		p = "/" + p // C:/… on Windows
 	}
-	return (&url.URL{Scheme: "file", Path: p, Fragment: u.Fragment}).String()
+	return (&url.URL{Scheme: "file", Path: p, RawQuery: u.RawQuery, Fragment: u.Fragment}).String()
 }
 
 // ref is "Figure N", "Table N" or "Equation N" as a REF field to the
@@ -253,14 +256,34 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	// The note's numbered figures, tables and equations show plain numbers;
 	// hidden SEQ fields here count them where the mark is, keeping Word's
 	// numbering of later ones in the text in step.
-	countNumbered(x.Blocks, func(kind string) { sb.WriteString(w.hiddenSeq(kind)) })
+	doc.Walk(x.Blocks, func(b *doc.Block) {
+		if kind := seqKind(b); kind != "" {
+			sb.WriteString(w.hiddenSeq(kind))
+		}
+	}, func(*doc.Inline) {})
 }
 
-// flatText writes the text of blocks in a line, for a note within a note:
-// paragraphs, a list's items, a quote's text, code, an equation, a table's
-// caption and cells and a figure's caption, a space between each (and
-// before the first when gap). It reports whether any text went before
-// what comes next.
+// seqKind is the SEQ name of a numbered figure, table or equation; "" for
+// any other block.
+func seqKind(b *doc.Block) string {
+	if b.Number > 0 {
+		switch b.Type {
+		case doc.BlockFigure:
+			return "Figure"
+		case doc.BlockTable:
+			return "Table"
+		case doc.BlockEquation:
+			return "Equation"
+		}
+	}
+	return ""
+}
+
+// flatText writes blocks in a line, for a note within a note: paragraphs, a
+// list's items, a quote's text, code, an equation, a table's caption and
+// cells and a figure's pictures and caption, a space between each (and
+// before the first when gap). It reports whether anything went before what
+// comes next.
 func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, p runProps, gap bool) bool {
 	add := func(runs string) {
 		if runs == "" {
@@ -282,11 +305,46 @@ func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, p runProps, gap b
 			q.code = true
 			add(w.run(strings.ReplaceAll(strings.TrimSuffix(b.Text, "\n"), "\n", " "), q))
 		case doc.BlockEquation:
-			add(w.math(doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error}, p))
+			runs := w.math(doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error}, p)
+			if b.Number > 0 {
+				runs += w.run(fmt.Sprintf(" (%d)", b.Number), p)
+			}
+			add(runs)
 		case doc.BlockFigure:
-			add(w.inlines(b.Caption, p))
+			var runs strings.Builder
+			caption := doc.PlainText(b.Caption)
+			if len(b.Pictures) > 0 {
+				// As wide as in a grid (see pictureGrid), so a row fits a line.
+				colW := w.availW()
+				if b.Width > 0 {
+					colW = int(float64(colW) * b.Width / 100)
+				}
+				width := float64(max(colW/max(b.Columns, 1)-2*gridCellPad, 20)) / 20
+				for i, pic := range b.Pictures {
+					if i > 0 {
+						runs.WriteString(w.run(" ", p))
+					}
+					alt := doc.PlainText(pic.Alt)
+					if alt == "" {
+						alt = caption
+					}
+					runs.WriteString(w.flatPicture(pic.Src, pic.Missing, width, alt, p))
+				}
+			} else {
+				want := 0.0
+				if b.Width > 0 {
+					want = b.Width / 100 * float64(w.availW()) / 20
+				}
+				runs.WriteString(w.flatPicture(b.Src, b.Missing, want, caption, p))
+			}
+			if len(b.Caption) > 0 || b.Label != "" {
+				runs.WriteString(w.run(" ", p) + w.captionRuns("Figure", b))
+			}
+			add(runs.String())
 		case doc.BlockTable:
-			add(w.inlines(b.Caption, p))
+			if len(b.Caption) > 0 || b.Label != "" {
+				add(w.captionRuns("Table", b))
+			}
 			for _, row := range append([][][]doc.Inline{b.Header}, b.Rows...) {
 				for _, cell := range row {
 					add(w.inlines(cell, p))
@@ -301,26 +359,14 @@ func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, p runProps, gap b
 	return gap
 }
 
-// countNumbered calls f with the SEQ name of each numbered figure, table and
-// equation in bs, in order. Notes within them are left out: Word has none.
-func countNumbered(bs []doc.Block, f func(kind string)) {
-	for i := range bs {
-		b := &bs[i]
-		if b.Number > 0 {
-			switch b.Type {
-			case doc.BlockFigure:
-				f("Figure")
-			case doc.BlockTable:
-				f("Table")
-			case doc.BlockEquation:
-				f("Equation")
-			}
-		}
-		countNumbered(b.Children, f)
-		for _, item := range b.Items {
-			countNumbered(item, f)
-		}
+// flatPicture is a figure's picture in a line, widthPt wide (0 for its
+// natural size).
+func (w *writer) flatPicture(src, missing string, widthPt float64, alt string, p runProps) string {
+	if src == "" {
+		p.i = true
+		return w.run("[missing image: "+missing+"]", p)
 	}
+	return w.picture(src, widthPt, alt)
 }
 
 // clean drops characters XML can't hold (and carriage returns).

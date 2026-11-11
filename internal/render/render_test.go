@@ -3,6 +3,7 @@ package render
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -193,6 +194,57 @@ func TestPageBreaksInContainers(t *testing.T) {
 		} else if len(pages) < 2 {
 			t.Errorf("%s: %d pages, want the top-level break", tpl.ID, len(pages))
 		}
+	}
+}
+
+// Quotes, lists, notes marking notes and styled text nested deeper than
+// Typst can read or evaluate (about 20 levels) are flattened, keeping their
+// text, rather than stopping the whole preview.
+func TestDeepNestingRenders(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	var list, notes strings.Builder
+	notes.WriteString("Text[^0]\n\n")
+	for i := range 100 {
+		list.WriteString(strings.Repeat("  ", i) + "- item\n")
+		fmt.Fprintf(&notes, "[^%d]: Note %d[^%d]\n\n", i, i, i+1)
+	}
+	list.WriteString(strings.Repeat("  ", 100) + "- deep text\n")
+	notes.WriteString("[^100]: deep text\n")
+	for name, src := range map[string]string{
+		"quotes":      strings.Repeat("> ", 100) + "deep text",
+		"loose lists": strings.ReplaceAll(list.String(), "\n", "\n\n"),
+		"tight lists": list.String(),
+		"mixed":       strings.Repeat("> 1. ", 50) + "deep text",
+		"notes":       notes.String(),
+		"styled":      strings.Repeat("*a **b ", 30) + "deep text" + strings.Repeat("** b* a", 30),
+	} {
+		d := doc.Parse(src, "")
+		if data, _, err := docJSON(d, t.TempDir(), unreadable{}); err != nil || !bytes.Contains(data, []byte(`deep text"`)) {
+			t.Errorf("%s: deepest text lost (%v)", name, err)
+		}
+		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A word too wide for the line breaks where it must instead of running off
+// the page: one of 30 000 letters fills pages rather than one line.
+func TestOverlongWordsBreak(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	d := doc.Parse("Before "+strings.Repeat("Supercalifragilistic", 1500)+" after.", "")
+	pages, _, err := ty.Preview(context.Background(), d, templates.List()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pages) < 3 {
+		t.Errorf("%d pages; want the word broken over several", len(pages))
 	}
 }
 

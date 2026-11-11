@@ -54,6 +54,31 @@
   align(center + horizon, text(fill: luma(120), size: 0.85em)[Missing image \ #raw(what)]),
 )
 
+// overlong lets a word too wide for its line (a long URL, a hash, a key held
+// down) break anywhere, rather than run off the page: Typst breaks lines only
+// where the script allows. A word here is a run of letters, digits and the
+// marks lines don't break around (not brackets, slashes, dashes, ? or !),
+// in scripts that don't break between letters (as CJK and Thai do). One
+// that fits is left as it is. The broken word's lines are filled one by one:
+// Typst's optimized (justified) line breaking can take seconds over a word's
+// thousands of break points. Where Typst hyphenates (justified text), a word
+// of letters under 40 long is left to it: one in a box can't be hyphenated.
+#let overlong(body) = {
+  show regex("[\p{L}\p{M}\p{N}\p{Pc}.,:;=&#@*~^<>+$%\\\\'\"--[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}\p{Thai}\p{Lao}\p{Khmer}\p{Myanmar}]]{20,}"): it => context {
+    let hyphenates = if text.hyphenate == auto { par.justify } else { text.hyphenate }
+    let word = it.text.match(regex("^[^\p{L}\p{M}\p{N}]*[\p{L}\p{M}']+[^\p{L}\p{M}\p{N}]*$")) != none
+    if hyphenates and word and it.text.clusters().len() < 40 { it } else {
+      box(layout(size => {
+        if measure(it).width > size.width {
+          set par(linebreaks: "simple")
+          it.text.clusters().join("\u{200B}")
+        } else { it }
+      }))
+    }
+  }
+  body
+}
+
 // node renders one block or inline (one function, since Typst functions
 // can't call each other before they're defined). In a note (note: true), as
 // in Word and the web page, a heading is bold text, kept out of the outline
@@ -192,6 +217,15 @@
   // Typst's own fallback can pick macOS's LastResort, which draws a box.
   // Name fonts that have it: macOS, Linux, Windows.
   show regex("[\u{2800}-\u{28FF}]+"): set text(font: ("Apple Braille", "Apple Symbols", "DejaVu Sans", "Segoe UI Symbol"))
+  // A display equation too wide for its line (Typst doesn't break one, and
+  // its number would be drawn over it) is drawn smaller, to fit.
+  show math.equation.where(block: true): it => layout(size => {
+    let w = measure(it).width
+    if w <= size.width { it } else {
+      set text(size: text.size * (size.width / w))
+      it
+    }
+  })
   // Outline entries repeat heading text: leave the preview's marks and
   // footnotes out.
   show outline: it => {

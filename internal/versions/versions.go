@@ -58,7 +58,7 @@ func Save(docPath, name string, sidecars []string, word, pdf []byte) (Version, e
 		return Version{}, err
 	}
 	defer os.RemoveAll(tmp) // left only if the rename failed
-	var names []string // the files written, the document's copy last
+	var names []string      // the files written, the document's copy last
 	write := func(name string, b []byte) error {
 		names = append(names, name)
 		return os.WriteFile(filepath.Join(tmp, name), b, 0o644)

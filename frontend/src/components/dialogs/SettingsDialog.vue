@@ -108,18 +108,22 @@ function describe(k: Key, v: Value | null | undefined) {
   return o ? o.label.replace(/:.*/, "") : String(v);
 }
 
-// Only what changed is written, so hand edits made meanwhile survive.
-// Turning formatting on (or changing it) formats the document straight away,
-// to show what it does.
+// Only the settings changed are written, so hand edits made meanwhile
+// survive, and the defaults shown (the computer user's name as the author,
+// say) aren't fixed in place. Turning formatting on (or changing it) formats
+// the document straight away, to show what it does.
 async function submit() {
   const i = info.value;
   if (!i) return;
-  const same = (a: Settings, b: Settings) =>
-    fields.every((f) => (a[f.key] ?? null) === (b[f.key] ?? null)) &&
-    (a.author ?? null) === (b.author ?? null);
+  const changed = (a: Settings, b: Settings) =>
+    [...fields.map((f) => f.key), "author" as const].filter(
+      (k) => (a[k] ?? null) !== (b[k] ?? null),
+    );
+  const userKeys = changed(user, i.user);
+  const docKeys = changed(doc, i.document);
   try {
-    if (!same(user, i.user)) await DocService.SetUserSettings({ ...user });
-    if (!same(doc, i.document)) await DocService.SetDocumentSettings({ ...doc });
+    if (userKeys.length) await DocService.SetUserSettings({ ...user }, userKeys);
+    if (docKeys.length) await DocService.SetDocumentSettings({ ...doc }, docKeys);
   } catch (e) {
     toast(`Settings: ${errorText(e)}`, "error");
     return;

@@ -16,5 +16,5 @@ Code layout: `docs/reference/development.md`. Known gaps: `todo/`.
 
 ## Changelog
 
-- Compactly document changes from the day in CHANGELOG.md
-- No more than 10 items for a given day, compact, summarizing most important changes
+- Document important changes from the day in CHANGELOG.md
+- Rewrite CHANGELOG.md as needed-- it should be a compact, high level summary of ~10 one-sentence items

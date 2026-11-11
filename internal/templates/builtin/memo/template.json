@@ -17,7 +17,7 @@
     "headingSizes": [13, 11, 10.5],
     "headingBold": true,
     "numberedHeadings": false,
-    "titleSize": 22,
+    "titleSize": 10.5,
     "titleColor": "1F3B5C",
     "titleAlign": "left",
     "titleRule": true,

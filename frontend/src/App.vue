@@ -109,9 +109,12 @@ watch(() => state.outline, focusCurrentSection);
 </template>
 
 <style scoped>
+/* One column as wide as the window: a wide child (the ribbon's open tab, a
+   long line) scrolls or clips inside it rather than widening the app. */
 .app {
   display: grid;
   grid-template-rows: auto auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
 }
 .main {

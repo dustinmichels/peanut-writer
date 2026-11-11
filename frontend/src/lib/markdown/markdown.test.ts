@@ -1,7 +1,17 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { figureMarkdown, figureSpec, gatherFootnotes, scan, sentenceAround } from ".";
+import {
+  captionMarkdown,
+  figureMarkdown,
+  figureSpec,
+  gatherFootnotes,
+  readFrontMatter,
+  scan,
+  scanFootnotes,
+  sentenceAround,
+  writeFrontMatter,
+} from ".";
 
 // scan must number figures, tables and equations as internal/doc does: each
 // sample's .want is what doc.Parse numbers (internal/doc/numbering_test.go).
@@ -53,6 +63,36 @@ test("figure captions", () => {
   }
 });
 
+// A table caption ending in braces keeps them: `Table: Values for {x}` would
+// read `{x}` as its attribute block.
+test("table captions", () => {
+  for (const [caption, label, md] of [
+    ["Values for {x}", "", "Table: Values for {x} {}"],
+    ["Values for {x}", "tbl:v", "Table: Values for {x} {#tbl:v}"],
+    ["", "tbl:v", "Table: {#tbl:v}"],
+  ]) {
+    expect(captionMarkdown(caption, label)).toBe(md);
+    const item = scan(`| a |\n| - |\n| 1 |\n\n${md}`)[0];
+    expect([item.caption, item.label]).toEqual([caption, label]);
+  }
+});
+
+// Front matter values read and are written as internal/doc reads and writes
+// them (TestFrontMatterValues, same cases).
+test("front matter values", () => {
+  const cases: { read: [string, string][]; write: [string, string][] } = JSON.parse(
+    readFileSync(join(dir, "../frontmatter.json"), "utf8"),
+  );
+  const title = (v: string) => readFrontMatter(`---\ntitle: ${v}\n---\n`).meta.title;
+  for (const [raw, want] of cases.read) expect(title(raw)).toBe(want);
+  for (const [value, written] of cases.write) {
+    expect(writeFrontMatter({ ...readFrontMatter("").meta, title: value })).toBe(
+      `---\ntitle: ${written}\n---\n`,
+    );
+    expect(title(written)).toBe(value);
+  }
+});
+
 // The figure dialog and footnote list show the sentence around a mention (@x
 // or [^x]): within its paragraph, list item, heading or table cell, cut at
 // sentence stops (and the footnote marks after them) but not abbreviations.
@@ -72,6 +112,27 @@ test("sentenceAround", () => {
     const m = /@x|\[\^x\]/.exec(text)!;
     const { before, after } = sentenceAround(text, m.index, m.index + m[0].length);
     expect(`${before}|${after}`).toBe(want);
+  }
+});
+
+// The editor numbers the footnote marks internal/doc prints (each case's
+// count checked against doc.Parse): labels as goldmark reads them, no marks
+// in code, HTML or an inline picture's alt text, an empty note carrying on
+// no lines.
+test("footnote marks", () => {
+  const cases: [string, number][] = [
+    ["See [^my note].\n\n[^my note]: Spaces are allowed.", 1],
+    ["See [^a\\]b].\n\n[^a\\]b]: An escaped bracket.", 1],
+    ["[^a]:\nSee [^a]: an empty note takes no lazy lines.", 1],
+    ["Inline ![a picture [^a]](a.png) drops its alt text.\n\n[^a]: n", 0],
+    ["![A figure's caption [^a]](a.png)\n\n[^a]: n", 1],
+    ["![A heading's [^a]](a.png)\n---\n\n[^a]: n", 0],
+    ["    Code [^a]\n\n<div>\nHTML [^a]\n</div>\n\n[^a]: n", 0],
+    ["- Item\n\n    More of it [^a]\n\n[^a]: n", 1],
+    ["[^a]: Note\n</div>\nHTML after a note [^a]", 0],
+  ];
+  for (const [text, n] of cases) {
+    expect([text, scanFootnotes(text).marks.filter((m) => m.number > 0).length]).toEqual([text, n]);
   }
 });
 

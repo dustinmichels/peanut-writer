@@ -25,7 +25,9 @@
     margin: (x: 0.75in, top: 0.85in, bottom: 0.9in),
     columns: 2,
     numbering: "1",
-    number-align: center,
+    // At the body size, but no bigger than 18pt: at a large custom size the
+    // number would run off the page.
+    footer: context align(center, text(size: calc.min(text.size, 18pt), counter(page).display())),
     header: if get("header") != "" { text(size: 8pt, style: "italic", fill: luma(90), get("header")) },
   )
   set columns(gutter: 0.25in)

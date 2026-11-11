@@ -24,7 +24,9 @@
     paper: "us-letter",
     margin: (x: 1.35in, y: 1.25in),
     numbering: "1",
-    number-align: center,
+    // At the body size, but no bigger than 18pt: at a large custom size the
+    // number would run off the page.
+    footer: context align(center, text(size: calc.min(text.size, 18pt), counter(page).display())),
     header: if get("header") != "" { align(center, text(size: 9pt, smallcaps(get("header")))) },
   )
   set text(font: body-font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")

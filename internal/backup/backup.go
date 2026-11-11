@@ -40,7 +40,7 @@ func List(docPath string) []Backup {
 	stamps := list(docPath)
 	bs := make([]Backup, 0, len(stamps))
 	for _, s := range slices.Backward(stamps) {
-		bs = append(bs, Backup{Saved: s.at.UnixMilli(), Path: file(docPath, s.name, ".md")})
+		bs = append(bs, Backup{Saved: s.saved.UnixMilli(), Path: s.path})
 	}
 	return bs
 }
@@ -52,38 +52,41 @@ func Changed(docPath, content string) bool {
 	if len(stamps) == 0 {
 		return true
 	}
-	b, err := os.ReadFile(file(docPath, stamps[len(stamps)-1].name, ".md"))
+	b, err := os.ReadFile(stamps[len(stamps)-1].path)
 	return err != nil || !bytes.Equal(b, []byte(content))
 }
 
 // Write saves content as a backup of the document at docPath in a folder
-// stamped with at (or the next free second, so a backup made in the same
-// second as the last doesn't replace it), then removes all but its newest
-// Keep backups. Once the backup is written, a backup that can't be removed
-// (locked in Finder, say) is left: the new one is still made.
+// stamped with at, or just after its newest backup if that's later, then
+// removes all but its newest Keep backups. Once the backup is written, a
+// backup that can't be removed (locked in Finder, say) is left: the new one
+// is still made.
 func Write(docPath, content string, at time.Time) error {
-	name := at.Format(stampLayout)
-	for {
-		if _, err := os.Lstat(file(docPath, name, ".md")); err != nil {
-			break
+	// Always the newest: one listed before others would be pruned as soon as
+	// it's made, once the clock has gone back past them (or they were made
+	// on a computer whose clock was ahead). A backup in the same second as
+	// the last takes the next rather than replace it.
+	if stamps := list(docPath); len(stamps) > 0 {
+		if next := stamps[len(stamps)-1].at.Add(time.Second); at.Before(next) {
+			at = next.In(at.Location())
 		}
-		at = at.Add(time.Second)
-		name = at.Format(stampLayout)
 	}
+	name := at.Format(stampLayout)
 	if err := os.MkdirAll(stampDir(docPath, name), 0o755); err != nil {
 		return err
 	}
 	// Whole or not at all: a part copy (on a full disk, say) would be listed
 	// as the newest backup.
-	if err := atomicfile.Write(file(docPath, name, ".md"), []byte(content), 0o644); err != nil {
+	if err := atomicfile.Write(filepath.Join(stampDir(docPath, name), filepath.Base(docPath)), []byte(content), 0o644); err != nil {
 		_ = os.Remove(stampDir(docPath, name)) // if it's left empty
 		return err
 	}
 	stamps := list(docPath)
 	for _, old := range stamps[:max(0, len(stamps)-Keep)] {
-		// Older backups also hold a Word copy.
-		for _, ext := range []string{".md", ".docx"} {
-			_ = os.Remove(file(docPath, old.name, ext))
+		_ = os.Remove(old.path)
+		if filepath.Base(old.path) == stem(docPath)+".md" {
+			// Older backups also hold a Word copy.
+			_ = os.Remove(filepath.Join(stampDir(docPath, old.name), stem(docPath)+".docx"))
 		}
 		// Another document's backups may share the folder; it's removed
 		// only once empty.
@@ -101,16 +104,15 @@ func stampDir(docPath, stamp string) string {
 	return filepath.Join(filepath.Dir(docPath), Folder, stamp)
 }
 
-func file(docPath, stamp, ext string) string {
-	return filepath.Join(stampDir(docPath, stamp), stem(docPath)+ext)
-}
-
 var stampRe = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}([+-]\d{4})?$`)
 
-// stamp is a backup folder's name and the time it stands for.
+// stamp is a backup: its folder's name, the time that stands for, its copy
+// of the document and when the copy was made.
 type stamp struct {
-	name string
-	at   time.Time
+	name  string
+	at    time.Time
+	path  string
+	saved time.Time
 }
 
 // parseStamp reads a backup folder's name.
@@ -124,10 +126,18 @@ func parseStamp(name string) (time.Time, error) {
 // list returns the stamps of the document's backups, oldest first: the
 // stamped folders holding a copy of it, so "notes.md" doesn't claim
 // "notes-draft.md"'s backups.
+//
+// A copy is named after the document ("notes.txt"). Before, every copy was
+// named Name.md, so "notes.md" and "notes.txt" shared them: such a copy
+// counts as a "notes.txt" backup only while there's no "notes.md" beside it.
 func list(docPath string) []stamp {
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(docPath), Folder))
 	if err != nil {
 		return nil
+	}
+	names := []string{filepath.Base(docPath)}
+	if legacy := stem(docPath) + ".md"; legacy != names[0] && !ownsLegacy(docPath, filepath.Join(filepath.Dir(docPath), legacy)) {
+		names = append(names, legacy)
 	}
 	var stamps []stamp
 	for _, e := range entries {
@@ -138,12 +148,34 @@ func list(docPath string) []stamp {
 		if err != nil {
 			continue
 		}
-		if _, err := os.Stat(file(docPath, e.Name(), ".md")); err == nil {
-			stamps = append(stamps, stamp{e.Name(), at})
+		for _, n := range names {
+			p := filepath.Join(stampDir(docPath, e.Name()), n)
+			if info, err := os.Stat(p); err == nil {
+				// The folder's time, unless the copy was made before it: a
+				// backup stamped after future-dated ones (see Write) shows
+				// when it was made.
+				saved := at
+				if info.ModTime().Before(at) {
+					saved = info.ModTime()
+				}
+				stamps = append(stamps, stamp{e.Name(), at, p, saved})
+				break
+			}
 		}
 	}
 	slices.SortFunc(stamps, func(a, b stamp) int {
 		return cmp.Or(a.at.Compare(b.at), strings.Compare(a.name, b.name))
 	})
 	return stamps
+}
+
+// ownsLegacy reports whether md, the Name.md beside the document at docPath,
+// is another document, which Name.md backup copies belong to.
+func ownsLegacy(docPath, md string) bool {
+	a, err := os.Stat(md)
+	if err != nil {
+		return false
+	}
+	b, err := os.Stat(docPath)
+	return err != nil || !os.SameFile(a, b)
 }

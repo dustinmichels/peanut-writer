@@ -71,6 +71,7 @@ func (w *writer) titleBlock(m doc.Meta) {
 
 func (w *writer) blocks(bs []doc.Block) {
 	for i := range bs {
+		w.afterPara = i > 0 && bs[i-1].Type == doc.BlockParagraph
 		w.block(&bs[i])
 	}
 }
@@ -78,7 +79,12 @@ func (w *writer) blocks(bs []doc.Block) {
 func (w *writer) block(b *doc.Block) {
 	switch b.Type {
 	case doc.BlockParagraph:
-		w.para(w.paraStyle, w.ind(w.paraStyle, 0), w.inlines(b.Inlines, runProps{}))
+		style := w.paraStyle
+		if style == "" && !w.afterPara && w.st.FirstLineIndent > 0 {
+			// As in the PDF, only a paragraph after a paragraph is indented.
+			style = "FirstParagraph"
+		}
+		w.para(style, w.ind(style, 0), w.inlines(b.Inlines, runProps{}))
 	case doc.BlockHeading:
 		if w.inNote {
 			// A heading in a footnote stays out of the outline and the TOC.

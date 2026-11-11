@@ -5,6 +5,7 @@ import { type Position, parseAttrs } from "./attrs";
 import { type Block, type Paragraph, paragraphs, readBlocks } from "./blocks";
 import { readFrontMatter } from "./frontMatter";
 import { type Restarts, reread, splice } from "./restart";
+import { goSpace, goTrim, reSpace, trimEnd } from "./space";
 
 export type Kind = "figure" | "table" | "equation";
 
@@ -82,7 +83,8 @@ export function relabelChanges(
 // keeps text's length, so matches index text.
 const literalRe =
   /(?<![\\`])(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)|(?<!\\)\$\$(?:\\.|[^$\\]|\$(?!\$))*\$\$|(?<!\\)\$(?![\s$])(?:\\.|[^$\\])*(?<!\s)\$(?!\d)/g;
-const masked = (text: string) => text.replace(literalRe, (m) => m.replace(/[[\]\\]/g, "\u0001"));
+export const masked = (text: string) =>
+  text.replace(literalRe, (m) => m.replace(/[[\]\\]/g, "\u0001"));
 
 // group is match m's group i, from text: m was matched against masked(text),
 // with indices ("d").
@@ -96,11 +98,16 @@ const group = (m: RegExpExecArray, text: string, i: number) => {
 // empty), and maybe a title. Groups: alt, `<…>` destination, bare one.
 const image = String.raw`!\[((?:\\.|[^[\]\\]|\[(?:\\.|[^[\]\\])*\])*)\]\(\s*(?:<((?:\\.|[^<>\n\\])*)>|((?:\\.|[^\s()\\]|\((?:\\.|[^\s()\\])*\))*))(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^()\\])*\)))?\s*\)`;
 // A paragraph holding only an image, and maybe an attribute block (after
-// white space or a `\` line break).
-const figureRe = new RegExp(String.raw`^${image}(?:\s|\\\n)*(\{[^{}]*\})?\s*$`, "d");
+// white space or a `\` line break). White space as internal/doc trims it,
+// here and below.
+const figureRe = new RegExp(
+  String.raw`^${image}(?:[${goSpace}]|\\\n)*(\{[^{}]*\})?[${goSpace}]*$`,
+  "d",
+);
 const imageAt = new RegExp(image, "yd");
-const trailingAttrs = /\s*(\{[^{}]*\})\s*$/;
-const tableCaption = /^(?:table:|:\s)/i;
+const imageGap = new RegExp(String.raw`^(?:[${goSpace}]|\\\n)*`);
+const trailingAttrs = new RegExp(String.raw`[${reSpace}]*(\{[^{}]*\})[${reSpace}]*$`);
+const tableCaption = new RegExp(String.raw`^(?:table:|:[${reSpace}])`, "i");
 const figureCaption = /^figure:/i;
 
 // imageSrc is an image's destination as goldmark reads it (internal/doc's
@@ -205,7 +212,7 @@ function figureOf(p: Paragraph): Omit<Item, "number"> | null {
   let gap = "";
   for (let m; (imageAt.lastIndex = pos), (m = imageAt.exec(hidden));) {
     pictures.push({ src: imageSrc(m, text), alt: unescapeAlt(group(m, text, 1)!) });
-    gap = /^(?:\s|\\\n)*/.exec(text.slice(imageAt.lastIndex))![0];
+    gap = imageGap.exec(text.slice(imageAt.lastIndex))![0];
     pos = imageAt.lastIndex + gap.length;
   }
   const rest = text.slice(pos);
@@ -226,6 +233,20 @@ function figureOf(p: Paragraph): Omit<Item, "number"> | null {
     width: a.width,
     position: a.position,
   };
+}
+
+// hiddenAlts are the offsets of the alt texts in a paragraph's text that
+// internal/doc leaves out: those of every picture in it (all, when every
+// is true, as in a heading or table cell), but a figure's (its caption) and
+// a grid's pictures' (their descriptions; pictures in its caption are
+// hidden). Footnote marks in them aren't printed.
+const imagesIn = new RegExp(image, "gd");
+export function hiddenAlts(text: string, every = false): [number, number][] {
+  if (!text.includes("![")) return [];
+  const alts = [...masked(text).matchAll(imagesIn)].map((m) => m.indices![1]!);
+  const line = { text, indent: 0, from: 0, lineFrom: 0, to: 0, line: 0 };
+  const fig = every ? null : figureOf({ type: "paragraph", lines: [line], prefix: undefined });
+  return fig ? alts.slice(fig.pictures!.length > 1 ? fig.pictures!.length : alts.length) : alts;
 }
 
 // scan finds the document's figures, tables and labelled equations, numbered
@@ -352,15 +373,11 @@ function readItems(
         };
         // The paragraph after it, when it starts `Table:` or `: `.
         const next = list[i + 1];
-        const raw =
-          next?.type === "paragraph"
-            ? next.lines
-                .map((l) => l.text)
-                .join("\n")
-                .trim()
-            : "";
-        if (next?.type === "paragraph" && tableCaption.test(raw)) {
-          let caption = raw.replace(tableCaption, "");
+        // Told by its text trimmed as Go trims it, then read as goldmark
+        // keeps it (no-break spaces are text).
+        const raw = next?.type === "paragraph" ? next.lines.map((l) => l.text).join("\n") : "";
+        if (next?.type === "paragraph" && tableCaption.test(goTrim(raw))) {
+          let caption = trimEnd(raw).replace(tableCaption, "");
           const attrs = trailingAttrs.exec(caption);
           if (attrs) caption = caption.slice(0, attrs.index);
           table.caption = caption.trim();
@@ -373,7 +390,7 @@ function readItems(
         push(table);
       } else if (b.type === "equation") {
         const id = parseAttrs(b.attrs || undefined).id;
-        if (b.closed && id.startsWith("eq:") && texReads(b.tex.trim())) {
+        if (b.closed && id.startsWith("eq:") && texReads(goTrim(b.tex))) {
           push({
             kind: "equation",
             label: id,
@@ -398,7 +415,7 @@ function readItems(
     equations.push({
       from: b.from,
       to: b.to,
-      tex: b.tex.trim(),
+      tex: goTrim(b.tex),
       label: id.startsWith("eq:") ? id : "",
     });
   }
@@ -499,11 +516,12 @@ export function figureSpec(item: Item): FigureSpec {
   };
 }
 
+// captionMarkdown writes a table's caption. One ending in braces and no
+// label gets an empty attribute block, so its braces aren't read as one.
 export function captionMarkdown(caption: string, label: string): string {
-  return `Table: ${caption.replace(/\s*\n\s*/g, " ").trim()}${label ? ` {#${label}}` : ""}`.replace(
-    /:\s+\{/,
-    ": {",
-  );
+  const text = caption.replace(/\s*\n\s*/g, " ").trim();
+  const attrs = label ? `{#${label}}` : trailingAttrs.test(text) ? "{}" : "";
+  return ["Table:", text, attrs].filter(Boolean).join(" ");
 }
 
 // equationMarkdown writes a display equation on lines of its own, its label

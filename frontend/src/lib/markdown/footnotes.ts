@@ -1,7 +1,16 @@
 // Footnotes: their marks and notes, renumbered and gathered at the end.
 
-import { type Fence, displayMathClose, displayMathStart, fenceCloses, fenceOpen } from "./fences";
+import {
+  type Block,
+  type ParaLine,
+  delimiterColumns,
+  footnoteLabel,
+  htmlAttr,
+  readBlocks,
+  splitParagraph,
+} from "./blocks";
 import { readFrontMatter } from "./frontMatter";
+import { hiddenAlts, masked } from "./items";
 import { type Restarts, reread, splice } from "./restart";
 
 // A footnote mark in the text: `[^label]`.
@@ -29,25 +38,38 @@ export interface FootnoteNote {
 
 export interface Footnotes {
   marks: FootnoteMark[];
-  notes: FootnoteNote[];
+  notes: FootnoteNote[]; // those at the top level, which the editor keeps at the end
+}
+
+// A note inside a list, quote or another note: it gives marks their numbers
+// like any other, but stays where it is.
+export interface NestedNote {
+  label: string;
+  from: number; // its `[`
 }
 
 // A reading of the footnotes, and where it can be read again from after an
 // edit.
 export interface FootnoteScan extends Footnotes {
+  nested: NestedNote[];
   restarts: Restarts;
 }
 
-const noteHead = /^( {0,3})\[\^([^\]\s]+)\]:[ \t]?/;
-const footMark = /\[\^([^\]\s]+)\]/g;
-// Code spans and inline math, which hold no marks.
-const codeOrMath = /(`+)[\s\S]*?\1|\$\$?(?:\\.|[^$\\])+\$\$?/g;
+type Read = Omit<FootnoteScan, "restarts">;
+
+// A mark: its label as goldmark reads it, on one line.
+const footMark = new RegExp(String.raw`\[\^${footnoteLabel}\]`, "g");
+// Raw HTML and autolinks in text, which hold no marks.
+const rawHTML = new RegExp(
+  String.raw`<!--->|<!-->|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<![A-Za-z][^>]*>|<!\[CDATA\[[\s\S]*?\]\]>|<[A-Za-z][A-Za-z0-9-]*${htmlAttr}*\s*\/?>|<\/[A-Za-z][A-Za-z0-9-]*\s*>|<[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*>`,
+  "g",
+);
 // Lines that start a block of their own rather than carry on a paragraph.
 export const blockStart = /^\s{0,3}(?:[#>|]|[-*+]\s|\d+[.)]\s|```|~~~|\$\$|(?:[-*_]\s*){3,}$)/;
 
-// scanFootnotes finds the footnote marks and notes outside code and math, as
-// goldmark reads them: a note runs on through blank and indented lines (and
-// lines straight after its text), to a line that isn't.
+// scanFootnotes finds the footnote marks and notes as goldmark reads them:
+// in paragraphs, headings and table cells, in lists, quotes and notes, but
+// not in code, math, HTML or the alt text of a picture that isn't a figure.
 export function scanFootnotes(text: string): FootnoteScan {
   const fm = readFrontMatter(text).to;
   const restarts: Restarts = { at: [], line: [] };
@@ -72,7 +94,7 @@ export function rescanFootnotes(
 ): FootnoteScan {
   // The front matter is where reading starts, the first restart point.
   if (readFrontMatter(text).to !== prev.restarts.at[0]) return scanFootnotes(text);
-  let fresh: Footnotes = { marks: [], notes: [] };
+  let fresh: Read = { marks: [], notes: [], nested: [] };
   const r = reread(prev.restarts, fromA, toA, toB, (from, line, point) => {
     fresh = readFootnotes(text, from, line, point);
   });
@@ -91,12 +113,13 @@ export function rescanFootnotes(
     to: n.to + shift,
     line: n.line + lines,
   }));
-  return { ...numbered({ marks, notes }), restarts: r.restarts };
+  const nested = splice(prev.nested, fresh.nested, r, (n) => ({ ...n, from: n.from + shift }));
+  return { ...numbered({ marks, notes, nested }), restarts: r.restarts };
 }
 
 // numbered numbers the marks outside notes that have a note.
-function numbered({ marks, notes }: Footnotes): Footnotes {
-  const noted = new Set(notes.map((n) => n.label));
+function numbered({ marks, notes, nested }: Read): Read {
+  const noted = new Set([...notes, ...nested].map((n) => n.label));
   let n = 0;
   return {
     marks: marks.map((m) => {
@@ -104,88 +127,83 @@ function numbered({ marks, notes }: Footnotes): Footnotes {
       return m.number === number ? m : { ...m, number };
     }),
     notes,
+    nested,
   };
 }
 
+// Text read inline as one: a paragraph's lines, a heading's, a table cell.
+type Span = Pick<ParaLine, "text" | "from">;
+
 // readFootnotes reads the marks and notes from offset from, the start of
-// 0-based line first, unnumbered. At each line with no note, code or math
-// open before it it calls point, and stops when point returns true.
+// 0-based line first, unnumbered, from the blocks readBlocks reads (calling
+// point as it does).
 function readFootnotes(
   text: string,
   from: number,
   first: number,
   point: (at: number, line: number) => boolean,
-): Footnotes {
-  const marks: FootnoteMark[] = [];
-  const notes: FootnoteNote[] = [];
-  let note: FootnoteNote | null = null;
-  let afterBlank = false;
-  let inFence: Fence | null = null;
-  let inMath = false;
-  for (let i = first, start = from, next = 0; start <= text.length; i++, start = next) {
-    let nl = text.indexOf("\n", start);
-    if (nl < 0) nl = text.length;
-    next = nl + 1;
-    if (!note && !inFence && !inMath && point(start, i)) break;
-    const line = text.slice(start, nl);
-    const blank = line.trim() === "";
-    const indented = /^( {4}|\t)/.test(line);
-    const head = inFence || inMath ? null : noteHead.exec(line);
-    if (note) {
-      if (blank) {
-        afterBlank = true;
-        continue;
+): Read {
+  const read: Read = { marks: [], notes: [], nested: [] };
+  // marksIn reads the marks in spans, joined by line breaks: not in code
+  // spans, math or HTML, nor in the alt texts internal/doc leaves out (all of
+  // them in a heading or table cell).
+  const marksIn = (spans: Span[], inNote: boolean, everyAlt: boolean) => {
+    const s = spans.length === 1 ? spans[0].text : spans.map((x) => x.text).join("\n");
+    if (!s.includes("[^")) return;
+    const hidden = hiddenAlts(s, everyAlt);
+    let m = masked(s);
+    if (m.includes("<")) m = m.replace(rawHTML, (h) => h.replace(/[[\]\\]/g, "\u0001"));
+    let k = 0;
+    let base = 0; // where spans[k] starts in s
+    for (const x of m.matchAll(footMark)) {
+      const at = x.index;
+      let escapes = 0;
+      while (m[at - 1 - escapes] === "\\") escapes++;
+      if (escapes % 2 || hidden.some(([a, b]) => at >= a && at < b)) continue;
+      while (at > base + spans[k].text.length) base += spans[k++].text.length + 1;
+      const src = spans[k].from + at - base;
+      const label = s.slice(at + 2, at + x[0].length - 1);
+      read.marks.push({ label, from: src, to: src + x[0].length, inNote, number: 0 });
+    }
+  };
+  // A table's cells, as goldmark splits its rows (cut to the delimiter
+  // row's columns).
+  const tableMarks = (rows: ParaLine[], inNote: boolean) => {
+    const cols = delimiterColumns(rows[1].text, true);
+    for (let r = 0; r < rows.length; r++) {
+      if (r === 1 || !rows[r].text.includes("[^")) continue;
+      const { text: row, from: rowFrom } = rows[r];
+      let pos = row[0] === "|" ? 1 : 0;
+      const limit = row.trimEnd().endsWith("|") ? row.trimEnd().length - 1 : row.length;
+      for (let c = 0; c < cols && pos < limit; c++) {
+        let end = pos;
+        while (end < limit && !(row[end] === "|" && row[end - 1] !== "\\")) end++;
+        marksIn([{ text: row.slice(pos, end), from: rowFrom + pos }], inNote, true);
+        pos = end + 1;
       }
-      const lazy = !afterBlank && !head && !inFence && !inMath && !blockStart.test(line);
-      if (indented || lazy) note.to = start + line.length;
-      else note = null;
     }
-    afterBlank = false;
-    if (head && !note) {
-      note = {
-        label: head[2],
-        from: start,
-        labelFrom: start + head[1].length + 2,
-        textFrom: start + head[0].length,
-        to: start + line.length,
-        line: i + 1,
-        text: "",
-      };
-      notes.push(note);
+  };
+  const visit = (blocks: Block[], inNote: boolean, top: boolean) => {
+    for (const b of blocks) {
+      if (b.type === "paragraph") {
+        const { text: lines, table } = splitParagraph(b.lines, b.underlined);
+        // An underlined paragraph is a heading after its table.
+        if (!b.heading) marksIn(lines, inNote, false);
+        if (table) tableMarks(table, inNote);
+        if (b.heading) marksIn(lines, inNote, true);
+      } else if (b.type === "heading") marksIn([b.line], inNote, true);
+      else if (b.type === "quote" || b.type === "item") visit(b.children, inNote, false);
+      else if (b.type === "note") {
+        const n = b.note!;
+        if (top) read.notes.push({ ...n, line: b.line + 1, text: "" });
+        else read.nested.push({ label: n.label, from: n.from });
+        visit(b.children, true, false);
+      }
     }
-    // A note's blocks are indented by four.
-    const body = note && indented ? line.replace(/^( {4}|\t)/, "") : line;
-    if (inFence) {
-      if (fenceCloses(body, inFence)) inFence = null;
-      continue;
-    }
-    inFence = fenceOpen(body);
-    if (inFence) continue;
-    if (inMath) {
-      if (displayMathClose(body, 0)) inMath = false;
-      continue;
-    }
-    const math = displayMathStart(body);
-    if (math >= 0) {
-      inMath = !displayMathClose(body, math + 2);
-      continue;
-    }
-    const masked = line.replace(codeOrMath, (s) => " ".repeat(s.length));
-    const from = head && note?.from === start ? head[0].length : 0;
-    for (const m of masked.slice(from).matchAll(footMark)) {
-      const at = from + m.index!;
-      if (masked[at - 1] === "\\") continue;
-      marks.push({
-        label: m[1],
-        from: start + at,
-        to: start + at + m[0].length,
-        inNote: !!note,
-        number: 0,
-      });
-    }
-  }
-  for (const x of notes) x.text = text.slice(x.textFrom, Math.max(x.to, x.textFrom));
-  return { marks, notes };
+  };
+  visit(readBlocks(text, from, first, point).children, false, true);
+  for (const x of read.notes) x.text = text.slice(x.textFrom, Math.max(x.to, x.textFrom));
+  return read;
 }
 
 // renumberFootnotes relabels numbered footnotes 1, 2, 3… in the order their

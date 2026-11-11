@@ -132,6 +132,12 @@ func (w *writer) styles() string {
 		{typ: "paragraph", id: "Abstract", name: "Abstract", basedOn: "Normal", next: "Normal", quick: true,
 			ppr: `<w:ind w:left="720" w:right="720" w:firstLine="0"/>`, rpr: rpr("", false, false, "", st.FontSize*0.95)},
 	}
+	if st.FirstLineIndent > 0 {
+		// The body's first paragraph, and one after a heading, list, figure
+		// or the like: Typst indents only a paragraph after a paragraph.
+		defs = append(defs, styleDef{typ: "paragraph", id: "FirstParagraph", name: "First Paragraph", basedOn: "Normal", next: "Normal", quick: true,
+			ppr: noIndent})
+	}
 	for level := 1; level <= 6; level++ {
 		size := w.headingSize(level)
 		numPr := ""

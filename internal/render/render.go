@@ -41,10 +41,12 @@ var mitex embed.FS
 
 const timeout = 60 * time.Second
 
-// main.typ: the template's show rule over the rendered body.
-const mainTyp = `#import "peanut.typ": render
+// main.typ: the template's show rule over the rendered body, with overlong
+// words (in the body or the template's title and header) broken.
+const mainTyp = `#import "peanut.typ": overlong, render
 #import "template.typ": template
 #let doc = json("doc.json")
+#show: overlong
 #show: template.with(doc.meta)
 #render(doc)
 `
@@ -522,6 +524,7 @@ func docJSON(d *doc.Document, dir string, bad unreadable) ([]byte, map[string]st
 		return nil, nil, err
 	}
 	shown.Meta = d.Meta.Shown()
+	shown.Blocks = capDepth(shown.Blocks, 0)
 	skip := map[string]bool{}
 	for _, m := range bad.images {
 		skip[m.what] = true
@@ -585,11 +588,142 @@ func docJSON(d *doc.Document, dir string, bad unreadable) ([]byte, map[string]st
 			x.Error = why[x.Text]
 		}
 	})
+	// A note made text (see maxDepth) loses its figures, and their labels:
+	// a reference to one is shown unresolved, as Typst would stop at it.
+	doc.Walk(shown.Blocks, func(*doc.Block) {}, func(x *doc.Inline) {
+		if x.Type == doc.InlineRef && !labels[x.Label] {
+			x.Kind = ""
+		}
+	})
 	if failed != nil {
 		return nil, nil, failed
 	}
 	data, err := json.Marshal(&shown)
 	return data, placed, err
+}
+
+// maxDepth caps how deeply quotes, lists, notes and styled or linked text
+// nest in doc.json: Typst gives up on a deeper document (its function calls
+// nest only so far, about 20 of ours, and its JSON reader stops at 128
+// arrays and objects). What's deeper is flattened into the level at the cap,
+// keeping its text: a quote or list into its blocks, styled text into its
+// text, and a note within a note into its text in brackets, as such a note
+// is drawn anyway.
+const maxDepth = 12
+
+// capDepth is bs, at depth, flattened below maxDepth (see there).
+func capDepth(bs []doc.Block, depth int) []doc.Block {
+	out := make([]doc.Block, 0, len(bs))
+	for _, b := range bs {
+		switch b.Type {
+		case doc.BlockQuote:
+			if depth >= maxDepth {
+				out = append(out, capDepth(b.Children, depth)...)
+				continue
+			}
+			b.Children = capDepth(b.Children, depth+1)
+		case doc.BlockList:
+			if depth >= maxDepth {
+				for _, item := range b.Items {
+					out = append(out, capDepth(item, depth)...)
+				}
+				continue
+			}
+			for i, item := range b.Items {
+				// A tight item's blocks run together: one with a list or
+				// quote flattened into it needs paragraph breaks.
+				if depth+1 >= maxDepth && slices.ContainsFunc(item, func(x doc.Block) bool {
+					return x.Type == doc.BlockQuote || x.Type == doc.BlockList
+				}) {
+					b.Tight = false
+				}
+				b.Items[i] = capDepth(item, depth+1)
+			}
+		}
+		b.Inlines = capInlines(b.Inlines, depth)
+		b.Caption = capInlines(b.Caption, depth)
+		for i, cell := range b.Header {
+			b.Header[i] = capInlines(cell, depth)
+		}
+		for _, row := range b.Rows {
+			for i, cell := range row {
+				row[i] = capInlines(cell, depth)
+			}
+		}
+		for i := range b.Pictures {
+			b.Pictures[i].Alt = capInlines(b.Pictures[i].Alt, depth)
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// capInlines is xs, at depth, flattened below maxDepth. A note at the cap is
+// kept (its blocks flattened), so only a note within it is made text.
+func capInlines(xs []doc.Inline, depth int) []doc.Inline {
+	if len(xs) == 0 {
+		return xs
+	}
+	out := make([]doc.Inline, 0, len(xs))
+	for _, x := range xs {
+		switch {
+		case x.Type == doc.InlineFootnote && depth > maxDepth:
+			out = append(out, doc.Inline{Type: doc.InlineText, Text: " ("})
+			out = append(out, capInlines(runOf(x.Blocks), depth)...)
+			out = append(out, doc.Inline{Type: doc.InlineText, Text: ")"})
+			continue
+		case x.Type == doc.InlineFootnote:
+			x.Blocks = capDepth(x.Blocks, depth+1)
+		case len(x.Children) > 0 && depth >= maxDepth:
+			out = append(out, capInlines(x.Children, depth)...)
+			continue
+		case len(x.Children) > 0:
+			x.Children = capInlines(x.Children, depth+1)
+		}
+		out = append(out, x)
+	}
+	return out
+}
+
+// runOf is the text of bs as one run, blocks apart by a space: a code block
+// as code, an equation as math, a figure or table as its caption and cells.
+func runOf(bs []doc.Block) []doc.Inline {
+	var out []doc.Inline
+	add := func(xs ...doc.Inline) {
+		if len(xs) == 0 {
+			return
+		}
+		if len(out) > 0 {
+			out = append(out, doc.Inline{Type: doc.InlineText, Text: " "})
+		}
+		out = append(out, xs...)
+	}
+	for _, b := range bs {
+		switch b.Type {
+		case doc.BlockQuote:
+			add(runOf(b.Children)...)
+		case doc.BlockList:
+			for _, item := range b.Items {
+				add(runOf(item)...)
+			}
+		case doc.BlockCode:
+			add(doc.Inline{Type: doc.InlineCode, Text: b.Text})
+		case doc.BlockEquation:
+			add(doc.Inline{Type: doc.InlineMath, Text: b.Text, Error: b.Error})
+		default:
+			add(b.Inlines...)
+			add(b.Caption...)
+			for _, cell := range b.Header {
+				add(cell...)
+			}
+			for _, row := range b.Rows {
+				for _, cell := range row {
+					add(cell...)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // linkInto puts the file src at dst: a hard link, or a copy where one can't

@@ -10,6 +10,11 @@ import (
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"image"
+	_ "image/gif" // picture formats checked before they're embedded
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"math"
 	"mime"
 	"os"
@@ -328,21 +333,109 @@ func (w *writer) picture(src, missing, alt, style string) string {
 	return `<img src="` + u + `" alt="` + esc(alt) + `"` + style + `>`
 }
 
-// image is the file at path as a data URL, "" when it can't be read.
+// image is the file at path as a data URL, "" when it can't be read or isn't
+// a picture a browser draws (see pictureType).
 func (w *writer) image(path string) string {
 	if u, ok := w.images[path]; ok {
 		return u
 	}
 	u := ""
 	if b, err := os.ReadFile(path); err == nil {
-		typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path)))
-		if typ == "" {
-			typ = "application/octet-stream"
+		if typ := pictureType(path, b); typ != "" {
+			u = dataURL(typ, b)
 		}
-		u = dataURL(typ, b)
 	}
 	w.images[path] = u
 	return u
+}
+
+// pictureType is the MIME type data, the file at path, is shown by; "" when
+// it's surely broken, as the PDF and Word file find it: empty, a .png, .jpg
+// or .gif that doesn't decode, or a .svg that isn't an SVG (see isSVG).
+// Formats Go can't read (WebP, …) are taken on trust.
+func pictureType(path string, data []byte) string {
+	if _, format, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+		return "image/" + format // as Word shows it, whatever its name says
+	}
+	typ := mime.TypeByExtension(strings.ToLower(filepath.Ext(path)))
+	switch {
+	case len(data) == 0, typ == "image/png", typ == "image/jpeg", typ == "image/gif":
+		return ""
+	case typ == "image/svg+xml":
+		if !isSVG(data) {
+			return ""
+		}
+	case typ == "":
+		typ = "application/octet-stream"
+	}
+	return typ
+}
+
+// entityDecl is a general entity declared in a DOCTYPE, as Illustrator
+// writes them (`<!ENTITY ns_svg "http://…">`).
+var entityDecl = regexp.MustCompile(`<!ENTITY\s+([^\s%]+)\s+(?:"([^"]*)"|'([^']*)')`)
+
+// isSVG reports whether data is XML a browser (and Typst) draws as an SVG:
+// well-formed, UTF-8, entities declared, one root, an svg element; no
+// attribute twice, no undeclared prefix (`xlink:href` without its xmlns).
+func isSVG(data []byte) bool {
+	dec := xml.NewDecoder(bytes.NewReader(bytes.TrimPrefix(data, []byte("\uFEFF"))))
+	// Another declared encoding is read as UTF-8: plain ASCII passes, as in
+	// Typst.
+	dec.CharsetReader = func(_ string, r io.Reader) (io.Reader, error) { return r, nil }
+	dec.Entity = map[string]string{}
+	spaces := map[string]bool{"xmlns": true, "http://www.w3.org/XML/1998/namespace": true}
+	depth, roots := 0, 0
+	for start := true; ; start = false {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return roots == 1
+		} else if err != nil {
+			return false
+		}
+		switch t := tok.(type) {
+		case xml.ProcInst:
+			if t.Target == "xml" && !start { // the declaration comes first or not at all
+				return false
+			}
+		case xml.Directive:
+			for _, m := range entityDecl.FindAllStringSubmatch(string(t), -1) {
+				dec.Entity[m[1]] = m[2] + m[3]
+			}
+		case xml.StartElement:
+			if depth == 0 {
+				if roots++; roots > 1 || t.Name.Local != "svg" {
+					return false
+				}
+			}
+			depth++
+			for i, a := range t.Attr {
+				if a.Name.Space == "xmlns" || a.Name.Space == "" && a.Name.Local == "xmlns" {
+					spaces[a.Value] = true
+				}
+				for _, b := range t.Attr[:i] {
+					if a.Name == b.Name {
+						return false
+					}
+				}
+			}
+			// Go leaves an undeclared prefix as the name's space.
+			for _, a := range t.Attr {
+				if a.Name.Space != "" && !spaces[a.Name.Space] {
+					return false
+				}
+			}
+			if t.Name.Space != "" && !spaces[t.Name.Space] {
+				return false
+			}
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			if depth == 0 && len(bytes.TrimSpace(t)) > 0 {
+				return false
+			}
+		}
+	}
 }
 
 func dataURL(typ string, b []byte) string {
@@ -565,11 +658,11 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline) {
 	fmt.Fprintf(sb, `<sup class="fnref"><a id="fnref:%d" href="#fn:%d">%d</a></sup>`, n, n, n)
 }
 
-// flatText writes the text of blocks in a line, for a note within a note:
-// paragraphs, a list's items, a quote's text, code, an equation, a table's
-// caption and cells and a figure's caption, a space between each (and
-// before the first when gap). It reports whether any text went before
-// what comes next.
+// flatText writes blocks in a line, for a note within a note: paragraphs, a
+// list's items, a quote's text, code, an equation, a table's caption and
+// cells and a figure's pictures and caption, a space between each (and
+// before the first when gap). Labelled figures, tables and equations keep
+// their ids. It reports whether anything went before what comes next.
 func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, gap bool) bool {
 	add := func(write func(*strings.Builder)) {
 		var t strings.Builder
@@ -595,12 +688,46 @@ func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, gap bool) bool {
 			}
 		case doc.BlockEquation:
 			add(func(t *strings.Builder) {
-				w.inlineMath(t, doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error})
+				var m strings.Builder
+				w.inlineMath(&m, doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error})
+				if b.Number > 0 {
+					fmt.Fprintf(&m, " (%d)", b.Number)
+					t.WriteString(w.withID(b.Label, m.String()))
+				} else {
+					t.WriteString(m.String())
+				}
 			})
 		case doc.BlockFigure:
-			text(b.Caption)
+			var s []string
+			caption := doc.PlainText(b.Caption)
+			if len(b.Pictures) > 0 {
+				width := 100.0
+				if b.Width > 0 {
+					width = b.Width
+				}
+				style := "max-width:100%;width:" + num(width/float64(max(b.Columns, 1))-1) + "%"
+				for _, p := range b.Pictures {
+					alt := doc.PlainText(p.Alt)
+					if alt == "" {
+						alt = caption
+					}
+					s = append(s, w.picture(p.Src, p.Missing, alt, style))
+				}
+			} else {
+				style := "max-width:100%"
+				if b.Width > 0 {
+					style += ";width:" + num(b.Width) + "%"
+				}
+				s = append(s, w.picture(b.Src, b.Missing, caption, style))
+			}
+			if len(b.Caption) > 0 || b.Label != "" {
+				s = append(s, w.caption("Figure", b))
+			}
+			add(func(t *strings.Builder) { t.WriteString(w.withID(b.Label, strings.Join(s, " "))) })
 		case doc.BlockTable:
-			text(b.Caption)
+			if len(b.Caption) > 0 || b.Label != "" {
+				add(func(t *strings.Builder) { t.WriteString(w.withID(b.Label, w.caption("Table", b))) })
+			}
 			for _, row := range append([][][]doc.Inline{b.Header}, b.Rows...) {
 				for _, cell := range row {
 					text(cell)
@@ -613,6 +740,15 @@ func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, gap bool) bool {
 		}
 	}
 	return gap
+}
+
+// withID is s in a span with label as its id (see idAttr); s itself when
+// the label gets none.
+func (w *writer) withID(label, s string) string {
+	if id := w.idAttr(label); id != "" {
+		return "<span" + id + ">" + s + "</span>"
+	}
+	return s
 }
 
 // mathPic is math drawn as SVG, its size in points.
@@ -738,7 +874,9 @@ func (w *writer) css() string {
 	p("article { max-width: 42em; margin: 0 auto; padding: 3em 1.5em 4em; }")
 	p("p { margin: 0 0 %spt; }", num(max(st.SpaceAfter, 0)))
 	if st.FirstLineIndent > 0 {
-		p("article > p + p, blockquote > p + p { text-indent: %sin; }", num(st.FirstLineIndent))
+		// A paragraph after a paragraph, as in the PDF; not the first after
+		// the running header.
+		p("article > p:not(.running) + p, blockquote > p + p { text-indent: %sin; }", num(st.FirstLineIndent))
 	}
 	if st.Justify {
 		p("article > p, blockquote > p, li { text-align: justify; hyphens: auto; }")

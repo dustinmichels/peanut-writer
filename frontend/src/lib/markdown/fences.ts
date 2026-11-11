@@ -35,7 +35,8 @@ export function displayMathClose(
   line: string,
   from: number,
 ): { at: number; attrs: string; attrsFrom: number } | null {
-  const m = /\$\$[ \t]*(\{[^{}]*\})?\s*$/.exec(line.slice(from));
+  // White space as internal/doc's equationNode.add reads it: ASCII only.
+  const m = /\$\$[ \t]*(?:[\t\n\f\r ]*(\{[^{}]*\})[\t\n\f\r ]*)?[ \t\r\n]*$/.exec(line.slice(from));
   if (!m) return null;
   const at = from + m.index;
   return {

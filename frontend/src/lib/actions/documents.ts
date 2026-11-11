@@ -26,6 +26,7 @@ export function loadDoc(info: DocInfo) {
   state.custom = null;
   if (editor.value) replaceDoc(editor.value, info.content);
   contentChanged(info.content);
+  countWords();
   scheduleRender(0);
   loadCustom();
   loadSettings();
@@ -57,7 +58,10 @@ export async function loadCustom() {
 export function contentChanged(content: string) {
   state.content = content;
   state.items = editor.value ? editor.value.state.field(itemsField) : scan(content);
-  state.words = wordCount(content);
+  // Counted once typing pauses: in a long document, counting takes as long
+  // as the rest of a keystroke.
+  clearTimeout(wordsTimer);
+  wordsTimer = setTimeout(countWords, 250);
   const dirty = content !== state.saved;
   if (dirty !== state.dirty) {
     state.dirty = dirty;
@@ -65,6 +69,13 @@ export function contentChanged(content: string) {
   }
   scheduleAutosave();
   scheduleRender();
+}
+
+let wordsTimer: ReturnType<typeof setTimeout> | undefined;
+
+function countWords() {
+  clearTimeout(wordsTimer);
+  state.words = wordCount(state.content);
 }
 
 // ensureSaved deals with unsaved changes before they'd be lost; false means

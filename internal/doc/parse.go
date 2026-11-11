@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -209,16 +212,140 @@ func splitFrontMatter(s string) (Meta, string) {
 	return m, body
 }
 
-func unquote(v string) string {
-	if len(v) >= 2 && (v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
-		if v[0] == '"' {
-			if u, err := strconv.Unquote(v); err == nil {
-				return u
-			}
-		}
-		return v[1 : len(v)-1]
+// space is what strings.TrimSpace trims, as a regexp class (frontMatter.ts
+// trims the same).
+const space = `\t\n\v\f\r \x{85}\x{A0}\x{1680}\x{2000}-\x{200A}\x{2028}\x{2029}\x{202F}\x{205F}\x{3000}`
+
+// needsQuotes matches a value that reads differently unquoted: in YAML, or
+// here, where a value is trimmed and a line ends at a line break.
+var needsQuotes = regexp.MustCompile("^[" + space + "\"'\\[{>|*&!%@`#-]|:[" + space + "]|[" + space + "]$|#|[\\x00-\\x1f\\x7f-\\x9f\\x{FEFF}\\x{FFFE}\\x{FFFF}]")
+
+// FrontMatterValue writes v as a front matter value: in double quotes when
+// it needs them, with only the escapes unquote reads (frontMatter.ts's
+// writeFrontMatter writes alike).
+func FrontMatterValue(v string) string {
+	if !needsQuotes.MatchString(v) {
+		return v
 	}
-	return v
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range v {
+		switch {
+		case r == '\\' || r == '"':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case r == '\t':
+			b.WriteString(`\t`)
+		case r == '\n':
+			b.WriteString(`\n`)
+		case r == '\r':
+			b.WriteString(`\r`)
+		case r < 0x20 || r >= 0x7f && r <= 0x9f:
+			fmt.Fprintf(&b, `\x%02X`, r)
+		case r == 0xfeff || r == 0xfffe || r == 0xffff:
+			fmt.Fprintf(&b, `\u%04X`, r)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// unquote reads a front matter value. One in double quotes takes YAML's
+// escapes (frontMatter.ts reads them alike, and the writers use no others);
+// one in single quotes, or with an escape that isn't one, is taken as
+// written.
+func unquote(v string) string {
+	if len(v) < 2 || !(v[0] == '"' && v[len(v)-1] == '"' || v[0] == '\'' && v[len(v)-1] == '\'') {
+		return v
+	}
+	if v[0] == '"' {
+		if u, ok := unescape(v[1 : len(v)-1]); ok {
+			return u
+		}
+	}
+	return v[1 : len(v)-1]
+}
+
+// yamlEscapes are YAML's double-quoted escapes but `\x`, `\u` and `\U`.
+var yamlEscapes = map[byte]string{
+	'0': "\x00", 'a': "\a", 'b': "\b", 't': "\t", '\t': "\t", 'n': "\n", 'v': "\v", 'f': "\f", 'r': "\r",
+	'e': "\x1b", ' ': " ", '"': `"`, '/': "/", '\\': `\`, 'N': "\u0085", '_': "\u00a0", 'L': "\u2028", 'P': "\u2029",
+}
+
+// unescape undoes the escapes in a double-quoted value; false if one isn't
+// YAML's or a `"` is bare. `\uD83D\uDE00` (UTF-16, as JSON writes it) is
+// one character; a lone surrogate isn't one.
+func unescape(s string) (string, bool) {
+	if !strings.ContainsAny(s, `\"`) {
+		return s, true
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			return "", false
+		case '\\':
+		default:
+			b.WriteByte(s[i])
+			continue
+		}
+		if i++; i == len(s) {
+			return "", false
+		}
+		if e, ok := yamlEscapes[s[i]]; ok {
+			b.WriteString(e)
+			continue
+		}
+		r, n := hexEscape(s, i)
+		if n == 0 {
+			return "", false
+		}
+		i += n
+		if utf16.IsSurrogate(r) {
+			// A high one and a low one, `\u` too.
+			if !strings.HasPrefix(s[i+1:], `\u`) {
+				return "", false
+			}
+			lo, m := hexEscape(s, i+2)
+			if r = utf16.DecodeRune(r, lo); m == 0 || r == utf8.RuneError {
+				return "", false
+			}
+			i += 2 + m
+		}
+		b.WriteRune(r)
+	}
+	return b.String(), true
+}
+
+// hexEscape reads the `x`, `u` or `U` escape whose letter is s[i]: the
+// character and the number of hex digits, or 0 if it isn't one.
+func hexEscape(s string, i int) (rune, int) {
+	if i >= len(s) {
+		return 0, 0
+	}
+	n := 0
+	switch s[i] {
+	case 'x':
+		n = 2
+	case 'u':
+		n = 4
+	case 'U':
+		n = 8
+	}
+	if n == 0 || i+1+n > len(s) {
+		return 0, 0
+	}
+	h := s[i+1 : i+1+n]
+	if strings.Trim(h, "0123456789abcdefABCDEF") != "" {
+		return 0, 0
+	}
+	r, _ := strconv.ParseUint(h, 16, 32)
+	if r > unicode.MaxRune {
+		return 0, 0
+	}
+	return rune(r), n
 }
 
 // --- Blocks ---------------------------------------------------------------
@@ -703,12 +830,25 @@ func destination(v []byte) string {
 // at characters that might have started something else.
 func mergeText(in []Inline) []Inline {
 	out := in[:0]
-	for _, x := range in {
-		if n := len(out); n > 0 && x.Type == InlineText && out[n-1].Type == InlineText {
-			out[n-1].Text += x.Text
-			continue
+	for i := 0; i < len(in); {
+		j := i + 1
+		if in[i].Type == InlineText {
+			for j < len(in) && in[j].Type == InlineText {
+				j++
+			}
+		}
+		x := in[i]
+		if j > i+1 {
+			// One join, not a concatenation per run: a line of 500 000 `[`
+			// is that many runs.
+			var b strings.Builder
+			for _, y := range in[i:j] {
+				b.WriteString(y.Text)
+			}
+			x.Text = b.String()
 		}
 		out = append(out, x)
+		i = j
 	}
 	return out
 }

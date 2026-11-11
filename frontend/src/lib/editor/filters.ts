@@ -16,7 +16,7 @@ import {
   relabelChanges,
   renumberFootnotes,
 } from "@/lib/markdown";
-import { footnotesField, frontMatterEnd, itemsField, showMarkdown } from "./fields";
+import { footnotesField, frontMatterEnd, itemsField, showMarkdown, textOf } from "./fields";
 
 // guardProperties keeps typing, deleting and dragging out of the front
 // matter while the Markdown is hidden: the card stands in for it, and its
@@ -66,7 +66,7 @@ export const followLabels = EditorState.transactionFilter.of((tr) => {
   const after = tr.state.field(itemsField);
   const had = new Set(before.map((x) => x.label));
   const has = new Set(after.map((x) => x.label));
-  const text = tr.newDoc.toString();
+  const text = textOf(tr.newDoc);
   const changes: ChangeSpec[] = [];
   for (const kind of Object.keys(kindName) as Kind[]) {
     const a = before.filter((x) => x.kind === kind);
@@ -104,15 +104,16 @@ export const followFootnotes = EditorState.transactionFilter.of((tr) => {
     return hit;
   };
   const gone = new Set<string>();
+  const kept = new Set(after.marks.map((x) => x.label));
   for (const m of before.marks) {
-    if (gone.has(m.label) || after.marks.some((x) => x.label === m.label)) continue;
+    if (gone.has(m.label) || kept.has(m.label)) continue;
     if (before.marks.every((x) => x.label !== m.label || whole(x))) gone.add(m.label);
   }
   let changes = ChangeSet.empty(tr.newDoc.length);
   if (paste || gone.size) {
     // Each note going takes the blank lines after it (or, at the end, before it).
     const doc = tr.newDoc;
-    const text = doc.toString();
+    const text = textOf(doc);
     const spans: { from: number; to: number }[] = [];
     for (const n of after.notes) {
       if (!gone.has(n.label)) continue;
@@ -136,7 +137,7 @@ export const followFootnotes = EditorState.transactionFilter.of((tr) => {
   }
   const doc = changes.apply(tr.newDoc);
   const cursor = changes.mapPos(tr.newSelection.main.head);
-  const gather = gatherFootnotes(doc.toString(), cursor, changes.empty ? after : undefined);
+  const gather = gatherFootnotes(textOf(doc), cursor, changes.empty ? after : undefined);
   changes = changes.compose(ChangeSet.of(gather, doc.length));
   return changes.empty ? tr : [tr, { changes, sequential: true }];
 });

@@ -26,14 +26,14 @@ export class PropertiesCard extends WidgetType {
     by.className = "pw-props-by";
     by.textContent = this.byline || "Document properties";
     text.append(title, by);
-    const btn = document.createElement("button");
-    btn.className = "pw-widget-btn";
-    btn.textContent = "Edit header";
-    btn.onmousedown = (e) => e.preventDefault();
-    const open = () => this.handlers.editProperties();
-    btn.onclick = open;
-    el.ondblclick = open;
-    el.append(text, btn);
+    const hint = document.createElement("span");
+    hint.className = "pw-props-edit";
+    hint.textContent = "Edit header";
+    // The whole card opens the dialog; keep the editor's focus and selection.
+    el.title = "Edit title, author and other properties";
+    el.onmousedown = (e) => e.preventDefault();
+    el.onclick = () => this.handlers.editProperties();
+    el.append(text, hint);
     return block(el, "pw-props-block");
   }
   ignoreEvent() {
