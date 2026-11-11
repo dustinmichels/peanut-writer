@@ -32,6 +32,7 @@
   instead of running off the page. Word keeps figure numbers in notes within notes on Update Fields.
 - Faster on long documents: Markdown parsing (13×), typing (the editor rereads only around each edit: 15× less work
   per keystroke) and cursor moves, and the preview reuses unchanged pages instead of reloading them.
+- Go 1.27.4 and `golang.org/x/mod` v0.42.0.
 
 ## 2026-11-10
 
