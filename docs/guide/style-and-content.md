@@ -46,7 +46,7 @@ Caption, Quote and so on. Whoever opens the Word file can keep editing it proper
 
 | Template       | Looks like                                                                                      |
 | -------------- | ----------------------------------------------------------------------------------------------- |
-| **Classic**    | Timeless and calm: Optima, pine-green headings, italic subheads, 1-inch margins. Default.       |
+| **Classic**    | Timeless and calm: Georgia, pine-green headings, italic subheads, 1-inch margins. Default.      |
 | **Wordy**      | A fresh Word document: Aptos, blue headings, 1-inch margins.                                    |
 | **Academic**   | A LaTeX article: Computer Modern, numbered sections, justified text, centered title.            |
 | **Report**     | A business report: serif body, crisp sans headings, a teal accent, running headers.             |

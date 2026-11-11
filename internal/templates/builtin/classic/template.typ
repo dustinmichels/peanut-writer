@@ -1,10 +1,10 @@
-// Classic: timeless and calm. Optima, a classical sans, on 1-inch margins, ragged right,
+// Classic: timeless and calm. Georgia, a conventional book serif, on 1-inch margins, ragged right,
 // roman and italic headings in a pine green, the template's one accent, which
-// also marks rules, list markers, links and caption labels.
+// also marks table and quote rules, links and caption labels.
 
 #import "style.typ": custom-color, custom-font, custom-size
 
-#let font = custom-font("bodyFont", ("Optima", "Candara", "Gill Sans", "Helvetica Neue", "Libertinus Sans", "DejaVu Sans"))
+#let font = custom-font("bodyFont", ("Georgia", "Charter", "Libertinus Serif"))
 #let heading-font = custom-font("headingFont", font)
 #let mono-font = custom-font("monoFont", ("Menlo", "DejaVu Sans Mono"))
 #let ink = custom-color("textColor", rgb("#1C1C1C"))
@@ -64,11 +64,11 @@
     stroke: (left: 1pt + pine),
     text(style: "italic", fill: luma(60), it.body),
   )
-  set list(marker: text(fill: pine)[–], indent: 0.4em)
+  set list(marker: [–], indent: 0.4em)
   set enum(indent: 0.4em)
   set outline(title: [Contents], indent: auto)
 
-  // Title block: left aligned, closed by a short pine rule.
+  // Title block: left aligned, unadorned.
   let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if get("title") != "" {
     block(below: 1em, text(font: heading-font, size: 26pt, fill: title-color, get("title")))
@@ -76,11 +76,8 @@
   if get("subtitle") != "" {
     block(below: 0.6em, text(font: heading-font, size: 13.5pt, style: "italic", fill: muted, get("subtitle")))
   }
-  if get("title") != "" or get("subtitle") != "" or byline.len() > 0 {
-    block(above: 1.4em, below: 1em, line(length: 0.6in, stroke: 1pt + pine))
-  }
   if byline.len() > 0 {
-    block(below: 2.2em, caps(8.5pt, muted, byline.join([#h(0.5em)·#h(0.5em)])))
+    block(above: 1.4em, below: 2.2em, caps(8.5pt, muted, byline.join([#h(0.5em)·#h(0.5em)])))
   }
   if get("abstract") != "" {
     block(inset: (x: 0.35in), below: 2em)[

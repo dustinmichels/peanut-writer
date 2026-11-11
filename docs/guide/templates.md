@@ -11,7 +11,7 @@ choice is saved in the document. You can also switch from the [command palette](
 
 ![The Design tab: each template on a sample page, then Customize and Manage Templates](/screenshots/design-tab.png)
 
-Built in are _Classic_ (the default: Optima, calm and simple), _Wordy_ (like a fresh Word document), _Academic_,
+Built in are _Classic_ (the default: Georgia, calm and simple), _Wordy_ (like a fresh Word document), _Academic_,
 _Report_, _Minimal_, _Manuscript_,
 _Elegant_, _Editorial_, _Journal_ (two columns) and _Peanut_. See
 [the built-in templates](./style-and-content#the-built-in-templates) for what each looks like.

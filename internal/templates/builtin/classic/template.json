@@ -1,11 +1,11 @@
 {
   "name": "Classic",
-  "description": "Timeless and calm: Optima, pine-green headings, italic subheads, 1-inch margins.",
+  "description": "Timeless and calm: Georgia, pine-green headings, italic subheads, 1-inch margins.",
   "docx": {
     "paper": "letter",
     "margin": 1,
-    "bodyFont": "Optima",
-    "headingFont": "Optima",
+    "bodyFont": "Georgia",
+    "headingFont": "Georgia",
     "monoFont": "Menlo",
     "fontSize": 11,
     "lineSpacing": 1.3,
@@ -20,7 +20,7 @@
     "titleSize": 26,
     "titleColor": "1C1C1C",
     "titleAlign": "left",
-    "titleRule": true,
+    "titleRule": false,
     "captionSize": 9.5,
     "captionColor": "555555",
     "captionItalic": true,
