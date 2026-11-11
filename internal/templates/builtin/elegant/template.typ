@@ -22,8 +22,8 @@
   set page(
     paper: "us-letter",
     margin: (x: 1.3in, top: 1.2in, bottom: 1.2in),
-    header: if get("organization") != "" {
-      align(center, smallcaps(all: true, text(size: 9pt, tracking: 0.08em, fill: claret, get("organization"))))
+    header: if get("header") != "" {
+      align(center, smallcaps(all: true, text(size: 9pt, tracking: 0.08em, fill: claret, get("header"))))
     },
     footer: context align(center, text(size: 9.5pt, fill: claret)[— #counter(page).display() —]),
   )
@@ -70,6 +70,7 @@
     #if get("subtitle") != "" { v(0.2em); text(size: 14pt, style: "italic", get("subtitle")) }
     #if get("title") != "" or get("subtitle") != "" { v(0.6em); line(length: 1.2in, stroke: 0.5pt + claret) }
     #if get("author") != "" { v(0.4em); smallcaps(all: true, text(size: 12pt, tracking: 0.1em, get("author"))) }
+    #if get("topic") != "" { linebreak(); text(size: 10.5pt, get("topic")) }
     #if get("date") != "" { linebreak(); text(size: 10.5pt, style: "italic", get("date")) }
     #v(1.8em)
   ]

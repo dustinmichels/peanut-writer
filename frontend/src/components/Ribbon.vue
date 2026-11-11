@@ -211,17 +211,6 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton
-              big
-              :icon="Settings2"
-              label="Properties"
-              @click="state.dialog = { kind: 'properties' }"
-            />
-          </div>
-          <label>Info</label>
-        </div>
-        <div class="group">
-          <div class="row">
             <RibbonButton big :icon="Sparkles" label="Welcome" @click="openWelcome" />
             <RibbonButton big :icon="BookOpen" label="Cheat Sheet" @click="menu('cheatsheet')" />
             <RibbonButton big :icon="Info" label="About" @click="menu('about')" />
@@ -540,10 +529,41 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
 .ribbon {
   background: linear-gradient(180deg, #f6ecdf, var(--panel));
 }
+/* The bottom border is the wooden ledge Peanut walks along, shown whether or
+   not the panel is collapsed: a thin plank with a lit top edge, a shadowed
+   underside, long drifting grain and slow figure. The open tab's wood frame
+   carries it up and around that tab. */
 .tabs {
+  --wood: #d6b187;
   display: flex;
   gap: 2px;
   padding: 0 10px;
+  border-bottom: 3px solid transparent;
+  background:
+    linear-gradient(
+        180deg,
+        rgba(255, 243, 225, 0.5) 0 1px,
+        transparent 1px calc(100% - 1px),
+        rgba(110, 66, 32, 0.25) calc(100% - 1px)
+      )
+      0 100% / 100% 3px no-repeat border-box,
+    repeating-linear-gradient(
+        179.6deg,
+        transparent 0 1px,
+        rgba(120, 72, 34, 0.12) 1px 1.5px,
+        transparent 1.5px 2.4px
+      )
+      0 100% / 100% 3px no-repeat border-box,
+    repeating-linear-gradient(
+        90deg,
+        rgba(120, 70, 30, 0) 0,
+        rgba(120, 70, 30, 0.08) 41px,
+        rgba(120, 70, 30, 0) 67px,
+        rgba(255, 236, 205, 0.12) 121px,
+        rgba(120, 70, 30, 0) 173px
+      )
+      0 100% / 100% 3px no-repeat border-box,
+    linear-gradient(180deg, #dfc29e, #cda477) 0 100% / 100% 3px no-repeat border-box;
 }
 .tab {
   height: 28px;
@@ -557,11 +577,22 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
 .tab:hover {
   color: var(--ink);
 }
+/* Framed in wood on three sides and dropped over the plank, so the ledge
+   climbs around the open tab and the tab opens into the panel below. Border
+   and padding together keep the label where it sits on a closed tab. */
 .tab.on {
-  background: var(--surface);
+  height: 31px;
+  margin-bottom: -3px;
+  padding: 0 11px 6px;
+  border: 3px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(180deg, rgba(255, 243, 225, 0.4), transparent 6px) border-box,
+    var(--wood) border-box;
   color: var(--roast);
   font-weight: 650;
-  box-shadow: 0 -1px 0 var(--border) inset;
 }
 .tab.file {
   color: var(--accent);
@@ -573,7 +604,6 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
   height: 92px;
   padding: 6px 8px 0;
   background: var(--surface);
-  border-top: 1px solid var(--border);
   overflow-x: auto;
   overflow-y: visible;
 }

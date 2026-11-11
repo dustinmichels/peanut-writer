@@ -53,11 +53,14 @@ import {
   figureSpec,
   type FigureSpec,
   type Item,
+  type Kind,
+  type RefAt,
   kindName,
   parseTable,
   plain,
   type Position,
   readFrontMatter,
+  relabelChanges,
   scan,
   type Table,
 } from "./markdown";
@@ -67,6 +70,7 @@ export interface Handlers {
   editFigure(item: Item): void;
   editTable(item: Item): void;
   editProperties(): void;
+  editRef(at: RefAt): void;
   // Dropped files arrive through Wails (see EditorPane), not DOM drop events.
   pasteImages(files: File[], pos: number): void;
   imageURL(src: string): Promise<string>;
@@ -618,17 +622,31 @@ class RefWidget extends WidgetType {
     readonly label: string,
     readonly text: string,
     readonly ok: boolean,
+    readonly handlers: Handlers,
   ) {
     super();
   }
   eq(o: RefWidget) {
     return o.label === this.label && o.text === this.text && o.ok === this.ok;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const el = document.createElement("span");
     el.className = this.ok ? "pw-ref" : "pw-ref broken";
     el.textContent = this.text;
-    el.title = this.ok ? `Cross-reference to ${this.label}` : `Nothing is labelled ${this.label}`;
+    el.title = this.ok
+      ? `Cross-reference to ${this.label}. Click to change or unlink it.`
+      : `Nothing is labelled ${this.label}. Click to change or remove it.`;
+    el.onmousedown = (e) => e.preventDefault();
+    el.onclick = () => {
+      // The widget may have moved since it was drawn.
+      const from = view.posAtDOM(el);
+      this.handlers.editRef({
+        from,
+        to: from + this.label.length + 1,
+        label: this.label,
+        text: this.ok ? this.text : "",
+      });
+    };
     return el;
   }
 }
@@ -718,7 +736,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       }),
     });
   } else if (!show) {
-    const by = [fm.meta.author, fm.meta.organization, fm.meta.date].filter(Boolean).join(" · ");
+    const by = [fm.meta.author, fm.meta.topic, fm.meta.date].filter(Boolean).join(" · ");
     const end = doc.lineAt(Math.max(fm.to - 1, 0)).to;
     ranges.push({
       from: 0,
@@ -835,7 +853,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
         from,
         to,
         deco: Decoration.replace({
-          widget: new RefWidget(m[2], label, !!target),
+          widget: new RefWidget(m[2], label, !!target, handlers),
         }),
         atomic: true,
       });
@@ -931,10 +949,27 @@ const lineStyles = ViewPlugin.fromClass(
 // --- Hidden Markdown marks ---------------------------------------------------------
 
 // Unless the Markdown is shown, its marks are replaced by nothing (or a
-// bullet, a rule). Each hidden range has a kind: "mark" around inline text,
-// "prefix" before a line's text (heading, quote, bullet), "line" for a whole
-// line (a rule, a code fence).
+// heading's #s, a bullet, a rule). Each hidden range has a kind: "mark"
+// around inline text, "prefix" before a line's text (heading, quote,
+// bullet), "line" for a whole line (a rule, a code fence).
 type HiddenKind = "mark" | "prefix" | "line";
+
+// HeadingMarkWidget shows a heading's #s, which stay out of the cursor's way
+// like the rest of the line's prefix.
+class HeadingMarkWidget extends WidgetType {
+  constructor(readonly level: number) {
+    super();
+  }
+  eq(o: HeadingMarkWidget) {
+    return o.level === this.level;
+  }
+  toDOM() {
+    const el = document.createElement("span");
+    el.className = "pw-heading-mark";
+    el.textContent = "#".repeat(this.level) + " ";
+    return el;
+  }
+}
 
 class BulletWidget extends WidgetType {
   eq() {
@@ -975,14 +1010,14 @@ class FenceWidget extends WidgetType {
 }
 
 // linePrefix is the marks before a line's text that are hidden: an ATX
-// heading's #s, quote marks and bullets, each with the space after it.
-// Indentation and numbers stay visible.
+// heading's #s (level is its count), quote marks and bullets, each with the
+// space after it. Indentation and numbers stay visible.
 function linePrefix(
   state: EditorState,
   line: Line,
-): { from: number; to: number; bullet: boolean }[] {
+): { from: number; to: number; bullet: boolean; level: number }[] {
   const tree = syntaxTree(state);
-  const out: { from: number; to: number; bullet: boolean }[] = [];
+  const out: { from: number; to: number; bullet: boolean; level: number }[] = [];
   let pos = line.from;
   for (;;) {
     while (pos < line.to && /[ \t]/.test(line.text[pos - line.from])) pos++;
@@ -995,7 +1030,7 @@ function linePrefix(
     let to = n.to;
     if (heading) while (to < line.to && line.text[to - line.from] === " ") to++;
     else if (line.text[to - line.from] === " ") to++;
-    out.push({ from: n.from, to, bullet });
+    out.push({ from: n.from, to, bullet, level: heading ? n.to - n.from : 0 });
     pos = to;
   }
   return out;
@@ -1077,7 +1112,16 @@ function buildHidden(view: EditorView): Hidden {
       const line = doc.lineAt(p);
       if (!covered(state, line.from)) {
         for (const m of linePrefix(state, line))
-          hide(m.from, m.to, "prefix", m.bullet ? new BulletWidget() : undefined);
+          hide(
+            m.from,
+            m.to,
+            "prefix",
+            m.level
+              ? new HeadingMarkWidget(m.level)
+              : m.bullet
+                ? new BulletWidget()
+                : undefined,
+          );
       }
       p = line.to + 1;
     }
@@ -1260,6 +1304,32 @@ const guardProperties = EditorState.transactionFilter.of((tr) => {
     scrollIntoView: tr.scrollIntoView,
     userEvent: tr.annotation(Transaction.userEvent),
   };
+});
+
+// followLabels keeps references on a figure, table or equation whose label
+// changes in place, in its dialog or by typing in the Markdown: references to
+// the old label take the new one, in the same undoable step. Items pair up by
+// kind and order; a label still in use after, or one already in use before,
+// is left alone, so moving items or reusing a label doesn't steal references.
+const followLabels = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || !(tr.isUserEvent("input") || tr.isUserEvent("delete"))) return tr;
+  const before = tr.startState.field(itemsField);
+  const after = tr.state.field(itemsField);
+  const had = new Set(before.map((x) => x.label));
+  const has = new Set(after.map((x) => x.label));
+  const text = tr.newDoc.toString();
+  const changes: ChangeSpec[] = [];
+  for (const kind of Object.keys(kindName) as Kind[]) {
+    const a = before.filter((x) => x.kind === kind);
+    const b = after.filter((x) => x.kind === kind);
+    if (a.length !== b.length) continue;
+    a.forEach(({ label: from }, i) => {
+      const to = b[i].label;
+      if (from && to && from !== to && !has.has(from) && !had.has(to))
+        changes.push(...relabelChanges(text, from, to));
+    });
+  }
+  return changes.length ? [tr, { changes, sequential: true }] : tr;
 });
 
 // moveChar moves the cursor one character, stepping over hidden marks as if
@@ -1814,6 +1884,7 @@ export function createEditor(
     hiddenMarks,
     settleCursor,
     guardProperties,
+    followLabels,
     EditorView.contentAttributes.of({
       spellcheck: "true",
       autocorrect: "on",
@@ -1873,6 +1944,30 @@ export function revealLine(view: EditorView, n: number) {
       y: "start",
       yMargin: revealMargin,
     }),
+  });
+  view.focus();
+}
+
+// revealSource puts the cursor a fraction t of the way down the editor from
+// the start of line n to the start of line next (0: n alone), and centers it
+// in the editor if it's out of view. In a long wrapped line the place is in
+// proportion.
+export function revealSource(view: EditorView, n: number, next: number, t: number) {
+  const doc = view.state.doc;
+  if (n < 1 || n > doc.lines) return;
+  const top = view.lineBlockAt(doc.line(n).from).top;
+  const end = next > n && next <= doc.lines ? view.lineBlockAt(doc.line(next).from).top : top;
+  const h = top + t * (end - top);
+  const b = view.lineBlockAtHeight(h);
+  const f = b.height > 0 ? Math.min(1, Math.max(0, (h - b.top) / b.height)) : 0;
+  // At least line n: a height on a line's top edge can find the line above.
+  const pos = Math.max(doc.line(n).from, Math.min(b.to, b.from + Math.round(f * b.length)));
+  const r = view.scrollDOM.getBoundingClientRect();
+  const y = view.documentTop + h;
+  const shown = y >= r.top && y <= r.bottom - 24;
+  view.dispatch({
+    selection: { anchor: pos },
+    effects: shown ? [] : EditorView.scrollIntoView(pos, { y: "center" }),
   });
   view.focus();
 }

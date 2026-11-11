@@ -38,7 +38,12 @@ function close() {
       @close="close"
     />
     <PasteTableDialog v-else-if="state.dialog.kind === 'pasteTable'" @close="close" />
-    <CrossRefDialog v-else-if="state.dialog.kind === 'crossref'" @close="close" />
+    <CrossRefDialog
+      v-else-if="state.dialog.kind === 'crossref'"
+      :key="state.dialog.at?.from ?? -1"
+      :at="state.dialog.at"
+      @close="close"
+    />
     <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
     <SettingsDialog v-else-if="state.dialog.kind === 'settings'" @close="close" />

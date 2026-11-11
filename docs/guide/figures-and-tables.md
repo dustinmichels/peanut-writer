@@ -36,7 +36,12 @@ Tables are numbered separately from figures: "Table 1", "Table 2", and so on.
 inserted at the cursor. You can also type `@` and choose from the suggestions.
 
 In the editor a reference reads "Figure 2". When figures are added, removed or moved, every reference updates.
-Renaming a figure's reference name updates the references to it, too.
+Renaming a figure's, table's or equation's reference name updates the references to it, too, whether in its dialog or
+by editing the `{#fig:…}` label in the Markdown. Renaming to a name something else already uses leaves the references
+alone.
+
+Click a reference to change it: pick another figure, table or equation to point it there, or choose **Unlink** to
+leave its words ("Figure 2") as plain text that no longer updates. A reference to nothing offers **Remove** instead.
 
 A reference to something that no longer exists shows as **??** in the preview, as in LaTeX, and is listed in the status
 bar's notes so you can find it.

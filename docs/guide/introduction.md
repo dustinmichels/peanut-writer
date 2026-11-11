@@ -37,3 +37,20 @@ version, with links to these docs and the source on GitHub.
 
 To start your own, choose **New** (⌘N). Peanut Writer asks for a name and a place, and makes a `.peanut` package there
 to hold your document, its pictures and its backups. See [Documents, saving and export](./documents).
+
+## Install and updates
+
+Download
+[**Peanut-Writer.dmg**](https://github.com/dustinmichels/peanut-writer/releases/latest/download/Peanut-Writer.dmg),
+open it and drag **Peanut Writer** to **Applications**. Or, with [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask dustinmichels/tap/peanut-writer
+```
+
+It runs on macOS 13 (Ventura) or later, on Apple Silicon and Intel Macs.
+
+Peanut Writer checks for a newer version when it opens and once a day while it's open, and stays quiet unless there is
+one; **Peanut Writer → Check for Updates…** checks right away. Nothing is downloaded without asking: **Update** fetches
+the new version and **Restart & Apply** replaces the app and reopens it. Your documents aren't touched. A copy that
+can't replace itself (opened straight from the disk image) offers to **Download** the new disk image instead.

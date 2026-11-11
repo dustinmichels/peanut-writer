@@ -3,35 +3,35 @@ package main
 import (
 	"embed"
 	"log"
-	"regexp"
+	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
+
+const appName = "Peanut Writer"
 
 // The built editor, embedded into the binary.
 //
 //go:embed all:frontend/dist
 var assets embed.FS
 
-// The build settings the app's bundle info is generated from, for its version.
-//
-//go:embed build/config.yml
-var buildConfig string
+// buildVersion is the release tag (v1.2.3), set at link time by
+// scripts/package.sh; "dev" in other builds.
+var buildVersion = "dev"
 
-// appVersion is the app's version (build/config.yml's info.version).
-var appVersion = func() string {
-	m := regexp.MustCompile(`(?m)^[ \t]+version:[ \t]*"?([^"\s#]+)`).FindStringSubmatch(buildConfig)
-	if m == nil {
-		panic("no info.version in build/config.yml")
-	}
-	return m[1]
-}()
+// appVersion is the app's version: 1.2.3 in a release, else "dev".
+var appVersion = strings.TrimPrefix(buildVersion, "v")
 
 func main() {
+	// Restart & Apply (update.go) reruns the app to swap in the update once
+	// this copy has quit; that run does only the swap, and exits.
+	updater.HandleHelperMode()
+
 	docs := newDocService()
 	app := application.New(application.Options{
-		Name:        "Peanut Writer",
+		Name:        appName,
 		Description: "A friendly writer for documents with figures, tables and cross-references",
 		Services:    []application.Service{application.NewService(docs)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
@@ -53,7 +53,7 @@ func main() {
 	app.Event.OnApplicationEvent(events.Common.ApplicationOpenedWithFile, func(e *application.ApplicationEvent) {
 		docs.openedWithFile(e.Context().Filename())
 	})
-	app.Menu.Set(menu(app, docs))
+	app.Menu.Set(menu(app, docs, startUpdates(app, docs)))
 
 	docs.window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Peanut Writer",
@@ -94,13 +94,29 @@ func main() {
 }
 
 // menu builds the menu bar. File and Edit commands go to the editor as
-// "menu" events, so they act on its state (and its undo history).
-func menu(app *application.App, docs *DocService) *application.Menu {
+// "menu" events, so they act on its state (and its undo history). With
+// updates (builds of a release), the app menu has Check for Updates….
+func menu(app *application.App, docs *DocService, updates *updates) *application.Menu {
 	send := func(action string) func(*application.Context) {
 		return func(*application.Context) { app.Event.Emit("menu", action) }
 	}
 	m := app.Menu.New()
-	m.AddRole(application.AppMenu)
+	if updates != nil {
+		// The standard app menu (application.AppMenu), plus Check for Updates….
+		a := m.AddSubmenu(appName)
+		a.AddRole(application.About)
+		a.Add("Check for Updates…").OnClick(func(*application.Context) { go updates.check(true) })
+		a.AddSeparator()
+		a.AddRole(application.ServicesMenu)
+		a.AddSeparator()
+		a.AddRole(application.Hide)
+		a.AddRole(application.HideOthers)
+		a.AddRole(application.UnHide)
+		a.AddSeparator()
+		a.AddRole(application.Quit)
+	} else {
+		m.AddRole(application.AppMenu)
+	}
 
 	file := m.AddSubmenu("File")
 	file.Add("New").SetAccelerator("CmdOrCtrl+N").OnClick(send("new"))

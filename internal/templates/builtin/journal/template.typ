@@ -26,7 +26,7 @@
     columns: 2,
     numbering: "1",
     number-align: center,
-    header: if get("organization") != "" { text(size: 8pt, style: "italic", fill: luma(90), get("organization")) },
+    header: if get("header") != "" { text(size: 8pt, style: "italic", fill: luma(90), get("header")) },
   )
   set columns(gutter: 0.25in)
   set text(font: body-font, size: custom-size("fontSize", 10pt), fill: ink, lang: "en")
@@ -70,7 +70,7 @@
   set outline(title: [Contents], indent: auto)
 
   // Title block across both columns.
-  let has-title = ("title", "subtitle", "author", "date", "abstract").any(k => get(k) != "")
+  let has-title = ("title", "subtitle", "author", "topic", "date", "abstract").any(k => get(k) != "")
   if has-title {
     place(top + center, float: true, scope: "parent", clearance: 1.8em, {
       set par(first-line-indent: 0pt, justify: false)
@@ -78,6 +78,7 @@
       if get("title") != "" { block(below: 12pt, text(size: 22pt, fill: title-color, get("title"))) }
       if get("subtitle") != "" { block(below: 12pt, text(size: 13pt, style: "italic", get("subtitle"))) }
       if get("author") != "" { block(above: 14pt, below: 5pt, text(size: 11pt, get("author"))) }
+      if get("topic") != "" { block(below: 5pt, text(size: 9.5pt, get("topic"))) }
       if get("date") != "" { block(below: 5pt, text(size: 9.5pt, style: "italic", get("date"))) }
       if get("abstract") != "" {
         v(1em)

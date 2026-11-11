@@ -24,7 +24,7 @@
     margin: 1in,
     numbering: "1",
     number-align: center,
-    header: if get("organization") != "" { align(right, text(size: 9pt, fill: luma(110), get("organization"))) },
+    header: if get("header") != "" { align(right, text(size: 9pt, fill: luma(110), get("header"))) },
   )
   set text(font: body-font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")
   set par(leading: 0.72em, spacing: 1.15em)
@@ -59,7 +59,7 @@
   if get("subtitle") != "" {
     block(below: 1.1em, text(font: heading-font, size: 14pt, fill: luma(90), get("subtitle")))
   }
-  let byline = (get("author"), get("date")).filter(s => s != "")
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if byline.len() > 0 {
     block(below: 1.6em, text(fill: luma(70), byline.join([ #h(0.4em)·#h(0.4em) ])))
   }

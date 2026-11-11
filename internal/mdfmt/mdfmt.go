@@ -213,9 +213,9 @@ var minor = map[string]bool{
 	"at": true, "by": true, "in": true, "of": true, "on": true, "per": true, "to": true, "via": true, "vs": true,
 }
 
-// TitleCaseHeadings puts src's ATX headings in title case, leaving front
-// matter and code blocks alone.
-func TitleCaseHeadings(src string) string {
+// CaseHeadings recases src's ATX headings with recase (TitleCase or
+// SentenceCase), leaving front matter and code blocks alone.
+func CaseHeadings(src string, recase func(string) string) string {
 	lines := strings.SplitAfter(src, "\n")
 	i := 0
 	if len(lines) > 0 && strings.TrimRight(lines[0], "\r\n") == "---" {
@@ -246,7 +246,7 @@ func TitleCaseHeadings(src string) string {
 			continue
 		}
 		text := body[m[4]:m[5]]
-		if tc := TitleCase(text); tc != text {
+		if tc := recase(text); tc != text {
 			lines[i] = body[:m[4]] + tc + body[m[5]:] + lines[i][len(body):]
 		}
 	}
@@ -257,6 +257,33 @@ func TitleCaseHeadings(src string) string {
 // Words with digits or capitals after their first letter (NASA, iPhone, 3D)
 // are kept as they are.
 func TitleCase(text string) string {
+	return eachWord(text, func(w string, first, last bool, before string) string {
+		lower := strings.ToLower(w)
+		if minor[lower] && !first && !last && !startsPhrase(before) {
+			return lower
+		}
+		return capitalize(w)
+	})
+}
+
+// SentenceCase capitalizes a heading's first word, any word starting a
+// phrase, and "I"; the rest are lowercased. Words with digits or capitals
+// after their first letter (NASA, iPhone, 3D) are kept as they are, but
+// names like "London" can't be told apart and are lowercased too.
+func SentenceCase(text string) string {
+	return eachWord(text, func(w string, first, _ bool, before string) string {
+		lower := strings.ToLower(w)
+		if first || startsPhrase(before) || lower == "i" || strings.HasPrefix(lower, "i'") || strings.HasPrefix(lower, "i’") {
+			return capitalize(w)
+		}
+		return lower
+	})
+}
+
+// eachWord rewrites text's words with recase, skipping its protected parts
+// and words kept as they are. recase is told whether the word is the first
+// or last and what comes before it.
+func eachWord(text string, recase func(w string, first, last bool, before string) string) string {
 	type span struct{ from, to int }
 	var words []span
 	at := 0
@@ -277,17 +304,16 @@ func TitleCase(text string) string {
 			b.WriteString(w)
 			continue
 		}
-		lower := strings.ToLower(w)
-		if minor[lower] && i > 0 && i < len(words)-1 && !startsPhrase(text[:s.from]) {
-			b.WriteString(lower)
-			continue
-		}
-		r, n := utf8.DecodeRuneInString(w)
-		b.WriteRune(unicode.ToUpper(r))
-		b.WriteString(w[n:])
+		b.WriteString(recase(w, i == 0, i == len(words)-1, text[:s.from]))
 	}
 	b.WriteString(text[at:])
 	return b.String()
+}
+
+// capitalize puts w's first letter in upper case.
+func capitalize(w string) string {
+	r, n := utf8.DecodeRuneInString(w)
+	return string(unicode.ToUpper(r)) + w[n:]
 }
 
 // keepAsIs reports whether w has a digit, or a capital after its first

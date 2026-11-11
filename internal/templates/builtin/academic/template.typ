@@ -25,7 +25,7 @@
     margin: (x: 1.35in, y: 1.25in),
     numbering: "1",
     number-align: center,
-    header: if get("organization") != "" { align(center, text(size: 9pt, smallcaps(get("organization")))) },
+    header: if get("header") != "" { align(center, text(size: 9pt, smallcaps(get("header")))) },
   )
   set text(font: body-font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")
   set par(justify: true, leading: 0.55em, spacing: 0.55em, first-line-indent: 1.8em)
@@ -61,6 +61,7 @@
     #if get("title") != "" { text(size: 17.28pt, fill: title-color, get("title")) }
     #if get("subtitle") != "" { linebreak(); text(size: 13pt, get("subtitle")) }
     #if get("author") != "" { v(1.1em); text(size: 12pt, get("author")) }
+    #if get("topic") != "" { v(0.6em); text(size: 12pt, get("topic")) }
     #if get("date") != "" { v(0.6em); text(size: 12pt, get("date")) }
     #v(1.6em)
   ]

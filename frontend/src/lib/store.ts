@@ -1,20 +1,20 @@
 // App state shared by the components: the open document, the preview, and
 // what the cursor is on (for the ribbon).
 
-import { computed, reactive, shallowRef } from "vue";
+import { computed, reactive, shallowRef, watch } from "vue";
 import type { EditorView } from "@codemirror/view";
 import { DocService } from "../../bindings/peanut-writer";
 import type { RecentFile } from "../../bindings/peanut-writer/models";
 import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
 import type { Heading } from "../../bindings/peanut-writer/internal/doc/models";
 import type { BlockStyle, Mark } from "./editor";
-import type { Item, Table } from "./markdown";
+import type { Item, RefAt, Table } from "./markdown";
 
 type Dialog =
   | { kind: "figure"; item: Item }
   | { kind: "table"; item?: Item; cols?: number; rows?: number; table?: Table }
   | { kind: "pasteTable" }
-  | { kind: "crossref" }
+  | { kind: "crossref"; at?: RefAt }
   | { kind: "link"; text: string }
   | { kind: "properties" }
   | { kind: "settings" }
@@ -38,6 +38,7 @@ export const state = reactive({
   content: "",
   dirty: false,
   synced: null as string | null, // the content the PDF and Word copies were last synced from
+  opened: null as string | null, // the content as opened; null once saved to another file
   autosaved: false, // an autosave just ran (shown briefly in the title bar)
 
   pages: [] as string[],
@@ -49,6 +50,7 @@ export const state = reactive({
   outline: [] as Heading[], // the headings, from the latest render
   outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
   currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none
+  scrollLinked: true, // the editor and preview scroll together; only the link button unlinks them
   versionsOpen: localStorage.getItem("versions") === "1", // the named versions beside the editor
 
   templates: [] as Template[],
@@ -65,6 +67,8 @@ export const state = reactive({
   // The editor shows the document's Markdown rather than hiding its marks.
   showMarkdown: localStorage.getItem("showMarkdown") === "1",
   showPeanut: true, // Peanut beside the ribbon tabs (Settings)
+  syncOnSave: false, // saving also syncs the PDF and Word copies (Settings)
+  syncOnQuit: true, // quitting or opening another document also syncs them (Settings)
   fitZoom: 1,
   dialog: null as Dialog | null,
   toasts: [] as Toast[],
@@ -74,6 +78,16 @@ export const state = reactive({
 export const canSave = computed(() => state.dirty || !state.path);
 // Syncing does something unless the copies came from this very text.
 export const canSync = computed(() => state.synced !== state.content);
+// The copies are behind edits made since the document was opened or last
+// synced, once it has a file. With Sync on quit, closing the window waits
+// for the editor to sync them.
+export const behindCopies = computed(
+  () => !!state.path && state.content !== (state.synced ?? state.opened),
+);
+watch(
+  () => state.syncOnQuit && behindCopies.value,
+  (behind) => DocService.SetUnsynced(behind),
+);
 // The templates the document can use: its own first, if it has one.
 export const docTemplates = computed(() =>
   state.custom ? [state.custom, ...state.templates] : state.templates,

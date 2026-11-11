@@ -32,11 +32,27 @@ func TestTitleCase(t *testing.T) {
 	}
 }
 
-func TestTitleCaseHeadings(t *testing.T) {
+func TestSentenceCase(t *testing.T) {
+	for in, want := range map[string]string{
+		"The Lord Of The Rings":              "The lord of the rings",
+		"results: A Summary Of The Findings": "Results: A summary of the findings",
+		"NASA And The iPhone In 3D":          "NASA and the iPhone in 3D",
+		"what I'm Doing And Why I Care":      "What I'm doing and why I care",
+		"Using `The_API` In Go":              "Using `The_API` in go",
+		"See @fig:The-Chart For More":        "See @fig:The-Chart for more",
+		"*What* Is *The* Point":              "*What* is *the* point",
+	} {
+		if got := SentenceCase(in); got != want {
+			t.Errorf("SentenceCase(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestCaseHeadings(t *testing.T) {
 	in := "---\ntitle: the front matter\n---\n\n# the first part ##\n\nbody text of the part\n\n````md\n# a fenced heading\n```\n# still fenced\n````\n\n   ## the last part\n"
 	want := "---\ntitle: the front matter\n---\n\n# The First Part ##\n\nbody text of the part\n\n````md\n# a fenced heading\n```\n# still fenced\n````\n\n   ## The Last Part\n"
-	if got := TitleCaseHeadings(in); got != want {
-		t.Errorf("TitleCaseHeadings:\n%s\nwant:\n%s", got, want)
+	if got := CaseHeadings(in, TitleCase); got != want {
+		t.Errorf("CaseHeadings:\n%s\nwant:\n%s", got, want)
 	}
 }
 

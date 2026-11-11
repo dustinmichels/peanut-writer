@@ -39,6 +39,6 @@ features:
     link: /guide/documents
   - icon: 🥜
     title: A little company
-    details: Peanut keeps you company at the top of the window, cheering every 250 words.
+    details: Peanut keeps you company at the top of the window, with a word of encouragement when you click him.
     link: /guide/writing#peanut
 ---

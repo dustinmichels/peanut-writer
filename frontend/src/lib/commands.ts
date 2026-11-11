@@ -12,8 +12,10 @@ import {
   insertLoremIpsum,
   menu,
   openTemplatesFolder,
+  packageOf,
   setTemplate,
   showInFolder,
+  showPackageContents,
 } from "./actions";
 import {
   type BlockStyle,
@@ -97,6 +99,13 @@ const fixed: Command[] = [
     label: "Show in Finder",
     run: showInFolder,
     enabled: () => !!state.path,
+  },
+  {
+    id: "revealPackage",
+    group: "File",
+    label: "Show Package Contents",
+    run: showPackageContents,
+    enabled: () => !!packageOf(state.path),
   },
   {
     id: "properties",

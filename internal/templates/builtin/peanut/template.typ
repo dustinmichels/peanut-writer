@@ -33,7 +33,7 @@
   set page(
     paper: "us-letter",
     margin: 1in,
-    header: if get("organization") != "" { align(right, text(size: 9pt, fill: roast, get("organization"))) },
+    header: if get("header") != "" { align(right, text(size: 9pt, fill: roast, get("header"))) },
     footer: context align(center, text(size: 9pt, fill: roast)[
       #peanut(size: 7pt) #h(3pt) #counter(page).display()
     ]),
@@ -83,7 +83,7 @@
   if get("subtitle") != "" {
     block(below: 1.2em, text(font: heading-font, size: 14pt, fill: skin, get("subtitle")))
   }
-  let byline = (get("author"), get("date")).filter(s => s != "")
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if byline.len() > 0 {
     block(below: 1.1em, byline.map(s => box(fill: cream, inset: (x: 8pt, y: 4pt), radius: 10pt, text(size: 9.5pt, fill: roast, s))).join(h(6pt)))
   }

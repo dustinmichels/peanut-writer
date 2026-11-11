@@ -21,6 +21,7 @@ Go + [Wails 3](https://v3.wails.io) for the app, Vue + [CodeMirror](https://code
 mise install       # go, bun, wails3, typst
 mise run dev       # the app with hot reload
 mise run package   # bin/peanut-writer.app, with typst inside
+mise run release   # tag, notarize and publish a GitHub release (Mac)
 mise run test      # Go tests
 mise run docs      # the documentation site (docs/, VitePress) with hot reload
 ```

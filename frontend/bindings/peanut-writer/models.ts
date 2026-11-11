@@ -69,9 +69,9 @@ export interface Settings {
     "autoFormat"?: boolean | null;
 
     /**
-     * ...and puts headings in title case
+     * ...and puts headings in "title" or "sentence" case; anything else leaves them as written
      */
-    "titleCase"?: boolean | null;
+    "headingCase"?: string | null;
 
     /**
      * a new document's author (global only); nil means the computer user's full name
@@ -82,6 +82,16 @@ export interface Settings {
      * Peanut keeps you company beside the ribbon tabs; nil means on
      */
     "peanut"?: boolean | null;
+
+    /**
+     * saving also writes the PDF and Word copies, as Sync Files does; nil means off
+     */
+    "syncOnSave"?: boolean | null;
+
+    /**
+     * quitting or opening another document also writes the copies; nil means on
+     */
+    "syncOnQuit"?: boolean | null;
 }
 
 /**

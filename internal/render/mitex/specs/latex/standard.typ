@@ -26,6 +26,21 @@
 } else {
   tex.text
 }
+// Peanut Writer: a TeX length (`1em`, `-2.5pt`) as a Typst length. Upstream
+// mitex evals the argument as Typst code, which lets a document's math run
+// arbitrary code; this reads only a number and a unit.
+#let mitex-tex-units = (pt: 1pt, bp: 1pt, pc: 12pt, mm: 1mm, cm: 1cm, "in": 1in, em: 1em, ex: 0.5em, mu: 1em / 18)
+#let get-tex-length(tex) = {
+  let s = get-tex-str(tex)
+  let m = if type(s) == str {
+    s.replace("\u{2212}", "-").replace(" ", "").match(regex("^([-+]?)(\d*\.?\d+)([a-z]{2})$"))
+  }
+  if m == none or m.captures.at(2) not in mitex-tex-units {
+    panic("not a length: " + repr(s))
+  }
+  let (sign, num, unit) = m.captures
+  (if sign == "-" { -1 } else { 1 }) * float(num) * mitex-tex-units.at(unit)
+}
 #let get-tex-color-from-arr(arr) = {
   mitex-color-map.at(lower(get-tex-str-from-arr(arr)), default: none)
 }
@@ -934,7 +949,7 @@
   underbar: define-cmd(1, handle: it => $underline(it)$),
   plim: of-sym(math.op("plim", limits: true)),
   projlim: of-sym(math.op("proj\u{2009}lim", limits: true)),
-  raisebox: define-cmd(2, handle: (sp, it) => text(baseline: -eval(get-tex-str(sp)), it)),
+  raisebox: define-cmd(2, handle: (sp, it) => text(baseline: -get-tex-length(sp), it)),
   sh: of-sym(math.op("sh")),
   smallint: of-sym($inline(integral)$),
   thickapprox: of-sym($bold(approx)$),
@@ -1049,8 +1064,8 @@
   operatorname: define-cmd(1, handle: it => math.op(math.upright(it))),
   operatornamewithlimits: define-cmd(1, alias: "operatornamewithlimits", handle: operatornamewithlimits),
   "operatorname*": define-cmd(1, alias: "operatornamewithlimits", handle: operatornamewithlimits),
-  vspace: define-cmd(1, handle: it => v(eval(get-tex-str(it)))),
-  hspace: define-cmd(1, handle: it => h(eval(get-tex-str(it)))),
+  vspace: define-cmd(1, handle: it => v(get-tex-length(it))),
+  hspace: define-cmd(1, handle: it => h(get-tex-length(it))),
   text: define-cmd(1, alias: "#textmath", handle: it => it),
   textmd: define-cmd(1, alias: "#textmd", handle: it => it),
   textnormal: define-cmd(1, alias: "#textnormal", handle: it => it),

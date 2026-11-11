@@ -26,6 +26,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"peanut-writer/internal/atomicfile"
 	"peanut-writer/internal/backup"
 	"peanut-writer/internal/doc"
 	"peanut-writer/internal/docx"
@@ -69,6 +70,7 @@ type DocService struct {
 	path      string // the open document's file; "" until it's saved
 	dir       string // where its images live: path's folder, or a scratch folder
 	dirty     bool
+	unsynced  bool // Sync on quit is on and the PDF and Word copies are behind the document
 	quitting  bool // the user chose to quit, so closing mustn't ask again
 	cancel    context.CancelFunc
 	previews  map[string]string // template previews by id and source hash
@@ -138,10 +140,12 @@ type appState struct {
 // (settings.json in the app's config folder), and a document's own (Name.settings.json
 // beside its Name.md), which override the user's. nil means not set.
 type Settings struct {
-	AutoFormat *bool   `json:"autoFormat,omitempty"` // saving tidies the Markdown with oxfmt
-	TitleCase  *bool   `json:"titleCase,omitempty"`  // ...and puts headings in title case
-	Author     *string `json:"author,omitempty"`     // a new document's author (global only); nil means the computer user's full name
-	Peanut     *bool   `json:"peanut,omitempty"`     // Peanut keeps you company beside the ribbon tabs; nil means on
+	AutoFormat  *bool   `json:"autoFormat,omitempty"`  // saving tidies the Markdown with oxfmt
+	HeadingCase *string `json:"headingCase,omitempty"` // ...and puts headings in "title" or "sentence" case; anything else leaves them as written
+	Author      *string `json:"author,omitempty"`      // a new document's author (global only); nil means the computer user's full name
+	Peanut      *bool   `json:"peanut,omitempty"`      // Peanut keeps you company beside the ribbon tabs; nil means on
+	SyncOnSave  *bool   `json:"syncOnSave,omitempty"`  // saving also writes the PDF and Word copies, as Sync Files does; nil means off
+	SyncOnQuit  *bool   `json:"syncOnQuit,omitempty"`  // quitting or opening another document also writes the copies; nil means on
 }
 
 // SettingsInfo is both sets of settings, and the files they're kept in.
@@ -223,7 +227,7 @@ func (s *DocService) NewDocument() (DocInfo, error) {
 	}
 	content += "\ndate: " + time.Now().Format("January 2, 2006") +
 		"\npeanut-version: " + frontMatterValue(appVersion) + "\n---\n\n"
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
 	os.Remove(documentSettingsPath(p)) // a replaced document's
@@ -260,19 +264,28 @@ func shownPath(p string) string {
 
 // docFile is the Markdown file of the document at p: p itself, or for a
 // package, the Markdown file inside it (Name.md, or its only one if the
-// package was renamed).
+// package was renamed). A package's Markdown file mustn't be a symlink: one
+// from elsewhere could otherwise show (and save over) any file.
 func docFile(p string) (string, error) {
 	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 		return p, err
 	}
 	md := filepath.Join(p, docName(p)+".md")
-	if _, err := os.Stat(md); err == nil {
-		return md, nil
+	if _, err := os.Lstat(md); err != nil {
+		found, _ := filepath.Glob(filepath.Join(p, "*.md"))
+		if len(found) != 1 {
+			return "", fmt.Errorf("%s holds no document", filepath.Base(p))
+		}
+		md = found[0]
 	}
-	if found, _ := filepath.Glob(filepath.Join(p, "*.md")); len(found) == 1 {
-		return found[0], nil
+	fi, err := os.Lstat(md)
+	if err != nil {
+		return "", err
 	}
-	return "", fmt.Errorf("%s holds no document", filepath.Base(p))
+	if fi.Mode()&fs.ModeSymlink != 0 {
+		return "", fmt.Errorf("%s isn't opened: its %s is a link to another file", filepath.Base(p), filepath.Base(md))
+	}
+	return md, nil
 }
 
 // choosePackage asks for a document's name and where to put it, makes a
@@ -411,7 +424,7 @@ func (s *DocService) Save(content string) (DocInfo, error) {
 	if p == "" {
 		return s.SaveAs(content)
 	}
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
 	s.SetDirty(false)
@@ -441,7 +454,7 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	if err := copyImages(content, oldDir, filepath.Dir(p)); err != nil {
 		return DocInfo{}, fmt.Errorf("copying images: %w", err)
 	}
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
 	if err := s.carrySettings(oldPath, p); err != nil {
@@ -486,6 +499,14 @@ func (s *DocService) ConfirmDiscard(name string) string {
 	return <-choice
 }
 
+// SetUnsynced records whether closing must first sync the PDF and Word
+// copies (Sync on quit is on and they're behind the document).
+func (s *DocService) SetUnsynced(unsynced bool) {
+	s.mu.Lock()
+	s.unsynced = unsynced
+	s.mu.Unlock()
+}
+
 // Quit quits without asking about unsaved changes (the editor already did).
 func (s *DocService) Quit() {
 	s.mu.Lock()
@@ -495,10 +516,10 @@ func (s *DocService) Quit() {
 }
 
 // shouldClose reports whether the window may close now; if not, the editor
-// is asked to deal with unsaved changes first.
+// is asked to deal with unsaved changes (and unsynced copies) first.
 func (s *DocService) shouldClose() bool {
 	s.mu.Lock()
-	ok := !s.dirty || s.quitting
+	ok := !(s.dirty || s.unsynced) || s.quitting
 	s.mu.Unlock()
 	if !ok {
 		s.app.Event.Emit("menu", "quit")
@@ -625,16 +646,14 @@ func safeFileName(s string) string {
 
 var imageRef = regexp.MustCompile(`!\[[^\]]*\]\(\s*<?([^)\s>]+)>?`)
 
-// copyImages copies the images content refers to by relative path from one
-// folder to another, keeping any that are already there.
+// copyImages copies the images content refers to (in from: see
+// doc.ImagePath) from one folder to another, keeping any that are already
+// there.
 func copyImages(content, from, to string) error {
 	if from == to {
 		return nil
 	}
 	for _, m := range imageRef.FindAllStringSubmatch(content, -1) {
-		if filepath.IsAbs(m[1]) {
-			continue // found the same from anywhere
-		}
 		src := doc.ImagePath(from, m[1])
 		if src == "" {
 			continue // missing before, missing after
@@ -654,7 +673,7 @@ func copyImages(content, from, to string) error {
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(dst, b, 0o644); err != nil {
+		if err := atomicfile.Write(dst, b, 0o644); err != nil {
 			return err
 		}
 	}
@@ -767,7 +786,20 @@ func (s *DocService) storeImage(name string, b []byte) (string, error) {
 			}
 			continue
 		}
-		if err := os.WriteFile(p, b, 0o644); err != nil {
+		// Only a new file: never through a (dangling) symlink left there.
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		_, err = f.Write(b)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			os.Remove(p)
 			return "", err
 		}
 		return "images/" + file, nil
@@ -781,7 +813,7 @@ func (s *DocService) ImageURL(ref string) string {
 	dir := s.dir
 	s.mu.Unlock()
 	p := doc.ImagePath(dir, ref)
-	if p == "" {
+	if p == "" || checkImageName(p) != nil {
 		return ""
 	}
 	b, err := os.ReadFile(p)
@@ -890,7 +922,7 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 	base := filepath.Join(filepath.Dir(shownPath(cur)), docName(cur))
 	paths := []string{base + ".pdf", base + ".docx"}
 	for i, b := range [][]byte{pdf, word} {
-		if err := os.WriteFile(paths[i], b, 0o644); err != nil {
+		if err := atomicfile.Write(paths[i], b, 0o644); err != nil {
 			return nil, err
 		}
 	}
@@ -1041,9 +1073,9 @@ func (s *DocService) LoadVersion(name string) (DocInfo, error) {
 
 // --- Formatting --------------------------------------------------------------
 
-// Format tidies the document's Markdown with oxfmt and, if titleCase, puts
-// its headings in title case.
-func (s *DocService) Format(content string, titleCase bool) (string, error) {
+// Format tidies the document's Markdown with oxfmt and puts its headings in
+// headingCase: "title" or "sentence" case, or as written.
+func (s *DocService) Format(content, headingCase string) (string, error) {
 	s.mu.Lock()
 	o := s.oxfmt
 	s.mu.Unlock()
@@ -1062,8 +1094,11 @@ func (s *DocService) Format(content string, titleCase bool) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if titleCase {
-		out = mdfmt.TitleCaseHeadings(out)
+	switch headingCase {
+	case "title":
+		out = mdfmt.CaseHeadings(out, mdfmt.TitleCase)
+	case "sentence":
+		out = mdfmt.CaseHeadings(out, mdfmt.SentenceCase)
 	}
 	return out, nil
 }
@@ -1590,7 +1625,7 @@ func (s *DocService) carrySettings(from, to string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, b, 0o644)
+	return atomicfile.Write(dst, b, 0o644)
 }
 
 // readSettings reads a settings file; one that isn't there sets nothing.
@@ -1621,7 +1656,7 @@ func writeSettings(p string, set Settings) error {
 		return err
 	}
 	on, none := true, ""
-	all, _ := json.Marshal(Settings{AutoFormat: &on, TitleCase: &on, Author: &none, Peanut: &on})
+	all, _ := json.Marshal(Settings{AutoFormat: &on, HeadingCase: &none, Author: &none, Peanut: &on, SyncOnSave: &on, SyncOnQuit: &on})
 	var keys map[string]json.RawMessage
 	json.Unmarshal(all, &keys)
 	for k := range keys {
@@ -1639,7 +1674,7 @@ func writeSettings(p string, set Settings) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(p, append(b, '\n'), 0o644)
+	return atomicfile.Write(p, append(b, '\n'), 0o644)
 }
 
 // defaultAuthor is the author a new document gets: the user's setting, or

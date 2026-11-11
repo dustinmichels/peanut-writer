@@ -24,9 +24,10 @@ change them.
 ## `template.typ`
 
 A [Typst](https://typst.app/docs) file exporting `template(meta, body)`: a function that sets up the page, fonts,
-headings, captions and tables, writes the title block from `meta` (`title`, `subtitle`, `author`, `date`,
-`abstract`), then shows `body`. `meta` also has `organization` (a class, team, project or company), which the built-in
-templates show in the page header or footer. Missing properties are absent, so read them with a default.
+headings, captions and tables, writes the title block from `meta` (`title`, `subtitle`, `author`, `topic`, `date`,
+`abstract`), then shows `body`. The built-in templates show `topic` beside the author and date. `meta` also has
+`header` (a class, team, project or company), which the built-in templates show in the page header or footer. Missing
+properties, and ones the document hides, are absent, so read them with a default.
 
 ```typst
 #import "style.typ": custom-color, custom-font, custom-size
@@ -39,7 +40,7 @@ templates show in the page header or footer. Missing properties are absent, so r
   set page(
     paper: "us-letter",
     margin: 1in,
-    header: if get("organization") != "" { align(right, text(size: 9pt, get("organization"))) },
+    header: if get("header") != "" { align(right, text(size: 9pt, get("header"))) },
   )
   set text(font: font, size: custom-size("fontSize", 11pt), fill: ink)
   show heading.where(level: 1): set text(size: 16pt)
@@ -54,6 +55,10 @@ templates show in the page header or footer. Missing properties are absent, so r
 Importing `style.typ` and wrapping your fonts, colors and size in `custom-font`, `custom-color` and `custom-size` is
 optional, but it's what lets **Customize** change them. A template that doesn't import `style.typ` can only be
 customized in Word.
+
+A template is typeset apart from the rest of your computer: it can read only the files Peanut Writer gives Typst
+(`style.typ` and the document's pictures), not other files, such as images or fonts of its own beside
+`template.typ`. Fonts come from those installed on the computer.
 
 ## `template.json`
 

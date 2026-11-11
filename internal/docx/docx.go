@@ -32,11 +32,12 @@ type Options struct {
 // Write renders d as a .docx file in style st.
 func Write(d *doc.Document, st templates.DocxStyle, opt Options) ([]byte, error) {
 	w := newWriter(st, opt)
-	w.org = strings.TrimSpace(d.Meta.Organization)
+	shown := d.Meta.Shown()
+	w.headerText = strings.TrimSpace(shown.Header)
 	w.collectBookmarks(d.Blocks)
 	var body strings.Builder
 	w.out = &body
-	w.titleBlock(d.Meta)
+	w.titleBlock(shown)
 	w.blocks(d.Blocks)
 	if body.Len() == 0 {
 		body.WriteString("<w:p/>")
@@ -98,10 +99,10 @@ type writer struct {
 	inNote bool
 	prefix string // runs that start the next paragraph (a footnote's mark)
 
-	paraStyle string        // style of body paragraphs here: "" (Normal), Quote, FootnoteText
-	ordered   []orderedList // ordered list numbering instances
-	hasTOC    bool
-	org       string // the front matter's organization, shown in the page header; "" for none
+	paraStyle  string        // style of body paragraphs here: "" (Normal), Quote, FootnoteText
+	ordered    []orderedList // ordered list numbering instances
+	hasTOC     bool
+	headerText string // the front matter's header, shown in the page header; "" for none
 }
 
 type part struct {
@@ -200,7 +201,7 @@ func (w *writer) pack(m doc.Meta, body string) ([]byte, error) {
 	if w.st.PageNumbers {
 		fixed = append(fixed, rel{"rId5", relFooter, "footer1.xml", false})
 	}
-	if w.org != "" {
+	if w.headerText != "" {
 		fixed = append(fixed, rel{"rId6", relHeader, "header1.xml", false})
 	}
 	parts := []struct{ name, body string }{
@@ -220,7 +221,7 @@ func (w *writer) pack(m doc.Meta, body string) ([]byte, error) {
 	if w.st.PageNumbers {
 		parts = append(parts, struct{ name, body string }{"word/footer1.xml", w.footer()})
 	}
-	if w.org != "" {
+	if w.headerText != "" {
 		parts = append(parts, struct{ name, body string }{"word/header1.xml", w.header()})
 	}
 	for _, p := range parts {
@@ -255,7 +256,7 @@ func (w *writer) contentTypes() string {
 	if w.st.PageNumbers {
 		b.WriteString(`<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`)
 	}
-	if w.org != "" {
+	if w.headerText != "" {
 		b.WriteString(`<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`)
 	}
 	b.WriteString(`<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`)
@@ -289,7 +290,7 @@ func (w *writer) document(body string) string {
 func (w *writer) sectPr(cols int, continuous bool) string {
 	var b strings.Builder
 	b.WriteString("<w:sectPr>")
-	if w.org != "" {
+	if w.headerText != "" {
 		b.WriteString(`<w:headerReference w:type="default" r:id="rId6"/>`)
 	}
 	if w.st.PageNumbers {
@@ -319,10 +320,10 @@ func (w *writer) footer() string {
 	return b.String()
 }
 
-// header is the page header: the organization, at the right.
+// header is the page header: the front matter's header, at the right.
 func (w *writer) header() string {
 	return xmlHeader + `<w:hdr ` + namespaces + `><w:p><w:pPr><w:pStyle w:val="Header"/></w:pPr>` +
-		w.run(w.org, runProps{}) + `</w:p></w:hdr>`
+		w.run(w.headerText, runProps{}) + `</w:p></w:hdr>`
 }
 
 func (w *writer) settings() string {

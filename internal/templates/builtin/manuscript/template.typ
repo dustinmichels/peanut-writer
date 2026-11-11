@@ -24,7 +24,7 @@
   set page(
     paper: "us-letter",
     margin: 1in,
-    header: context grid(columns: (1fr, auto), get("organization"), counter(page).display()),
+    header: context grid(columns: (1fr, auto), get("header"), counter(page).display()),
   )
   set text(font: font, size: size, fill: ink, lang: "en")
   // Double spacing: the gap between paragraphs is the gap between lines.
@@ -62,6 +62,7 @@
     #if get("title") != "" { text(font: heading-font, weight: "bold", fill: title-color, get("title")) }
     #if get("subtitle") != "" { linebreak(); text(font: heading-font, weight: "bold", get("subtitle")) }
     #if get("author") != "" { v(1.3em); get("author") }
+    #if get("topic") != "" { linebreak(); get("topic") }
     #if get("date") != "" { linebreak(); get("date") }
     #v(1.3em)
   ]

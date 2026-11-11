@@ -119,17 +119,26 @@ func splitFrontMatter(source string) (Meta, string) {
 			m.Subtitle = value
 		case "author":
 			m.Author = value
+		case "topic":
+			m.Topic = value
 		case "date":
 			if strings.EqualFold(value, "today") {
 				value = time.Now().Format("January 2, 2006")
 			}
 			m.Date = value
-		case "organization":
-			m.Organization = value
+		case "header":
+			m.Header = value
 		case "abstract":
 			m.Abstract = value
 		case "template":
 			m.Template = value
+		case "hide":
+			m.Hide = nil
+			for _, k := range strings.Split(value, ",") {
+				if k = strings.ToLower(strings.TrimSpace(k)); k != "" {
+					m.Hide = append(m.Hide, k)
+				}
+			}
 		}
 	}
 	body := rest[end:]
@@ -158,6 +167,7 @@ func unquote(v string) string {
 func (p *parser) blocks(parent ast.Node) []Block {
 	out := []Block{}
 	for n := parent.FirstChild(); n != nil; n = n.NextSibling() {
+		had := len(out)
 		switch n := n.(type) {
 		case *ast.Paragraph, *ast.TextBlock:
 			// A table caption is taken by the table before it.
@@ -166,7 +176,7 @@ func (p *parser) blocks(parent ast.Node) []Block {
 			}
 			out = append(out, p.paragraph(n))
 		case *ast.Heading:
-			out = append(out, Block{Type: BlockHeading, Level: n.Level, Line: p.line(n), Inlines: p.inlines(n)})
+			out = append(out, Block{Type: BlockHeading, Level: n.Level, Inlines: p.inlines(n)})
 		case *ast.List:
 			b := Block{Type: BlockList, Ordered: n.IsOrdered(), Tight: n.IsTight}
 			if n.IsOrdered() {
@@ -190,6 +200,9 @@ func (p *parser) blocks(parent ast.Node) []Block {
 			out = append(out, p.equation(n))
 		}
 		// HTML blocks and the footnote list (read up front) aren't shown.
+		if len(out) > had {
+			out[len(out)-1].Line = p.line(n)
+		}
 	}
 	return out
 }
@@ -199,12 +212,16 @@ func (p *parser) raw(n ast.Node) string {
 	return strings.TrimSpace(p.lines(n))
 }
 
-// line is the 1-based source line n's text starts on; 0 when it has none.
+// line is the 1-based source line block n starts on; 0 when unknown.
 func (p *parser) line(n ast.Node) int {
-	if n.Lines().Len() == 0 {
-		return 0
+	at := n.Pos()
+	if at < 0 {
+		if n.Lines().Len() == 0 {
+			return 0
+		}
+		at = n.Lines().At(0).Start
 	}
-	return p.lineBase + bytes.Count(p.src[:n.Lines().At(0).Start], []byte("\n")) + 1
+	return p.lineBase + bytes.Count(p.src[:at], []byte("\n")) + 1
 }
 
 func (p *parser) lines(n ast.Node) string {
@@ -389,18 +406,31 @@ func (p *parser) image(dest string) (src, missing string) {
 		return "", dest
 	}
 	if src = ImagePath(p.baseDir, dest); src == "" {
-		p.warn("image not found: %s", dest)
+		if !filepath.IsLocal(filepath.FromSlash(dest)) {
+			p.warn("image outside the document's folder: %s", dest)
+		} else {
+			p.warn("image not found: %s", dest)
+		}
 		return "", dest
 	}
 	return src, ""
 }
 
 // ImagePath finds the file an image reference names, relative to baseDir
-// (the document's folder) unless absolute: its absolute path, or "" if
-// there's none. Percent-encoded references (`my%20picture.png`) are tried
-// decoded too.
+// (the document's folder): its absolute path, or "" if there's none. Only
+// files in baseDir count, also through symlinks, so a document from
+// elsewhere can't show (or export) other pictures on the computer.
+// Percent-encoded references (`my%20picture.png`) are tried decoded too.
 func ImagePath(baseDir, ref string) string {
-	if ref == "" || strings.Contains(ref, "://") {
+	if ref == "" || baseDir == "" || strings.Contains(ref, "://") {
+		return ""
+	}
+	base, err := filepath.Abs(baseDir)
+	if err != nil {
+		return ""
+	}
+	realBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
 		return ""
 	}
 	refs := []string{ref}
@@ -408,17 +438,19 @@ func ImagePath(baseDir, ref string) string {
 		refs = append(refs, u)
 	}
 	for _, r := range refs {
-		p := filepath.FromSlash(r)
-		if !filepath.IsAbs(p) {
-			if baseDir == "" {
-				return ""
-			}
-			p = filepath.Join(baseDir, p)
+		rel := filepath.FromSlash(r)
+		if !filepath.IsLocal(rel) {
+			continue
 		}
-		if abs, err := filepath.Abs(p); err == nil {
-			p = abs // typst runs elsewhere
+		p := filepath.Join(base, rel) // absolute: typst runs elsewhere
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			continue
 		}
-		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+		if in, err := filepath.Rel(realBase, real); err != nil || !filepath.IsLocal(in) {
+			continue
+		}
+		if fi, err := os.Stat(real); err == nil && !fi.IsDir() {
 			return p
 		}
 	}

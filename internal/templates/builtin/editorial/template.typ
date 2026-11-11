@@ -31,7 +31,7 @@
         column-gutter: 1em,
         text(weight: "bold", fill: accent, counter(page).display()),
         upper(get("title")),
-        upper(get("organization")),
+        upper(get("header")),
       )
     },
   )
@@ -80,7 +80,7 @@
   show outline.entry.where(level: 1): set text(font: sans, weight: "semibold")
 
   // Title block: kicker rule, headline, deck, byline.
-  let byline = (get("author"), get("date")).filter(s => s != "")
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if get("title") != "" or get("subtitle") != "" or byline.len() > 0 {
     line(length: 0.9in, stroke: 3pt + accent)
     v(0.9em)

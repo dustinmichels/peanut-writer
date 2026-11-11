@@ -24,6 +24,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"peanut-writer/internal/atomicfile"
 )
 
 //go:embed all:builtin
@@ -197,7 +199,7 @@ func WriteCustom(p string, c *Custom) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(p, append(b, '\n'), 0o644)
+	return atomicfile.Write(p, append(b, '\n'), 0o644)
 }
 
 // DocxStyle is how a template looks in Word. Colors are RRGGBB.

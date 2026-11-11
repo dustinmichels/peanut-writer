@@ -25,6 +25,20 @@
   }
 }
 
+// In the preview, blocks carry an invisible `peanut:<line>` link to their
+// source line, which the app finds in the SVG: to keep the editor and
+// preview scrolled together, and to show where a click on a page is in the
+// source. _mark puts it where a block (or a heading's text) starts, without
+// moving anything; lists and quotes have their blocks marked instead.
+#let _mark(line) = if _preview and line > 0 { place(link("peanut:" + str(line), box(width: 0.01pt, height: 0.01pt))) }
+#let _placed(n) = if n.type in ("paragraph", "codeblock", "equation", "figure", "table") { _mark(n.at("line", default: 0)) }
+// _unmarked drops the marks from content shown twice (the outline's copy of
+// headings) or out of source order (footnotes, at the page's foot).
+#let _unmarked(body) = {
+  show link: l => if type(l.dest) == str and l.dest.starts-with("peanut:") { none } else { l }
+  body
+}
+
 // Whether content is being laid out inside the outline.
 #let _in_outline = state("peanut-in-outline", false)
 
@@ -41,7 +55,8 @@
 // can't call each other before they're defined).
 #let node(n) = {
   let all(xs) = { for x in xs { node(x) } }
-  let blocks(xs) = xs.map(node).join(parbreak())
+  let marked(x) = { _placed(x); node(x) }
+  let blocks(xs) = xs.map(marked).join(parbreak())
   let t = n.type
 
   // Inlines.
@@ -65,22 +80,21 @@
     let body = blocks(n.at("blocks", default: ()))
     // A heading's note stays out of the outline's copy of the heading (a
     // show rule can't hide it: it would still be numbered and listed).
-    context if not _in_outline.get() { footnote(if body == none [] else { body }) }
+    context if not _in_outline.get() { footnote(_unmarked(if body == none [] else { body })) }
   }
 
   // Blocks. Paragraphs are separated with parbreak() by whoever lays them out.
   else if t == "paragraph" { all(n.at("inlines", default: ())) }
   else if t == "heading" {
-    // In the preview each heading carries an invisible link to its source
-    // line, which the outline pane finds in the SVG to scroll to it.
-    let line = n.at("line", default: 0)
-    let mark = if _preview and line > 0 { link("peanut:" + str(line), box(width: 0.01pt, height: 0.01pt)) }
-    heading(level: n.level, [#mark#all(n.at("inlines", default: ()))])
+    // The heading's mark is in its text, where the outline pane looks for it;
+    // boxed, as a bare place would split the number from the text.
+    let mark = _mark(n.at("line", default: 0))
+    heading(level: n.level, [#if mark != none { box(mark) }#all(n.at("inlines", default: ()))])
   }
   else if t == "list" {
     // Tight items: a nested list follows its text without a paragraph break.
     let tight = n.at("tight", default: false)
-    let items = n.items.map(xs => if tight { xs.map(node).join() } else { blocks(xs) })
+    let items = n.items.map(xs => if tight { xs.map(marked).join() } else { blocks(xs) })
     if n.at("ordered", default: false) {
       enum(start: n.at("start", default: 1), tight: n.at("tight", default: false), ..items)
     } else {
@@ -155,10 +169,10 @@
   // Outline entries repeat heading text: leave the preview's marks and
   // footnotes out.
   show outline: it => {
-    show link: l => if type(l.dest) == str and l.dest.starts-with("peanut:") { none } else { l }
+    show: _unmarked
     _in_outline.update(true)
     it
     _in_outline.update(false)
   }
-  doc.blocks.map(node).join(parbreak())
+  doc.blocks.map(b => { _placed(b); node(b) }).join(parbreak())
 }

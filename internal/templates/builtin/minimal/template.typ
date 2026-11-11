@@ -25,7 +25,7 @@
     margin: (x: 1.1in, top: 1.1in, bottom: 1.1in),
     footer: context {
       set text(font: font, size: 8.5pt, fill: gray)
-      grid(columns: (1fr, auto), get("organization"), counter(page).display())
+      grid(columns: (1fr, auto), get("header"), counter(page).display())
     },
   )
   set text(font: font, size: custom-size("fontSize", 10.5pt), fill: ink, lang: "en")
@@ -64,7 +64,7 @@
   if get("subtitle") != "" {
     block(below: 1em, text(font: heading-font, size: 14pt, fill: gray, get("subtitle")))
   }
-  let byline = (get("author"), get("date")).filter(s => s != "")
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if byline.len() > 0 {
     block(below: 0.9em, text(size: 9pt, fill: gray, byline.join(h(1.5em))))
   }

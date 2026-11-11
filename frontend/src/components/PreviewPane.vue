@@ -9,13 +9,24 @@ interface Page {
   height: number;
 }
 
+const emit = defineEmits<{
+  // pick: a click on a page, at source line `line`, a fraction t of the way
+  // to line `next` (0 when there's no next).
+  pick: [line: number, next: number, t: number];
+}>();
+
 const scroller = ref<HTMLElement>();
 const pages = ref<Page[]>([]);
 const paneWidth = ref(600);
 
-// Where each heading is in the preview, by source line: its page and its
-// baseline in points from the page's top.
-let headings = new Map<number, { page: number; y: number }>();
+// Where each marked block is in the preview, by source line: its page, and
+// the top left of its first line in points from the page's top left.
+interface Mark {
+  page: number;
+  x: number;
+  y: number;
+}
+let marks = new Map<number, Mark>();
 
 // Pages are shown as images: each page's SVG keeps its ids to itself, and
 // swapping a whole set at once doesn't flicker.
@@ -31,7 +42,7 @@ watch(
         height: m ? parseFloat(m[2]) : 792,
       };
     });
-    headings = findHeadings(svgs);
+    marks = findMarks(svgs);
     // Let the new images load before dropping the old ones.
     setTimeout(() => old.forEach((p) => URL.revokeObjectURL(p.url)), 1000);
   },
@@ -71,10 +82,10 @@ function applyTransform(t: string, x: number, y: number): [number, number] {
   return [x, y];
 }
 
-// findHeadings locates the headings in the pages. The preview marks each
-// heading with an invisible `peanut:<line>` link (see peanut.typ).
-function findHeadings(svgs: string[]): Map<number, { page: number; y: number }> {
-  const found = new Map<number, { page: number; y: number }>();
+// findMarks locates the marked blocks in the pages: the preview marks each
+// with an invisible `peanut:<line>` link (see peanut.typ).
+function findMarks(svgs: string[]): Map<number, Mark> {
+  const found = new Map<number, Mark>();
   svgs.forEach((src, page) => {
     if (!src.includes('href="peanut:')) return;
     const svg = new DOMParser().parseFromString(src, "image/svg+xml");
@@ -86,7 +97,7 @@ function findHeadings(svgs: string[]): Map<number, { page: number; y: number }> 
       for (let el: Element | null = a; el; el = el.parentElement) {
         [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
       }
-      found.set(line, { page, y });
+      found.set(line, { page, x, y });
     }
   });
   return found;
@@ -98,12 +109,42 @@ function headingTops(): Map<number, number> {
   const tops = new Map<number, number>();
   const els = scroller.value?.querySelectorAll<HTMLElement>(".page");
   if (!els) return tops;
-  for (const [line, at] of headings) {
-    const page = els[at.page];
-    // Leave room above the baseline for the heading itself.
-    if (page) tops.set(line, page.offsetTop + (at.y - 40) * PX * zoom.value);
+  for (const h of state.outline) {
+    const at = marks.get(h.line);
+    const page = at && els[at.page];
+    // Leave a margin above the heading.
+    if (page) tops.set(h.line, page.offsetTop + (at.y - 24) * PX * zoom.value);
   }
   return tops;
+}
+
+// clicked finds where in the source a click on page i is. The block it's in
+// is the last one (in source order) starting before it: on an earlier page,
+// or above and left of it (in an earlier column, a block lower down is still
+// before it, but in the same column one to its right is a nested item or in
+// the next column). The click is then as far between that block's line and
+// the next block's as it is down the page between them.
+function clicked(e: MouseEvent, i: number) {
+  const els = scroller.value?.querySelectorAll<HTMLElement>(".page");
+  const el = els?.[i];
+  if (!el) return;
+  const box = el.getBoundingClientRect();
+  const scale = PX * zoom.value;
+  const x = (e.clientX - box.left) / scale;
+  const y = (e.clientY - box.top) / scale;
+  let line = 0;
+  for (const [l, m] of marks) {
+    if (l > line && (m.page < i || (m.page === i && m.y <= y && m.x <= x))) line = l;
+  }
+  if (!line) return emit("pick", 1, 0, 0);
+  let next = 0;
+  for (const l of marks.keys()) if (l > line && (!next || l < next)) next = l;
+  // Positions down the whole column of pages, in px.
+  const down = (m: Mark) => els[m.page].offsetTop + m.y * scale;
+  const from = down(marks.get(line)!);
+  const span = next ? down(marks.get(next)!) - from : 0;
+  const t = span > 0 ? Math.min(1, Math.max(0, (el.offsetTop + y * scale - from) / span)) : 0;
+  emit("pick", line, next, t);
 }
 defineExpose({ scroller, headingTops });
 </script>
@@ -130,6 +171,7 @@ defineExpose({ scroller, headingTops });
         :key="i"
         class="page"
         :style="{ width: `${p.width * PX * zoom}px`, height: `${p.height * PX * zoom}px` }"
+        @click="clicked($event, i)"
       >
         <img :src="p.url" :alt="`Page ${i + 1}`" draggable="false" />
       </div>

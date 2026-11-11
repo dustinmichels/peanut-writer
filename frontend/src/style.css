@@ -213,6 +213,9 @@ select {
   font-family: var(--ui);
   color: var(--muted);
 }
+.cm-editor .pw-heading-mark {
+  color: var(--marks);
+}
 .cm-editor .pw-bullet {
   display: inline-block;
   width: 1.2em;
@@ -506,6 +509,10 @@ select {
   padding: 1px 6px;
   margin: 0 1px;
   white-space: nowrap;
+  cursor: pointer;
+}
+.pw-ref:hover {
+  box-shadow: inset 0 0 0 1px var(--border);
 }
 .pw-ref.broken {
   color: var(--danger);

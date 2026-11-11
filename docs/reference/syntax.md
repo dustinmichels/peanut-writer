@@ -31,6 +31,10 @@ braces gives it a reference name, a size and a position:
 - `width` is a percentage of the text width.
 - `align` is `left` or `right`; leave it out to center the figure.
 
+A picture's path is relative to the document, and the picture must be in the document's folder (its `.peanut`
+package, or the folder holding its Markdown file): pictures elsewhere on your computer, named by a full path or with
+`../`, aren't shown. Pictures you paste, drop or insert are copied into `images/` for you.
+
 ## Picture grids
 
 Two or more pictures in one paragraph, with a last line starting `Figure:` that holds the shared caption:
@@ -99,10 +103,12 @@ The block between `---` lines at the very top holds the document's properties an
 title: My Report
 subtitle: Third quarter
 author: Ann
+topic: Essay 2
 date: today # or any text
-organization: HIST 101
+header: HIST 101
 abstract: One paragraph.
 template: report
+hide: subtitle, date
 ---
 ```
 
@@ -110,6 +116,9 @@ template: report
 `journal`, `peanut`,
 `custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
 [your own templates](./custom-templates).
+
+`hide` lists properties (`title`, `subtitle`, `author`, `topic`, `date`, `header`, `abstract`), separated by commas, that
+the document keeps but doesn't show.
 
 ## The rest
 

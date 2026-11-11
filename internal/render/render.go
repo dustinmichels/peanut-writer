@@ -151,7 +151,11 @@ func (t *Typst) PNG(ctx context.Context, path string, widthPt float64) ([]byte, 
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	src := fmt.Sprintf("#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#image(%s, width: %.2fpt)\n", typstString(path), widthPt)
+	img := "img" + strings.ToLower(filepath.Ext(path))
+	if err := linkInto(path, filepath.Join(dir, img)); err != nil {
+		return nil, err
+	}
+	src := fmt.Sprintf("#set page(width: auto, height: auto, margin: 0pt, fill: none)\n#image(%s, width: %.2fpt)\n", typstString("/"+img), widthPt)
 	if err := os.WriteFile(filepath.Join(dir, "main.typ"), []byte(src), 0o600); err != nil {
 		return nil, err
 	}
@@ -214,16 +218,13 @@ func (t *Typst) Fonts(ctx context.Context) ([]string, error) {
 }
 
 // workspace writes main.typ, the renderer, the template, its style (a custom
-// template's changes, read by style.typ), doc.json and mitex to a new
-// temporary folder.
+// template's changes, read by style.typ), doc.json, mitex and the document's
+// images (in img/, which doc.json refers to them in) to a new temporary
+// folder.
 func (t *Typst) workspace(d *doc.Document, tpl templates.Template) (string, error) {
 	src, err := tpl.Source()
 	if err != nil {
 		return "", fmt.Errorf("template %s: %w", tpl.Name, err)
-	}
-	data, err := json.Marshal(d)
-	if err != nil {
-		return "", err
 	}
 	style, err := json.Marshal(tpl.TypstStyle())
 	if err != nil {
@@ -231,6 +232,11 @@ func (t *Typst) workspace(d *doc.Document, tpl templates.Template) (string, erro
 	}
 	dir, err := os.MkdirTemp("", "peanut-render-*")
 	if err != nil {
+		return "", err
+	}
+	data, err := docJSON(d, dir)
+	if err != nil {
+		os.RemoveAll(dir)
 		return "", err
 	}
 	files := map[string][]byte{
@@ -248,6 +254,91 @@ func (t *Typst) workspace(d *doc.Document, tpl templates.Template) (string, erro
 		return "", err
 	}
 	return dir, nil
+}
+
+// docJSON is d as doc.json in the workspace dir: only the properties the
+// document shows, and its images put in dir/img and referred to there, as
+// Typst reads nothing outside the workspace.
+func docJSON(d *doc.Document, dir string) ([]byte, error) {
+	// A deep copy, so d keeps its own paths (Word reads them).
+	b, err := json.Marshal(d)
+	if err != nil {
+		return nil, err
+	}
+	var shown doc.Document
+	if err := json.Unmarshal(b, &shown); err != nil {
+		return nil, err
+	}
+	shown.Meta = d.Meta.Shown()
+	placed := map[string]string{}
+	var failed error
+	place := func(src *string) {
+		if *src == "" || failed != nil {
+			return
+		}
+		name, ok := placed[*src]
+		if !ok {
+			if err := os.MkdirAll(filepath.Join(dir, "img"), 0o700); err != nil {
+				failed = err
+				return
+			}
+			name = fmt.Sprintf("/img/%d%s", len(placed), strings.ToLower(filepath.Ext(*src)))
+			if err := linkInto(*src, filepath.Join(dir, filepath.FromSlash(name))); err != nil {
+				failed = err
+				return
+			}
+			placed[*src] = name
+		}
+		*src = name
+	}
+	var inl func([]doc.Inline)
+	var blk func([]doc.Block)
+	inl = func(xs []doc.Inline) {
+		for i := range xs {
+			place(&xs[i].Src)
+			inl(xs[i].Children)
+			blk(xs[i].Blocks)
+		}
+	}
+	blk = func(bs []doc.Block) {
+		for i := range bs {
+			b := &bs[i]
+			place(&b.Src)
+			for j := range b.Pictures {
+				place(&b.Pictures[j].Src)
+				inl(b.Pictures[j].Alt)
+			}
+			inl(b.Inlines)
+			inl(b.Caption)
+			for _, row := range append([][][]doc.Inline{b.Header}, b.Rows...) {
+				for _, cell := range row {
+					inl(cell)
+				}
+			}
+			blk(b.Children)
+			for _, item := range b.Items {
+				blk(item)
+			}
+		}
+	}
+	blk(shown.Blocks)
+	if failed != nil {
+		return nil, failed
+	}
+	return json.Marshal(&shown)
+}
+
+// linkInto puts the file src at dst: a hard link, or a copy where one can't
+// be made (another volume).
+func linkInto(src, dst string) error {
+	if os.Link(src, dst) == nil {
+		return nil
+	}
+	b, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o600)
 }
 
 // writeMitex writes the bundled mitex package to dir/mitex.
@@ -268,16 +359,13 @@ func writeMitex(dir string) error {
 	})
 }
 
-// compile runs typst in dir. The project root is the file system's root, so
-// images anywhere can be read by absolute path.
+// compile runs typst in dir, which is also its project root: Typst can read
+// only what the workspace holds (doc.json, the images put there, mitex), so
+// neither a template nor a document's math can read other files.
 func (t *Typst) compile(ctx context.Context, dir, input, output string, flags ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	root := string(filepath.Separator)
-	if v := filepath.VolumeName(dir); v != "" {
-		root = v + root
-	}
-	args := append([]string{"compile", "--diagnostic-format", "short", "--root", root}, flags...)
+	args := append([]string{"compile", "--diagnostic-format", "short", "--root", "."}, flags...)
 	cmd := exec.CommandContext(ctx, t.Bin, append(args, input, output)...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer

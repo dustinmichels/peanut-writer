@@ -26,13 +26,13 @@ func (w *writer) para(style, ppr, runs string) {
 	w.out.WriteString("</w:p>")
 }
 
-// titleBlock writes the front matter's title, subtitle, author, date and
-// abstract, each only when given. With text columns, it's a section of its
-// own, across the page.
+// titleBlock writes the front matter's title, subtitle, author, topic, date
+// and abstract, each only when given. With text columns, it's a section of
+// its own, across the page.
 func (w *writer) titleBlock(m doc.Meta) {
 	type line struct{ style, text string }
 	var lines []line
-	for _, l := range []line{{"Title", m.Title}, {"Subtitle", m.Subtitle}, {"Author", m.Author}, {"Date", m.Date}} {
+	for _, l := range []line{{"Title", m.Title}, {"Subtitle", m.Subtitle}, {"Author", m.Author}, {"Topic", m.Topic}, {"Date", m.Date}} {
 		if strings.TrimSpace(l.text) != "" {
 			lines = append(lines, l)
 		}

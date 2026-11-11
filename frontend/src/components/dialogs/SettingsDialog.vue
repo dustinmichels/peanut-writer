@@ -1,24 +1,47 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
+import { RotateCcw } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { DocService } from "../../../bindings/peanut-writer";
 import type { Settings, SettingsInfo } from "../../../bindings/peanut-writer/models";
-import { autoFormat, effectiveSettings } from "../../lib/actions";
+import { autoFormat, defaultSettings, effectiveSettings } from "../../lib/actions";
 import { errorText, state, toast } from "../../lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 
-type Key = "autoFormat" | "titleCase" | "peanut";
-const fields: { key: Key; label: string; hint: string }[] = [
+type Key = "autoFormat" | "headingCase" | "syncOnSave" | "syncOnQuit" | "peanut";
+type Value = boolean | string;
+// A field is a checkbox, or a choice among options.
+const fields: {
+  key: Key;
+  label: string;
+  hint: string;
+  options?: { value: string; label: string }[];
+}[] = [
   {
     key: "autoFormat",
     label: "Auto format on save",
     hint: "Saving (⌘S, Save As, Sync Files) tidies the Markdown with oxfmt: blank lines, list markers, table columns, trailing spaces. Autosaves don't.",
   },
   {
-    key: "titleCase",
-    label: "Title case headings",
-    hint: "When auto formatting: “The Lord of the Rings”. NASA, iPhone and code are left alone.",
+    key: "headingCase",
+    label: "Auto format headings",
+    hint: "When auto formatting. NASA, iPhone and code are left alone; sentence case lowercases names like “London” too.",
+    options: [
+      { value: "none", label: "None" },
+      { value: "title", label: "Title Case: “The Lord of the Rings”" },
+      { value: "sentence", label: "Sentence case: “The lord of the rings”" },
+    ],
+  },
+  {
+    key: "syncOnSave",
+    label: "Sync files on save",
+    hint: "Saving (⌘S, Save As) also writes the PDF and Word copies beside the document, as Sync Files does, if it changed since they were last written. Autosaves don't.",
+  },
+  {
+    key: "syncOnQuit",
+    label: "Sync files on quit",
+    hint: "Quitting and opening another document also write the PDF and Word copies beside the document, if it changed since they were last written.",
   },
   {
     key: "peanut",
@@ -32,6 +55,8 @@ const scope = ref<"user" | "document">("user");
 const info = ref<SettingsInfo | null>(null);
 const user = reactive<Settings>({});
 const doc = reactive<Settings>({});
+const userValues = user as Record<Key, Value | null | undefined>;
+const docValues = doc as Record<Key, Value | null | undefined>;
 
 DocService.Settings()
   .then((i) => {
@@ -44,12 +69,22 @@ DocService.Settings()
     emit("close");
   });
 
-const onOff = (v: boolean | null | undefined) => (v ? "on" : "off");
+const globalValue = (k: Key): Value => userValues[k] ?? defaultSettings[k];
+// value is what k comes to in the pane shown.
+const value = (k: Key): Value =>
+  scope.value === "user" ? globalValue(k) : (docValues[k] ?? globalValue(k));
+// A document overrides a global setting only where it differs from it.
+const overridden = (k: Key) => docValues[k] != null && docValues[k] !== globalValue(k);
 
-// A document setting is "" (use the global one), "on" or "off".
-const docValue = (k: Key) => (doc[k] == null ? "" : onOff(doc[k]));
-function setDoc(k: Key, v: string) {
-  doc[k] = v === "" ? null : v === "on";
+function set(k: Key, v: Value) {
+  if (scope.value === "user") userValues[k] = v;
+  else docValues[k] = v === globalValue(k) ? null : v;
+}
+
+function describe(k: Key, v: Value | null | undefined) {
+  if (typeof v === "boolean") return v ? "on" : "off";
+  const o = fields.find((f) => f.key === k)?.options?.find((o) => o.value === v);
+  return o ? o.label.replace(/:.*/, "") : String(v);
 }
 
 // Only what changed is written, so hand edits made meanwhile survive.
@@ -71,8 +106,10 @@ async function submit() {
   const before = effectiveSettings(i);
   const after = effectiveSettings({ ...i, user, document: doc });
   state.showPeanut = after.peanut;
+  state.syncOnSave = after.syncOnSave;
+  state.syncOnQuit = after.syncOnQuit;
   emit("close");
-  if (after.autoFormat && (!before.autoFormat || after.titleCase !== before.titleCase))
+  if (after.autoFormat && (!before.autoFormat || after.headingCase !== before.headingCase))
     autoFormat();
 }
 </script>
@@ -101,14 +138,51 @@ async function submit() {
         </button>
       </div>
 
-      <template v-if="scope === 'user'">
-        <div v-for="f in fields" :key="f.key" class="field">
-          <label class="check"><input v-model="user[f.key]" type="checkbox" /> {{ f.label }}</label>
-          <span class="hint">{{ f.hint }}</span>
-          <span v-if="doc[f.key] != null" class="hint override"
-            >This document overrides it: {{ onOff(doc[f.key]) }}.</span
+      <div
+        v-for="f in fields"
+        :key="f.key"
+        class="field"
+        :class="{ off: f.options && !value('autoFormat') }"
+      >
+        <div class="head">
+          <label v-if="!f.options" class="check"
+            ><input
+              type="checkbox"
+              :checked="value(f.key) === true"
+              @change="set(f.key, ($event.target as HTMLInputElement).checked)"
+            />
+            {{ f.label }}</label
+          >
+          <span v-else :id="`${f.key}-label`">{{ f.label }}</span>
+          <button
+            v-if="scope === 'document' && overridden(f.key)"
+            type="button"
+            class="btn icon"
+            :title="`Back to the global setting (${describe(f.key, globalValue(f.key))})`"
+            @click="docValues[f.key] = null"
+          >
+            <RotateCcw :size="14" />
+          </button>
+        </div>
+        <div v-if="f.options" class="choices" role="radiogroup" :aria-labelledby="`${f.key}-label`">
+          <label v-for="o in f.options" :key="o.value" class="check"
+            ><input
+              type="radio"
+              :name="f.key"
+              :checked="value(f.key) === o.value"
+              :disabled="!value('autoFormat')"
+              @change="set(f.key, o.value)"
+            />
+            {{ o.label }}</label
           >
         </div>
+        <span class="hint">{{ f.hint }}</span>
+        <span v-if="scope === 'user' && overridden(f.key)" class="hint override"
+          >This document overrides it: {{ describe(f.key, docValues[f.key]) }}.</span
+        >
+      </div>
+
+      <template v-if="scope === 'user'">
         <div class="field">
           <label
             >Default author
@@ -120,31 +194,15 @@ async function submit() {
         </div>
         <p class="hint">For every document. Kept in {{ info.userFile }}</p>
       </template>
-
-      <template v-else>
-        <div v-for="f in fields" :key="f.key" class="field">
-          <label
-            >{{ f.label }}
-            <select
-              :value="docValue(f.key)"
-              @change="setDoc(f.key, ($event.target as HTMLSelectElement).value)"
-            >
-              <option value="">Use global ({{ onOff(user[f.key]) }})</option>
-              <option value="on">On</option>
-              <option value="off">Off</option>
-            </select>
-          </label>
-          <span class="hint">{{ f.hint }}</span>
-        </div>
-        <p class="hint">
-          Overrides the global settings for this document only.
-          {{
-            info.documentFile
-              ? `Kept in ${info.documentFile}`
-              : "Kept beside the document once it's saved."
-          }}
-        </p>
-      </template>
+      <p v-else class="hint">
+        Overrides the global settings for this document only; reset one to follow the global setting
+        again.
+        {{
+          info.documentFile
+            ? `Kept in ${info.documentFile}`
+            : "Kept beside the document once it's saved."
+        }}
+      </p>
     </template>
     <template #footer>
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
@@ -183,6 +241,22 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 4px;
+}
+.off .choices {
+  opacity: 0.55;
 }
 .field > label:not(.check) {
   display: flex;

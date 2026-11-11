@@ -1,4 +1,4 @@
-// Sample content for trying out a template: headings, text, figures and
+// Sample content for trying out a template: headings, text, math, figures and
 // tables, from the command palette's "Lorem Ipsum".
 
 // The sample pictures, drawn without text so they look the same everywhere.
@@ -109,6 +109,12 @@ Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vivamus magna justo
 2. Cras ultricies ligula sed magna dictum porta.
 3. Quisque velit nisi, pretium ut lacinia in, elementum id enim.
 
+Donec velit neque, auctor sit amet aliquam vel, with $\\alpha \\in [0, 1]$ and $n$ samples $x_1, \\dots, x_n$. Ullamcorper sit amet ligula per @${l("eq:lorem-mean")}:
+
+$$
+\\bar{x}_\\alpha = \\frac{1}{n} \\sum_{i=1}^{n} x_i^{\\alpha}, \\qquad \\sigma^2 = \\int_{-\\infty}^{\\infty} (x - \\mu)^2 \\, f(x) \\, dx
+$$ {#${l("eq:lorem-mean")}}
+
 ## Materials
 
 Sed porttitor lectus nibh. Curabitur arcu erat, accumsan id imperdiet et, porttitor at sem. @${l("fig:lorem-grid")} pairs two vivamus suscipit, and @${l("tbl:lorem-materials")} lists the rest.
@@ -141,4 +147,5 @@ export const loremLabels = [
   "fig:lorem-grid",
   "tbl:lorem-results",
   "tbl:lorem-materials",
+  "eq:lorem-mean",
 ];

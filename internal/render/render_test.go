@@ -17,8 +17,9 @@ const everything = `---
 title: Everything
 subtitle: All of it
 author: Ann
+topic: Essay 1
 date: today
-organization: Course 101
+header: Course 101
 abstract: Short.
 ---
 [TOC]
@@ -153,5 +154,46 @@ func TestEmptyHeadingRenders(t *testing.T) {
 		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
 			t.Errorf("%q: %v", src, err)
 		}
+	}
+}
+
+// Typst reads nothing outside its workspace (a template could otherwise
+// put any file into the PDF), and a document's math runs no code: mitex's
+// \hspace, \vspace and \raisebox once ran their argument as Typst.
+func TestTypstCantReadOtherFiles(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	secret := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOPSECRET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+
+	dir := t.TempDir()
+	src := "#read(" + typstString(secret) + ")\n"
+	if err := os.WriteFile(filepath.Join(dir, "main.typ"), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ty.compile(ctx, dir, "main.typ", "out.pdf"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("template read: err = %v", err)
+	}
+
+	// Code mitex keeps as written (a path's "_" or "-" it doesn't).
+	for _, tex := range []string{
+		`x \hspace{panic("ran")} y`,
+		`x \vspace{1pt + 1pt} y`,
+		`\raisebox{2pt * 2}{x}`,
+	} {
+		d := doc.Parse("$"+tex+"$", "")
+		_, _, err := ty.Preview(ctx, d, templates.List()[0])
+		if err == nil || !strings.Contains(err.Error(), "not a length") {
+			t.Errorf("%s: err = %v", tex, err)
+		}
+	}
+	d := doc.Parse(`$a \hspace{-1.5em} b \raisebox{2pt}{c}$`, "")
+	if _, _, err := ty.Preview(ctx, d, templates.List()[0]); err != nil {
+		t.Errorf("lengths: %v", err)
 	}
 }

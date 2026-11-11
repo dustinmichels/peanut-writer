@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Image, Sigma, Table } from "lucide-vue-next";
+import { Image, Sigma, Table, Unlink } from "lucide-vue-next";
 import Modal from "../Modal.vue";
-import { insertCrossRef } from "../../lib/actions";
-import { type Item, type Kind, kindName, plain } from "../../lib/markdown";
+import { insertCrossRef, unlinkCrossRef } from "../../lib/actions";
+import { type Item, type Kind, kindName, plain, type RefAt } from "../../lib/markdown";
 import { state } from "../../lib/store";
 
+// With `at`, the dialog changes the reference there instead of inserting one.
+const props = defineProps<{ at?: RefAt }>();
 const emit = defineEmits<{ close: [] }>();
 const kinds = [
   { id: "all", label: "Everything" },
@@ -18,11 +20,16 @@ const kind = ref<"all" | Kind>("all");
 const list = computed(() =>
   state.items.filter((x) => kind.value === "all" || x.kind === kind.value),
 );
-const picked = ref(0);
+const picked = ref(Math.max(0, list.value.findIndex((x) => x.label === props.at?.label)));
 
 function insert(item: Item | undefined) {
   if (!item) return;
-  insertCrossRef(item);
+  insertCrossRef(item, props.at);
+  emit("close");
+}
+
+function unlink() {
+  unlinkCrossRef(props.at!);
   emit("close");
 }
 
@@ -39,7 +46,11 @@ onUnmounted(() => window.removeEventListener("keydown", key));
 </script>
 
 <template>
-  <Modal title="Cross-reference" @close="emit('close')" @submit="insert(list[picked])">
+  <Modal
+    :title="at ? 'Change cross-reference' : 'Cross-reference'"
+    @close="emit('close')"
+    @submit="insert(list[picked])"
+  >
     <div class="seg">
       <button
         v-for="k in kinds"
@@ -72,13 +83,27 @@ onUnmounted(() => window.removeEventListener("keydown", key));
       <img src="/peanut.svg" alt="" />
       Nothing to refer to yet. Add a picture, a table or a labelled equation first.
     </div>
-    <p class="hint">
+    <p v-if="at" class="hint">
+      Pick what this reference points to.
+      {{
+        at.text
+          ? `Unlink leaves the words “${at.text}” as plain text, which won't keep up when things move.`
+          : "It points to nothing, so Remove takes it out."
+      }}
+    </p>
+    <p v-else class="hint">
       The reference reads like “Figure 2” and keeps up when things move. You can also type
       <code>@</code> in the text.
     </p>
     <template #footer>
+      <button v-if="at" type="button" class="btn" @click="unlink">
+        <Unlink :size="14" /> {{ at.text ? "Unlink" : "Remove" }}
+      </button>
+      <span v-if="at" style="flex: 1" />
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
-      <button type="submit" class="btn primary" :disabled="!list.length">Insert</button>
+      <button type="submit" class="btn primary" :disabled="!list.length">
+        {{ at ? "Change" : "Insert" }}
+      </button>
     </template>
   </Modal>
 </template>

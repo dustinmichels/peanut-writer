@@ -18,6 +18,7 @@ import {
   type Item,
   type Meta,
   readFrontMatter,
+  type RefAt,
   scan,
   type Table,
   uniqueLabel,
@@ -25,7 +26,7 @@ import {
   writeFrontMatter,
   writeTable,
 } from "./markdown";
-import { editor, errorText, scheduleRender, state, toast } from "./store";
+import { behindCopies, editor, errorText, scheduleRender, state, toast } from "./store";
 
 export const docsUrl = "https://dustinmichels.github.io/peanut-writer/";
 export const repoUrl = "https://github.com/dustinmichels/peanut-writer";
@@ -45,6 +46,7 @@ export function loadDoc(info: DocInfo) {
   state.content = info.content;
   state.dirty = false;
   state.synced = null;
+  state.opened = info.content;
   state.pages = [];
   state.renderError = "";
   state.warnings = [];
@@ -57,12 +59,18 @@ export function loadDoc(info: DocInfo) {
   loadSettings();
 }
 
-// loadSettings applies the settings that show straight away (Peanut) for
-// the open document, unless another document is opened meanwhile.
+// loadSettings applies the settings that take effect without saving (Peanut,
+// Sync on save and quit) for the open document and returns what they come to, unless
+// another document is opened meanwhile.
 export async function loadSettings() {
   const path = state.path;
   const info = await run("Settings", () => DocService.Settings());
-  if (info && state.path === path) state.showPeanut = effectiveSettings(info).peanut;
+  if (!info || state.path !== path) return undefined;
+  const s = effectiveSettings(info);
+  state.showPeanut = s.peanut;
+  state.syncOnSave = s.syncOnSave;
+  state.syncOnQuit = s.syncOnQuit;
+  return s;
 }
 
 // loadCustom fetches the document's own template, if it has one, unless
@@ -118,13 +126,15 @@ async function run<T>(what: string, f: () => Promise<T>): Promise<T | undefined>
 
 // ensureSaved deals with unsaved changes before they'd be lost; false means
 // the user canceled. A document with a file is just saved; only an untitled
-// one asks.
+// one asks. With Sync on quit, copies behind the document are synced too.
 async function ensureSaved(): Promise<boolean> {
-  if (!state.dirty) return true;
-  if (state.path) return queueSave();
-  const choice = await DocService.ConfirmDiscard(state.name);
-  if (choice === "cancel") return false;
-  if (choice === "save") return queueSave();
+  if (state.dirty) {
+    let choice = "save";
+    if (!state.path) choice = await DocService.ConfirmDiscard(state.name);
+    if (choice === "cancel") return false;
+    if (choice === "save" && !(await queueSave())) return false;
+  }
+  if (state.syncOnQuit && behindCopies.value) await syncCopies();
   return true;
 }
 
@@ -167,7 +177,7 @@ export async function openWelcome() {
 
 function saved(info: DocInfo) {
   // Copies synced beside another file don't count for this one.
-  if (info.path !== state.path) state.synced = null;
+  if (info.path !== state.path) state.synced = state.opened = null;
   state.path = info.path;
   state.name = info.name;
   state.saved = info.content;
@@ -195,20 +205,39 @@ async function saveNow(): Promise<boolean> {
 }
 
 // save is the user saving: with Auto Format on, the Markdown is tidied
-// first. Autosaves and saves on the way out don't format, so spaces typed a
-// moment ago aren't trimmed from under the cursor.
+// first; with Sync on save, the PDF and Word copies follow. Autosaves and
+// saves on the way out don't format, so spaces typed a moment ago aren't
+// trimmed from under the cursor.
 export async function save(): Promise<boolean> {
+  if (!(await formatAndSave())) return false;
+  if (state.syncOnSave && behindCopies.value) await syncCopies();
+  return true;
+}
+
+async function formatAndSave(): Promise<boolean> {
   await autoFormat();
   return queueSave();
 }
 
+// defaultSettings is what a setting neither the document nor the user sets
+// comes to.
+export const defaultSettings = {
+  autoFormat: false,
+  headingCase: "none",
+  peanut: true,
+  syncOnSave: false,
+  syncOnQuit: true,
+};
+
 // effectiveSettings is what the settings come to: the document's where it
-// has them, else the user's, else off.
+// has them, else the user's, else the default.
 export function effectiveSettings(s: SettingsInfo) {
   return {
-    autoFormat: s.document.autoFormat ?? s.user.autoFormat ?? false,
-    titleCase: s.document.titleCase ?? s.user.titleCase ?? false,
-    peanut: s.document.peanut ?? s.user.peanut ?? true,
+    autoFormat: s.document.autoFormat ?? s.user.autoFormat ?? defaultSettings.autoFormat,
+    headingCase: s.document.headingCase ?? s.user.headingCase ?? defaultSettings.headingCase,
+    peanut: s.document.peanut ?? s.user.peanut ?? defaultSettings.peanut,
+    syncOnSave: s.document.syncOnSave ?? s.user.syncOnSave ?? defaultSettings.syncOnSave,
+    syncOnQuit: s.document.syncOnQuit ?? s.user.syncOnQuit ?? defaultSettings.syncOnQuit,
   };
 }
 
@@ -217,14 +246,12 @@ export function effectiveSettings(s: SettingsInfo) {
 // was in. If the text changes meanwhile, or formatting fails, it's left as
 // it is.
 export async function autoFormat() {
+  const s = await loadSettings();
   const v = editor.value;
-  if (!v) return;
-  const info = await run("Settings", () => DocService.Settings());
-  if (!info) return;
-  const { autoFormat: on, titleCase } = effectiveSettings(info);
-  if (!on) return;
+  if (!v || !s?.autoFormat) return;
+  const { headingCase } = s;
   const before = v.state.doc.toString();
-  const after = await run("Auto format", () => DocService.Format(before, titleCase));
+  const after = await run("Auto format", () => DocService.Format(before, headingCase));
   if (after === undefined || after === before || v.state.doc.toString() !== before) return;
   const changes = diff(before, after).map((c) => ({
     from: c.fromA,
@@ -252,6 +279,7 @@ export async function saveAs(): Promise<boolean> {
   if (!info || info.canceled) return false;
   saved(info);
   toast(`Saved as ${info.name}`, "success");
+  if (state.syncOnSave && behindCopies.value) await syncCopies();
   return true;
 }
 
@@ -269,7 +297,10 @@ export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(sta
 
 // syncFiles saves the document, then writes its PDF and Word copies beside it.
 export async function syncFiles() {
-  if (!(await save())) return;
+  if (await formatAndSave()) await syncCopies();
+}
+
+async function syncCopies() {
   const content = state.content;
   const paths = await run("Sync files", () => DocService.SyncFiles(content));
   if (!paths?.length) return;
@@ -280,9 +311,24 @@ export async function syncFiles() {
   });
 }
 
-// showInFolder opens the document's folder in Finder with the file selected.
+// packageOf is the .peanut package holding the document file at path, or ""
+// if it isn't in one.
+export function packageOf(path: string): string {
+  const dir = path.replace(/[/\\][^/\\]*$/, "");
+  return dir !== path && /\.peanut$/i.test(dir) ? dir : "";
+}
+
+// showInFolder opens the folder holding the document (its package, if it's in
+// one, beside its synced PDF and Word copies) in Finder with it selected.
 export function showInFolder() {
-  if (state.path) run("Show in Finder", () => DocService.Reveal(state.path));
+  if (state.path)
+    run("Show in Finder", () => DocService.Reveal(packageOf(state.path) || state.path));
+}
+
+// showPackageContents opens the document's package in Finder with its
+// Markdown file selected.
+export function showPackageContents() {
+  if (packageOf(state.path)) run("Show Package Contents", () => DocService.Reveal(state.path));
 }
 
 // Closing the window asks again each time; one question at a time.
@@ -444,8 +490,8 @@ export async function choosePictureGrid() {
   if (srcs?.length) addFigure(srcs);
 }
 
-// insertLoremIpsum inserts sample headings, text, figures and tables at the
-// cursor, storing the sample pictures beside the document.
+// insertLoremIpsum inserts sample headings, text, math, figures and tables at
+// the cursor, storing the sample pictures beside the document.
 export async function insertLoremIpsum() {
   const srcs = await run("Lorem ipsum", () =>
     Promise.all(loremPictures.map((p) => DocService.AddImage(p.name, btoa(p.svg)))),
@@ -466,30 +512,12 @@ export async function addPictures(): Promise<string[]> {
   return (await run("Add pictures", () => DocService.ChooseImages())) ?? [];
 }
 
-// relabelChanges points every reference to one label at another.
-function relabelChanges(text: string, from: string, to: string): ChangeSpec[] {
-  if (!from || from === to) return [];
-  const re = new RegExp(
-    `(^|[^\\w])@${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:-]*[A-Za-z0-9_])`,
-    "g",
-  );
-  const out: ChangeSpec[] = [];
-  for (const m of text.matchAll(re)) {
-    const at = m.index! + m[1].length + 1;
-    out.push({ from: at, to: at + from.length, insert: to });
-  }
-  return out;
-}
-
 export function applyFigure(item: Item, f: FigureSpec) {
   const v = view();
   const items = v.state.field(itemsField);
   const label = f.label || uniqueLabel("fig", f.caption, items, item.label);
   v.dispatch({
-    changes: [
-      { from: item.from, to: item.to, insert: figureMarkdown({ ...f, label }) },
-      ...relabelChanges(v.state.doc.toString(), item.label, label),
-    ],
+    changes: { from: item.from, to: item.to, insert: figureMarkdown({ ...f, label }) },
     userEvent: "input",
   });
   v.focus();
@@ -514,10 +542,7 @@ export function applyTable(item: Item | undefined, table: Table, caption: string
   const text = `${writeTable(table)}\n\n${captionMarkdown(caption, id)}`;
   if (item) {
     v.dispatch({
-      changes: [
-        { from: item.tableFrom!, to: item.to, insert: text },
-        ...relabelChanges(v.state.doc.toString(), item.label, id),
-      ],
+      changes: { from: item.tableFrom!, to: item.to, insert: text },
       userEvent: "input",
     });
     v.focus();
@@ -530,9 +555,9 @@ export function applyTable(item: Item | undefined, table: Table, caption: string
 
 const labelPrefix = { figure: "fig", table: "tbl", equation: "eq" } as const;
 
-// insertCrossRef inserts a reference to item at the cursor, first giving the
-// item a label if it has none.
-export function insertCrossRef(item: Item) {
+// insertCrossRef inserts a reference to item at the cursor, or in place of the
+// reference at `at`, first giving the item a label if it has none.
+export function insertCrossRef(item: Item, at?: RefAt) {
   const v = view();
   const items = v.state.field(itemsField);
   const changes: ChangeSpec[] = [];
@@ -557,13 +582,25 @@ export function insertCrossRef(item: Item) {
       changes.push({ from: item.tableTo!, insert: `\n\n${captionMarkdown("", label)}` });
     }
   }
-  const { from, to } = v.state.selection.main;
-  const before = v.state.sliceDoc(from - 1, from);
+  const { from, to } = at ?? v.state.selection.main;
+  const before = at ? "" : v.state.sliceDoc(from - 1, from);
   const text = (before && !/[\s(\[]/.test(before) ? " " : "") + "@" + label;
   changes.push({ from, to, insert: text });
   const set = v.state.changes(changes);
   // The cursor goes after the reference, wherever the other changes put it.
   v.dispatch({ changes: set, selection: { anchor: set.mapPos(to, 1) }, userEvent: "input" });
+  v.focus();
+}
+
+// unlinkCrossRef turns the reference at `at` into the plain text it reads as,
+// which no longer follows its target; a reference to nothing is removed.
+export function unlinkCrossRef(at: RefAt) {
+  const v = view();
+  v.dispatch({
+    changes: { from: at.from, to: at.to, insert: at.text },
+    selection: { anchor: at.from + at.text.length },
+    userEvent: "input",
+  });
   v.focus();
 }
 
@@ -640,9 +677,7 @@ export function setTemplateBase(base: string) {
 // templates, for any document to use, and reports whether it did.
 export async function saveCustomTemplate(name: string, description: string) {
   await styling; // its latest changes
-  const id = await run("Save as template", () =>
-    DocService.SaveCustomTemplate(name, description),
-  );
+  const id = await run("Save as template", () => DocService.SaveCustomTemplate(name, description));
   if (!id) return false;
   await refreshTemplates();
   const saved = state.templates.find((t) => t.id === id)?.name ?? id;

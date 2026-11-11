@@ -4,7 +4,8 @@
 // The dialect is CommonMark + GFM tables and strikethrough + footnotes, with:
 //
 //   - YAML-style front matter (flat `key: value` lines): title, subtitle,
-//     author, date, organization, abstract, template.
+//     author, topic, date, header, abstract, template, and hide: the fields
+//     kept out of the output, comma-separated (`hide: subtitle, date`).
 //   - Figures: a paragraph holding only an image, optionally followed by an
 //     attribute block: `![Caption](images/a.png){#fig:a width=60% align=left}`.
 //   - Picture grids: a paragraph of two or more images (one per line, or
@@ -38,12 +39,42 @@ type Meta struct {
 	Title    string `json:"title,omitempty"`
 	Subtitle string `json:"subtitle,omitempty"`
 	Author   string `json:"author,omitempty"`
-	Date     string `json:"date,omitempty"`
-	// Organization is who or what the document is for: a class, team,
-	// project or company. Templates show it in page headers or footers.
-	Organization string `json:"organization,omitempty"`
-	Abstract     string `json:"abstract,omitempty"`
-	Template     string `json:"template,omitempty"`
+	// Topic is what the document is about (a course, a project, an
+	// assignment); templates show it beside the author and date.
+	Topic string `json:"topic,omitempty"`
+	Date  string `json:"date,omitempty"`
+	// Header is the running text of each page: a class, team, project or
+	// company. Templates show it in the page header or footer.
+	Header   string `json:"header,omitempty"`
+	Abstract string `json:"abstract,omitempty"`
+	Template string `json:"template,omitempty"`
+	// Hide names the fields above (lowercase) kept out of the output; see
+	// Shown.
+	Hide []string `json:"-"`
+}
+
+// Shown is m as the output shows it: the fields named in Hide blank.
+func (m Meta) Shown() Meta {
+	for _, k := range m.Hide {
+		switch k {
+		case "title":
+			m.Title = ""
+		case "subtitle":
+			m.Subtitle = ""
+		case "author":
+			m.Author = ""
+		case "topic":
+			m.Topic = ""
+		case "date":
+			m.Date = ""
+		case "header":
+			m.Header = ""
+		case "abstract":
+			m.Abstract = ""
+		}
+	}
+	m.Hide = nil
+	return m
 }
 
 // Block types.
@@ -69,10 +100,11 @@ type Block struct {
 	Inlines []Inline `json:"inlines,omitempty"`
 	Caption []Inline `json:"caption,omitempty"`
 
-	// heading: 1–6, and the 1-based source line its text starts on (0 for an
-	// empty heading).
+	// heading: 1–6.
 	Level int `json:"level,omitempty"`
-	Line  int `json:"line,omitempty"`
+	// The 1-based source line the block starts on (0 when unknown). The
+	// preview marks blocks with it to map pages back to the source.
+	Line int `json:"line,omitempty"`
 
 	// list.
 	Ordered bool      `json:"ordered,omitempty"`

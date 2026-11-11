@@ -7,10 +7,12 @@ export interface Meta {
   title: string;
   subtitle: string;
   author: string;
+  topic: string; // what it's about (an assignment, a subject), beside the author and date
   date: string;
-  organization: string; // a class, team, project or company, for headers and footers
+  header: string; // a class, team, project or company, for page headers and footers
   abstract: string;
   template: string;
+  hide: string; // the fields kept out of the output, comma-separated
   "peanut-version": string; // the app's version that last saved it
 }
 
@@ -18,10 +20,12 @@ const metaKeys: (keyof Meta)[] = [
   "title",
   "subtitle",
   "author",
+  "topic",
   "date",
-  "organization",
+  "header",
   "abstract",
   "template",
+  "hide",
   "peanut-version",
 ];
 
@@ -39,10 +43,12 @@ function emptyMeta(): Meta {
     title: "",
     subtitle: "",
     author: "",
+    topic: "",
     date: "",
-    organization: "",
+    header: "",
     abstract: "",
     template: "",
+    hide: "",
     "peanut-version": "",
   };
 }
@@ -139,6 +145,32 @@ export interface Item {
   tableTo?: number; // end of the last row
   captionFrom?: number; // the caption line, when there is one
   captionTo?: number;
+}
+
+// A cross-reference in the text: `@label` from `from` to `to`, and what it
+// reads as ("Figure 2", or "" when nothing has the label).
+export interface RefAt {
+  from: number;
+  to: number;
+  label: string;
+  text: string;
+}
+
+// relabelChanges points every reference to one label in text at another.
+export function relabelChanges(
+  text: string,
+  from: string,
+  to: string,
+): { from: number; to: number; insert: string }[] {
+  if (!from || from === to) return [];
+  const re = new RegExp(
+    `(^|[^\\w])@${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w:-]*[A-Za-z0-9_])`,
+    "g",
+  );
+  return [...text.matchAll(re)].map((m) => {
+    const at = m.index! + m[1].length + 1;
+    return { from: at, to: at + from.length, insert: to };
+  });
 }
 
 const image = String.raw`!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)`;

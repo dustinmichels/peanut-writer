@@ -123,6 +123,8 @@ func (w *writer) styles() string {
 			rpr: rpr(st.HeadingFont, false, false, st.TitleColor, max(st.FontSize*1.3, st.TitleSize*0.55))},
 		{typ: "paragraph", id: "Author", name: "Author", basedOn: "Normal", next: "Normal", quick: true,
 			ppr: spacing(4, 2) + noIndent + jc(titleJc), rpr: rpr("", false, false, "", st.FontSize*1.15)},
+		{typ: "paragraph", id: "Topic", name: "Topic", basedOn: "Normal", next: "Normal", quick: true,
+			ppr: spacing(0, 2) + noIndent + jc(titleJc), rpr: rpr("", false, false, "", st.FontSize*1.05)},
 		{typ: "paragraph", id: "Date", name: "Date", basedOn: "Normal", next: "Normal", quick: true,
 			ppr: spacing(0, 2) + noIndent + jc(titleJc), rpr: rpr("", false, false, "", st.FontSize*1.05)},
 		{typ: "paragraph", id: "AbstractTitle", name: "Abstract Title", basedOn: "Normal", next: "Abstract", quick: true,

@@ -125,6 +125,16 @@ func TestFrontMatterNeedsClosingFence(t *testing.T) {
 	}
 }
 
+func TestHiddenPropertiesKeptButNotShown(t *testing.T) {
+	d := Parse("---\ntitle: T\nauthor: A\ndate: D\nhide: Author, date\n---\n\nText.", "")
+	if d.Meta.Author != "A" || d.Meta.Date != "D" {
+		t.Errorf("hidden properties dropped from meta: %+v", d.Meta)
+	}
+	if s := d.Meta.Shown(); s.Title != "T" || s.Author != "" || s.Date != "" {
+		t.Errorf("shown = %+v", s)
+	}
+}
+
 func TestEscapesAndEntities(t *testing.T) {
 	d := Parse("a \\*b\\* &amp; &#169; `x &amp;`", "")
 	in := d.Blocks[0].Inlines
@@ -211,6 +221,41 @@ func TestPercentEncodedImagePath(t *testing.T) {
 	d := Parse("![A](my%20pic.png)", dir)
 	if got := d.Blocks[0].Src; got != filepath.Join(dir, "my pic.png") {
 		t.Errorf("src = %q, warnings = %v", got, d.Warnings)
+	}
+}
+
+// Only pictures in the document's folder are used: not ones elsewhere named
+// by an absolute or ../ path, nor ones a symlink inside it points out to.
+func TestImagesStayInTheDocumentFolder(t *testing.T) {
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "secret.png")
+	if err := os.WriteFile(secret, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(outside, "Doc.peanut")
+	if err := os.MkdirAll(filepath.Join(dir, "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "images", "in.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(dir, "images", "link.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "out")); err != nil {
+		t.Fatal(err)
+	}
+	for _, ref := range []string{secret, filepath.ToSlash(secret), "../secret.png", "images/../../secret.png", "images/link.png", "out/secret.png"} {
+		if got := ImagePath(dir, ref); got != "" {
+			t.Errorf("ImagePath(%q) = %q, want none", ref, got)
+		}
+	}
+	if got := ImagePath(dir, "./images/in.png"); got != filepath.Join(dir, "images", "in.png") {
+		t.Errorf("in the folder: %q", got)
+	}
+	d := Parse("![A](../secret.png)", dir)
+	if d.Blocks[0].Src != "" || len(d.Warnings) != 1 || !strings.Contains(d.Warnings[0], "outside the document's folder") {
+		t.Errorf("src = %q, warnings = %v", d.Blocks[0].Src, d.Warnings)
 	}
 }
 

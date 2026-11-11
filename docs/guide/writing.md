@@ -24,8 +24,8 @@ per template too, so "acad" switches to _Academic_. Commands that wouldn't do an
 
 ![The command palette, finding the export commands from "ex"](/screenshots/command-palette.png)
 
-_Lorem Ipsum_ (palette only) inserts sample headings, text, figures and tables at the cursor, handy for seeing how a
-template looks. Its pictures are saved in the document's `images/` folder.
+_Lorem Ipsum_ (palette only) inserts sample headings, text, math, figures and tables at the cursor, handy for seeing how
+a template looks. Its pictures are saved in the document's `images/` folder.
 
 ## Text that looks like itself
 
@@ -41,11 +41,13 @@ below it. Press ⌘/ again to go back.
 
 ## Title, author and abstract
 
-A document's title, subtitle, author, date, organization and abstract are its **properties** (Design → Properties,
-or File → Properties…). The template decides where and how they appear on the first page. The date can be a fixed
-text or `today`. The organization is who or what the document is for (a class like `HIST 101`, a team, a project
-or a company); templates show it in the page header or footer, and Word copies in the page header. New documents get
-the default author from [Settings](./settings).
+A document's title, subtitle, author, topic, date, header/footer and abstract are its **properties** (Design →
+Properties). The template decides where and how they appear on the first page. The topic is optional: what the
+document is about (an assignment, a subject), shown beside the author and date. The date can be a fixed text or
+`today`. The header/footer is who or what the document is for (a class like `HIST 101`, a team, a project or a
+company); templates show it in the page header or footer, and Word copies in the page header. New documents get
+the default author from [Settings](./settings). The eye beside each property in the dialog hides it from the preview,
+PDF and Word file without deleting it.
 
 ## Outline and scrolling
 
@@ -54,8 +56,12 @@ highlights the section you're in. Click a heading to jump there in both the edit
 
 ![The outline beside the editor](/screenshots/outline.png)
 
-The editor and the preview scroll together, lined up at each heading, so the page on the right always shows what
-you're working on.
+The preview and the editor scroll together, lined up at each heading, so the page on the right always shows what you're
+working on: scroll either one and the other follows. To look elsewhere in one pane without moving the other, click the
+link button on the bar between the two panes; it turns into a broken link. Click it again to link them and bring the
+preview back to where the editor is. Clicking a heading in the outline links them again too.
+
+Click anywhere on a page in the preview to put the cursor at that spot in the editor.
 
 ## Footnotes, contents and page breaks
 
@@ -67,5 +73,5 @@ you're working on.
 ## Peanut
 
 A little 3D Peanut keeps you company at the top right, by the Export button. He breathes, blinks, sits down and stands
-up, now and then puts on a cowboy hat or a party hat, cheers every few minutes while you're writing and at every 250
-words, and says something nice when you click him. His words fade away soon after he says them.
+up, now and then puts on a cowboy hat or a party hat, and says something nice when you click him — he never speaks on
+his own. His words fade away soon after he says them.

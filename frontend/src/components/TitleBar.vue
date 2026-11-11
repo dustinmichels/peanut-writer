@@ -5,6 +5,7 @@ import {
   Command,
   FileDown,
   FileText,
+  Folder,
   FolderOpen,
   Redo2,
   RefreshCw,
@@ -12,7 +13,16 @@ import {
   SlidersHorizontal,
   Undo2,
 } from "lucide-vue-next";
-import { exportDocx, exportPdf, menu, save, showInFolder, syncFiles } from "../lib/actions";
+import {
+  exportDocx,
+  exportPdf,
+  menu,
+  packageOf,
+  save,
+  showInFolder,
+  showPackageContents,
+  syncFiles,
+} from "../lib/actions";
 import { canSave, canSync, state } from "../lib/store";
 
 const exportOpen = ref(false);
@@ -51,6 +61,14 @@ function pick(f: () => unknown) {
         <Command :size="15" />
       </button>
       <button class="icon" title="Show in Finder" :disabled="!state.path" @click="showInFolder">
+        <Folder :size="15" />
+      </button>
+      <button
+        class="icon"
+        title="Show Package Contents"
+        :disabled="!packageOf(state.path)"
+        @click="showPackageContents"
+      >
         <FolderOpen :size="15" />
       </button>
       <button class="icon" title="Settings (⌘,)" @click="menu('settings')">

@@ -2,8 +2,9 @@
 
 ## Documents are packages
 
-**New** (⌘N), **Save As** and the first save of an untitled document ask for a name and a place, then make a
-`.peanut` package of that name there:
+A Peanut Writer document is a `.peanut` **package**: a folder that Finder shows as a single file. **New** (⌘N),
+**Save As** and the first save of an untitled document ask for a name and a place, then make a package of that name
+there:
 
 ```text
 Quarterly Update.peanut/
@@ -15,12 +16,25 @@ Quarterly Update.peanut/
 └── versions/                        named versions you saved
 ```
 
-Finder shows the package as a single file: double-click it to open it in Peanut Writer, and move, copy or send it like
-any other file. Everything the document needs travels with it. To look inside, right-click it and choose **Show Package
-Contents**, or use the folder button. Anywhere else (Terminal, Windows, Linux, cloud storage) it's an ordinary folder.
+Everything the document needs travels with it, so double-click it to open it in Peanut Writer, and move, copy or send
+it like any other file. The text itself is plain Markdown, readable by any editor. Anywhere that doesn't know about
+packages (Terminal, Windows, Linux, cloud storage) it's an ordinary folder.
 
 **Open** (⌘O) takes a package or any Markdown file. Save As starts beside the current document and brings its pictures
 along. Choosing a name whose package already holds that document asks before replacing it.
+
+### Seeing it in Finder: outside or inside
+
+Two folder buttons in the title bar, also in the command palette (⇧⌘P), open the document in Finder:
+
+| Button                                  | Opens                                                                                                                                      |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Show in Finder** (closed folder)      | **Outside**: the folder that holds `Name.peanut`, with the package selected, next to its [synced](#sync-files) `Name.pdf` and `Name.docx`. |
+| **Show Package Contents** (open folder) | **Inside**: the package itself, with `Name.md` selected, so you can see its pictures, backups and versions.                                |
+
+Show Package Contents is the same as right-clicking the package in Finder and choosing **Show Package Contents**. It's
+unavailable for a Markdown file that isn't in a package; Show in Finder then shows the file itself. Both are
+unavailable until an untitled document is saved.
 
 ## Saving
 
@@ -73,5 +87,9 @@ The **Export** button (⌘E for PDF, ⇧⌘E for Word) saves a copy wherever you
 
 **Sync files** (⇧⌘Y, File → Sync Files) saves the document, then writes `Name.pdf` and `Name.docx` beside
 `Name.peanut` (or beside `Name.md`, for a Markdown file outside a package), replacing the previous copies, without any
-dialogs. It's a quick way to always have an up-to-date PDF and Word file next to your document. The folder button
-beside it shows the document's files in Finder.
+dialogs. It's a quick way to always have an up-to-date PDF and Word file next to your document. **Show in Finder** (the
+closed-folder button in the title bar) shows them, beside the document.
+
+The copies are kept up to date without you thinking about it: with **Sync files on quit** (on unless you turn it off
+in [Settings](./settings)), quitting or opening another document syncs them too, whenever you've changed the document
+since they were last written. Turn on **Sync files on save** to also sync them each time you save.

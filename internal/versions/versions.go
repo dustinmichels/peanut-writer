@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"peanut-writer/internal/atomicfile"
 )
 
 // Folder is the versions folder's name, inside the document's folder.
@@ -131,12 +133,12 @@ func Restore(docPath, name string, sidecars []string) (string, error) {
 		case err != nil:
 			return "", err
 		default:
-			if err := os.WriteFile(p, b, 0o644); err != nil {
+			if err := atomicfile.Write(p, b, 0o644); err != nil {
 				return "", err
 			}
 		}
 	}
-	return string(content), os.WriteFile(docPath, content, 0o644)
+	return string(content), atomicfile.Write(docPath, content, 0o644)
 }
 
 // read describes the version name of the document at docPath, which must

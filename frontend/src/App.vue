@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Events } from "@wailsio/runtime";
+import { Link, Unlink } from "lucide-vue-next";
 import { DocService } from "../bindings/peanut-writer";
 import TitleBar from "./components/TitleBar.vue";
 import Ribbon from "./components/Ribbon.vue";
@@ -13,7 +14,7 @@ import VersionsPane from "./components/VersionsPane.vue";
 import Dialogs from "./components/Dialogs.vue";
 import Toasts from "./components/Toasts.vue";
 import { loadDoc, menu, openRecent } from "./lib/actions";
-import { revealLine } from "./lib/editor";
+import { revealLine, revealSource } from "./lib/editor";
 import { syncScroll } from "./lib/scrollsync";
 import { editor, errorText, state, toast } from "./lib/store";
 
@@ -46,19 +47,27 @@ const columns = computed(
     `${state.outlineOpen ? side : ""}${state.versionsOpen ? side : ""}${split.value}fr 6px ${1 - split.value}fr`,
 );
 
-// jump shows a heading from the outline in the editor; the preview follows.
+// jump shows a heading from the outline in the editor, and the preview
+// follows (linked again if it wasn't).
 function jump(line: number) {
-  if (editor.value) revealLine(editor.value, line);
+  if (!editor.value) return;
+  sync?.link();
+  revealLine(editor.value, line);
+}
+
+// pick shows where a click on the preview is in the editor.
+function pick(line: number, next: number, t: number) {
+  if (editor.value && !state.customizing) revealSource(editor.value, line, next, t);
 }
 
 const preview = ref<InstanceType<typeof PreviewPane>>();
 let offMenu: (() => void) | undefined;
 let offRecent: (() => void) | undefined;
 let offBackup: (() => void) | undefined;
-let offSync: (() => void) | undefined;
+let sync: ReturnType<typeof syncScroll> | undefined;
 onMounted(async () => {
   // The panes mount first, so both scrollers exist.
-  offSync = syncScroll(editor.value!, preview.value!.scroller!, preview.value!.headingTops);
+  sync = syncScroll(editor.value!, preview.value!.scroller!, preview.value!.headingTops);
   offMenu = Events.On("menu", (e: { data: string }) => menu(e.data));
   offRecent = Events.On("openRecent", (e: { data: string }) => openRecent(e.data));
   offBackup = Events.On("backupFailed", (e: { data: string }) =>
@@ -82,7 +91,7 @@ onUnmounted(() => {
   offMenu?.();
   offRecent?.();
   offBackup?.();
-  offSync?.();
+  sync?.stop();
 });
 </script>
 
@@ -96,8 +105,26 @@ onUnmounted(() => {
       <!-- The editor stays mounted (hidden) while the template is customized. -->
       <EditorPane v-show="!state.customizing" />
       <CustomizePane v-if="state.customizing" />
-      <div class="splitter" @pointerdown="startResize"><span /></div>
-      <PreviewPane ref="preview" />
+      <div class="splitter" @pointerdown="startResize">
+        <button
+          v-if="!state.customizing"
+          class="link"
+          :class="{ linked: state.scrollLinked }"
+          :title="
+            state.scrollLinked
+              ? 'The panes scroll together. Click to unlink them'
+              : 'Scroll the panes together again'
+          "
+          :aria-pressed="state.scrollLinked"
+          @pointerdown.stop
+          @click="state.scrollLinked ? sync?.unlink() : sync?.link()"
+        >
+          <Link v-if="state.scrollLinked" :size="13" />
+          <Unlink v-else :size="13" />
+        </button>
+        <span v-else />
+      </div>
+      <PreviewPane ref="preview" @pick="pick" />
     </main>
     <StatusBar />
     <Dialogs />
@@ -132,5 +159,33 @@ onUnmounted(() => {
   margin-top: -18px;
   border-radius: 2px;
   background: var(--marks);
+}
+/* Wider than the splitter, centered on it. Unlinked, it stands out. */
+.link {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  background: var(--cream);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.link.linked {
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--quote);
+}
+.link:hover {
+  background: var(--hover);
+  color: var(--roast);
 }
 </style>

@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { state } from "../lib/store";
+import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { HatKind } from "../peanut/hats";
 import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "../peanut/stage";
 
 // Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
 // the edge of the tab row with his legs dangling over the ribbon; now and
 // then he stands up, strolls a little way left or right and comes back to
-// his spot, or puts on a cowboy or party hat. He breathes,
-// blinks, and cheers you on while you write; click him for a word of
-// encouragement. What he says fades away slowly.
+// his spot, or puts on a cowboy or party hat. He breathes and blinks, and
+// says a word of encouragement only when you click him. What he says fades
+// away slowly.
 
 const CHEERS = [
   "You can do it!",
@@ -26,7 +25,6 @@ const CHEERS = [
   "Write the messy version first.",
   "Look at you go!",
 ];
-const MILESTONE = 250; // words
 const SAY_MS = 4000; // from popping out of his mouth to faded away
 const WALK_PX_PER_S = 28;
 const MIN_STROLL_PX = 40;
@@ -120,14 +118,12 @@ function drawTail() {
 }
 
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
-let lastSaidAt = 0;
 // Bumped per line, so a new one replaces the bubble and restarts its fade.
 const said = ref(0);
 async function say(text: string) {
   placeBubble();
   message.value = text;
   said.value++;
-  lastSaidAt = Date.now();
   stage?.bounce();
   clearTimeout(hideTimer);
   hideTimer = setTimeout(() => (message.value = ""), SAY_MS);
@@ -237,27 +233,6 @@ function onResize() {
   x.value = Math.min(max, Math.max(min, x.value));
 }
 
-// While you're writing, a cheer every few minutes; nothing while you're away.
-let lastTypedAt = 0;
-function cheerLoop() {
-  later(rand(4, 7) * 60_000, () => {
-    if (Date.now() - lastTypedAt < 2 * 60_000 && Date.now() - lastSaidAt > 60_000) cheer();
-    cheerLoop();
-  });
-}
-
-watch(
-  () => state.words,
-  (now, before) => {
-    const added = now - before;
-    // Opening a document changes the count by a lot at once; that isn't writing.
-    if (added <= 0 || added > 50) return;
-    lastTypedAt = Date.now();
-    const mark = Math.floor(now / MILESTONE) * MILESTONE;
-    if (mark > before) say(`${mark.toLocaleString()} words! You can do it!`);
-  },
-);
-
 function onPointerDown(e: PointerEvent) {
   if (stage?.hits(e.clientX, e.clientY)) cheer();
 }
@@ -268,10 +243,8 @@ onMounted(() => {
   perch(true);
   window.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("resize", onResize);
-  later(1200, () => say("Hi, I'm Peanut! You can do it!"));
   blinkLoop();
   activityLoop();
-  cheerLoop();
 });
 
 onBeforeUnmount(() => {
@@ -306,7 +279,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* Clicks pass through to the page; Peanut hit-tests them himself. His box sits
-   on the bottom edge of the tab row (the line above the ribbon panel), just
+   on the wooden ledge along the bottom of the tab row, just
    left of the Show in Finder, Sync files and Export buttons in the title bar;
    he rests in the middle of the gap between there and the centred title. */
 .buddy {

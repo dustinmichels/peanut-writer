@@ -134,11 +134,11 @@ export function ForgetRecent(p: string): $CancellablePromise<void> {
 }
 
 /**
- * Format tidies the document's Markdown with oxfmt and, if titleCase, puts
- * its headings in title case.
+ * Format tidies the document's Markdown with oxfmt and puts its headings in
+ * headingCase: "title" or "sentence" case, or as written.
  */
-export function Format(content: string, titleCase: boolean): $CancellablePromise<string> {
-    return $Call.ByID(1680585180, content, titleCase);
+export function Format(content: string, headingCase: string): $CancellablePromise<string> {
+    return $Call.ByID(1680585180, content, headingCase);
 }
 
 /**
@@ -310,6 +310,14 @@ export function SetTemplateBase(base: string): $CancellablePromise<templates$0.T
  */
 export function SetTemplateStyle(style: templates$0.Style): $CancellablePromise<templates$0.Template> {
     return $Call.ByID(839137448, style);
+}
+
+/**
+ * SetUnsynced records whether closing must first sync the PDF and Word
+ * copies (Sync on quit is on and they're behind the document).
+ */
+export function SetUnsynced(unsynced: boolean): $CancellablePromise<void> {
+    return $Call.ByID(134104460, unsynced);
 }
 
 /**

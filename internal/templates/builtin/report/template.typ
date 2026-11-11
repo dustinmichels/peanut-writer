@@ -32,7 +32,7 @@
     },
     footer: context {
       set text(font: sans, size: 8.5pt, fill: luma(110))
-      grid(columns: (1fr, auto), get("organization"), [Page #counter(page).display() of #counter(page).final().first()])
+      grid(columns: (1fr, auto), get("header"), [Page #counter(page).display() of #counter(page).final().first()])
     },
   )
   set text(font: serif, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")
@@ -78,7 +78,7 @@
   if get("subtitle") != "" {
     block(below: 1em, text(font: sans, size: 15pt, fill: luma(90), get("subtitle")))
   }
-  let byline = (get("author"), get("date")).filter(s => s != "")
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if byline.len() > 0 {
     block(below: 1.6em, text(font: sans, size: 10pt, fill: luma(90), tracking: 0.04em, upper(byline.join("  ·  "))))
   }
