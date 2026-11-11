@@ -11,7 +11,7 @@ mise run build     # bin/peanut-writer
 mise run package   # bin/peanut-writer.app, with typst inside
 mise run release:package # signed, notarized Peanut-Writer.dmg and .zip in bin/release
 mise run release   # tag and publish a release (see Releasing)
-mise run test      # Go tests
+mise run test      # Go tests, and the editor's (bun test)
 mise run check     # type-check the editor
 mise run fmt       # gofmt + oxfmt
 mise run cleanup   # delete build output, unregister stale .app bundles
@@ -79,7 +79,8 @@ Name.md ──► internal/doc ──► document model ──┬──► inter
 ```
 
 The document model is the single source of truth for numbering and references, which is why the PDF and the Word file
-always agree. The editor mirrors the same numbering rules while you type (`frontend/src/lib/markdown.ts`).
+always agree. The editor mirrors the same numbering rules while you type (`frontend/src/lib/markdown.ts`); the samples in
+`internal/doc/testdata/numbering/` check both number them alike.
 
 ## Layout
 

@@ -118,6 +118,37 @@ func TestSpecialParagraphsAndFootnotes(t *testing.T) {
 	}
 }
 
+// A figure in a footnote is numbered where the note's mark is, as Typst
+// counts it; marks with no note and notes with no mark are warned about.
+func TestFootnoteFiguresAndOrphans(t *testing.T) {
+	src := "![A](a.png){#fig:a}\n\nText[^1] and[^x], see @fig:n.\n\n![B](b.png){#fig:b}\n\n" +
+		"[^1]: The note.\n\n    ![N](n.png){#fig:n}\n\n[^2]: Unused.\n"
+	d := Parse(src, "")
+	note := d.Blocks[1].Inlines[1]
+	if note.Type != InlineFootnote || len(note.Blocks) != 2 || note.Blocks[1].Type != BlockFigure {
+		t.Fatalf("note = %+v", note)
+	}
+	if fig := note.Blocks[1]; fig.Number != 2 || fig.Label != "fig:n" {
+		t.Errorf("figure in note = %+v", fig)
+	}
+	if b := d.Blocks[2]; b.Number != 3 {
+		t.Errorf("figure after the note is %d, want 3", b.Number)
+	}
+	if ref := d.Blocks[1].Inlines[3]; ref.Type != InlineRef || ref.Number != 2 {
+		t.Errorf("ref = %+v", ref)
+	}
+	var notes []string
+	for _, w := range d.Warnings {
+		if strings.Contains(w, "footnote") {
+			notes = append(notes, w)
+		}
+	}
+	want := []string{"footnote nothing refers to: [^2]", "footnote with no note: [^x]"}
+	if strings.Join(notes, "|") != strings.Join(want, "|") {
+		t.Errorf("footnote warnings = %q, want %q", notes, want)
+	}
+}
+
 func TestFrontMatterNeedsClosingFence(t *testing.T) {
 	d := Parse("---\ntitle: x\n\nNo end.", "")
 	if d.Meta.Title != "" {

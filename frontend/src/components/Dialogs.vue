@@ -19,6 +19,12 @@ function close() {
   state.dialog = null;
   editor.value?.focus();
 }
+
+// The cheat sheet sits over any open dialog, which stays as it was.
+function closeCheatSheet() {
+  state.cheatSheet = false;
+  if (!state.dialog) editor.value?.focus();
+}
 </script>
 
 <template>
@@ -49,7 +55,6 @@ function close() {
     <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
     <SettingsDialog v-else-if="state.dialog.kind === 'settings'" @close="close" />
-    <CheatSheet v-else-if="state.dialog.kind === 'cheatsheet'" @close="close" />
     <AboutDialog v-else-if="state.dialog.kind === 'about'" @close="close" />
     <RecentDialog
       v-else-if="state.dialog.kind === 'recent'"
@@ -65,4 +70,5 @@ function close() {
     <SaveTemplateDialog v-else-if="state.dialog.kind === 'saveTemplate'" @close="close" />
     <CommandPalette v-else-if="state.dialog.kind === 'commands'" @close="close" />
   </template>
+  <CheatSheet v-if="state.cheatSheet" @close="closeCheatSheet" />
 </template>

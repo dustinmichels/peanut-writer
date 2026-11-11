@@ -9,7 +9,7 @@ it's what you'll see in **View → Markdown** (⌘/). This is the same list as H
 | ---------------------------------- | -------------------------------------- |
 | `**bold**` `*italic*` `~~strike~~` | Bold (⌘B), italic (⌘I), strikethrough  |
 | `` `code` ``                       | Code in a sentence                     |
-| `# Heading 1` `## Heading 2`       | Headings (⌥⌘1, ⌥⌘2, ⌥⌘3)               |
+| `# Heading 1` `## Heading 2`       | Headings (⌥⌘1 – ⌥⌘4)                   |
 | `- item` `1. item`                 | Bulleted and numbered lists; Tab nests |
 | `> quoted`                         | A quotation                            |
 | `[text](https://…)`                | A link                                 |

@@ -86,8 +86,9 @@ type DocService struct {
 	started   bool              // the editor has called Startup
 	pending   string            // a document Finder asked to open before then
 
-	backupMu   sync.Mutex // one backup at a time
-	backupOnce sync.Once  // starts the periodic backups
+	backupMu   sync.Mutex     // one backup at a time
+	backupOnce sync.Once      // starts the periodic backups
+	backups    sync.WaitGroup // backups started in the background, which quitting waits for
 
 	menuMu     sync.Mutex
 	menu       *application.Menu // the menu bar
@@ -455,7 +456,7 @@ func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	}
 	s.setOpen(md, filepath.Dir(md))
 	s.remember(md)
-	go s.backup(md)
+	s.backupLater(md)
 	return DocInfo{Path: md, Name: docName(md), Content: string(b)}, nil
 }
 
@@ -602,7 +603,7 @@ func (s *DocService) setOpen(p, dir string) {
 	s.mu.Unlock()
 	s.SetDirty(false)
 	if old != "" && old != p {
-		go s.backup(old)
+		s.backupLater(old)
 	}
 }
 
@@ -618,6 +619,11 @@ func (s *DocService) backupPeriodically() {
 		s.mu.Unlock()
 		s.backup(p)
 	}
+}
+
+// backupLater backs up p in the background; quitting waits for it.
+func (s *DocService) backupLater(p string) {
+	s.backups.Go(func() { s.backup(p) })
 }
 
 // backup copies the saved file at p into a timestamped backups folder beside it, as
@@ -675,8 +681,10 @@ func (s *DocService) scratch() (string, error) {
 	return dir, nil
 }
 
-// ServiceShutdown backs up the open document and removes the scratch folders.
+// ServiceShutdown backs up the open document, once the backups started in
+// the background are done, and removes the scratch folders.
 func (s *DocService) ServiceShutdown() error {
+	s.backups.Wait()
 	s.mu.Lock()
 	p := s.path
 	s.mu.Unlock()
@@ -707,19 +715,24 @@ func safeFileName(s string) string {
 	return s
 }
 
-var imageRef = regexp.MustCompile(`!\[[^\]]*\]\(\s*<?([^)\s>]+)>?`)
-
 // copyImages copies the images content refers to (in from: see
-// doc.ImagePath) from one folder to another, keeping any that are already
-// there.
+// doc.ImagePath), in any Markdown form the document reads (inline,
+// reference-style, `<…>` or escaped paths), from one folder to another,
+// keeping any that are already there.
 func copyImages(content, from, to string) error {
 	if from == to {
 		return nil
 	}
-	for _, m := range imageRef.FindAllStringSubmatch(content, -1) {
-		src := doc.ImagePath(from, m[1])
+	var srcs []string
+	doc.Walk(doc.Parse(content, from).Blocks, func(b *doc.Block) {
+		srcs = append(srcs, b.Src)
+		for _, p := range b.Pictures {
+			srcs = append(srcs, p.Src)
+		}
+	}, func(x *doc.Inline) { srcs = append(srcs, x.Src) })
+	for _, src := range srcs {
 		if src == "" {
-			continue // missing before, missing after
+			continue // not an image, or missing before, missing after
 		}
 		rel, err := filepath.Rel(from, src)
 		if err != nil || !filepath.IsLocal(rel) {
@@ -914,6 +927,9 @@ func (s *DocService) Render(content string) RenderResult {
 		return RenderResult{Outline: d.Outline(), Error: err.Error(), Template: templates.CustomID}
 	}
 	pages, warnings, err := s.typst.Preview(ctx, d, tpl)
+	if p := templates.Problem(d.Meta.Template); p != "" {
+		warnings = append(warnings, p)
+	}
 	res := RenderResult{Pages: pages, Outline: d.Outline(), Warnings: append(d.Warnings, warnings...), Template: tpl.ID}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -965,8 +981,9 @@ func (s *DocService) ExportHTML(content string) (string, error) {
 	}
 	opt := html.Options{Title: strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))}
 	if s.typst != nil {
-		opt.Equation = func(tex string, display bool, sizePt float64) ([]byte, error) {
-			return s.typst.Equation(context.Background(), tex, display, sizePt, "svg")
+		opt.Equations = func(ms []doc.Math, sizePt float64) [][]byte {
+			pics, _ := s.typst.Equations(context.Background(), ms, sizePt, "svg")
+			return pics
 		}
 	}
 	return p, os.WriteFile(p, html.Write(d, tpl.Docx, opt), 0o644)
@@ -1014,8 +1031,9 @@ func (s *DocService) docxBytes(d *doc.Document, tpl templates.Template) ([]byte,
 		opt.Rasterize = func(path string, widthPt float64) ([]byte, error) {
 			return s.typst.PNG(context.Background(), path, widthPt)
 		}
-		opt.Equation = func(tex string, display bool, sizePt float64) ([]byte, error) {
-			return s.typst.Equation(context.Background(), tex, display, sizePt, "png")
+		opt.Equations = func(ms []doc.Math, sizePt float64) [][]byte {
+			pics, _ := s.typst.Equations(context.Background(), ms, sizePt, "png")
+			return pics
 		}
 	}
 	return docx.Write(d, tpl.Docx, opt)

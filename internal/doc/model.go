@@ -23,7 +23,11 @@
 //   - `[TOC]` (table of contents) and `\pagebreak` on a line of their own.
 package doc
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+	"unicode"
+)
 
 // Document is a parsed document.
 type Document struct {
@@ -32,6 +36,9 @@ type Document struct {
 	// Warnings are problems the writer should hear about (an unknown
 	// reference, a missing image); the document still renders.
 	Warnings []string `json:"warnings,omitempty"`
+	// Dir is the folder relative paths (pictures, links to files) are
+	// relative to: the document's own; "" when it has none.
+	Dir string `json:"-"`
 }
 
 // Meta is the front matter.
@@ -244,6 +251,99 @@ func (d *Document) Outline() []Heading {
 	}
 	walk(d.Blocks)
 	return out
+}
+
+// HeadingIDs gives each heading outside footnotes (in lists and quotes too)
+// the id `#id` links reach it by: its text in lowercase letters, digits and
+// hyphens, with -2, -3… added when it's taken. An id never has a colon, so it
+// can't clash with labels (fig:a) or footnotes (fn:1).
+func HeadingIDs(bs []Block) map[*Block]string {
+	ids := map[*Block]string{}
+	used := map[string]bool{}
+	var walk func([]Block)
+	walk = func(bs []Block) {
+		for i := range bs {
+			b := &bs[i]
+			switch b.Type {
+			case BlockHeading:
+				ids[b] = uniqueSlug(strings.TrimSpace(PlainText(b.Inlines)), used)
+			case BlockList:
+				for j := range b.Items {
+					walk(b.Items[j])
+				}
+			case BlockQuote:
+				walk(b.Children)
+			}
+		}
+	}
+	walk(bs)
+	return ids
+}
+
+func uniqueSlug(text string, used map[string]bool) string {
+	var sb strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(text) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if dash && sb.Len() > 0 {
+				sb.WriteByte('-')
+			}
+			sb.WriteRune(r)
+			dash = false
+		} else {
+			dash = true
+		}
+	}
+	base := sb.String()
+	if base == "" {
+		base = "section"
+	}
+	id := base
+	for n := 2; used[id]; n++ {
+		id = base + "-" + strconv.Itoa(n)
+	}
+	used[id] = true
+	return id
+}
+
+// Walk calls block for every block in bs and inline for every inline, in
+// document order, at any depth: in lists, quotes, tables, captions, picture
+// descriptions, links and footnotes. Each gets a pointer it may change
+// through.
+func Walk(bs []Block, block func(*Block), inline func(*Inline)) {
+	var inl func([]Inline)
+	var blk func([]Block)
+	inl = func(xs []Inline) {
+		for i := range xs {
+			inline(&xs[i])
+			inl(xs[i].Children)
+			blk(xs[i].Blocks)
+		}
+	}
+	blk = func(bs []Block) {
+		for i := range bs {
+			b := &bs[i]
+			block(b)
+			for j := range b.Pictures {
+				inl(b.Pictures[j].Alt)
+			}
+			inl(b.Inlines)
+			inl(b.Caption)
+			for _, cell := range b.Header {
+				inl(cell)
+			}
+			for _, row := range b.Rows {
+				for _, cell := range row {
+					inl(cell)
+				}
+			}
+			blk(b.Children)
+			for _, item := range b.Items {
+				blk(item)
+			}
+		}
+	}
+	blk(bs)
 }
 
 // PlainText is inlines' text, without formatting.

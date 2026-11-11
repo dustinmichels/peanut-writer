@@ -20,7 +20,6 @@ type Dialog =
   | { kind: "link"; text: string }
   | { kind: "properties" }
   | { kind: "settings" }
-  | { kind: "cheatsheet" }
   | { kind: "about" }
   | { kind: "recent"; files: RecentFile[] }
   | { kind: "start"; files: RecentFile[] }
@@ -52,7 +51,7 @@ export const state = reactive({
   typstError: "",
   version: "", // the app's, recorded in the front matter on saving
   outline: [] as Heading[], // the headings, from the latest render
-  outlineOpen: localStorage.getItem("outline") === "1", // the outline beside the preview
+  outlineOpen: localStorage.getItem("outline") !== "0", // the outline beside the preview; open unless hidden
   currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none
   scrollLinked: true, // the editor and preview scroll together; only the link button unlinks them
   versionsOpen: localStorage.getItem("versions") === "1", // the named versions beside the editor
@@ -78,6 +77,7 @@ export const state = reactive({
   syncOnQuit: true, // quitting or opening another document also syncs them (Settings)
   fitZoom: 1,
   dialog: null as Dialog | null,
+  cheatSheet: false, // the Markdown cheat sheet, shown over any dialog
   toasts: [] as Toast[],
 });
 

@@ -3,17 +3,32 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import { Events } from "@wailsio/runtime";
 import { DocService } from "../../bindings/peanut-writer";
 import { X } from "lucide-vue-next";
-import { contentChanged, insertImageFiles, insertImages, toggleMarkdown } from "../lib/actions";
+import {
+  contentChanged,
+  insertImageFiles,
+  insertImages,
+  openRecent,
+  toggleMarkdown,
+} from "../lib/actions";
 import { activeMarks, blockStyleAt, createEditor } from "../lib/editor";
 import { editor, state } from "../lib/store";
 
 const host = ref<HTMLElement>();
 
+// Documents (packages or Markdown files) are opened, like File → Open.
+const documentFile = /\.(peanut|md|markdown|txt)[\\/]?$/i;
+
 // Files dropped on the pane (its data-file-drop-target) come from Wails with
-// window coordinates; the picture goes where it was dropped.
+// window coordinates; the picture goes where it was dropped. A dropped
+// document is opened instead.
 function filesDropped(e: { data: { paths: string[]; x?: number; y?: number } }) {
   const v = editor.value;
   if (!v || !e.data.paths?.length) return;
+  const doc = e.data.paths.find((p) => documentFile.test(p));
+  if (doc) {
+    openRecent(doc);
+    return;
+  }
   const { x, y } = e.data;
   const pos =
     (x !== undefined && y !== undefined ? v.posAtCoords({ x, y }) : null) ??
@@ -69,7 +84,7 @@ onBeforeUnmount(() => {
     </button>
     <div class="drop">
       <img src="/peanut.svg" alt="" />
-      <span>Drop a picture to add a figure</span>
+      <span>Drop a picture to add a figure, or a document to open it</span>
     </div>
   </section>
 </template>

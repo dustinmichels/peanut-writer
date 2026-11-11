@@ -10,6 +10,9 @@ hero:
     alt: Peanut, the mascot
   actions:
     - theme: brand
+      text: Download for macOS
+      link: https://github.com/dustinmichels/peanut-writer/releases/latest/download/Peanut-Writer.dmg
+    - theme: alt
       text: Get started
       link: /guide/introduction
     - theme: alt

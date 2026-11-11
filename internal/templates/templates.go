@@ -52,8 +52,9 @@ type Template struct {
 	Description string    `json:"description"`
 	Builtin     bool      `json:"builtin"`
 	Docx        DocxStyle `json:"docx"`
-	Base        string    `json:"base"`  // a custom template's base template; "" for others
-	Style       Style     `json:"style"` // a custom template's changes to its base; a saved one's (see Save) to the template it was made from
+	Base        string    `json:"base"`     // a custom template's base template; "" for others
+	Style       Style     `json:"style"`    // a custom template's changes to its base; a saved one's (see Save) to the template it was made from
+	Modified    int64     `json:"modified"` // when a user template's files last changed, in Unix milliseconds; 0 for a built-in one
 
 	dir       string // the user template's folder; "" for a built-in one
 	baseStyle Style  // a custom template's base's Style
@@ -287,6 +288,25 @@ func Get(id string) Template {
 	return t
 }
 
+// Problem says why a document naming the template id gets Default instead
+// (see Get): its folder in the user's templates folder can't be read, or
+// there's none. "" when id is "", CustomID or a template there is.
+func Problem(id string) string {
+	used := Get(id)
+	if id == "" || id == CustomID || used.ID == id {
+		return ""
+	}
+	if dir, err := UserDir(); err == nil && !reserved(id) && filepath.IsLocal(id) {
+		p := filepath.Join(dir, id)
+		if fi, err := os.Stat(p); err == nil && fi.IsDir() {
+			if _, err := loadUser(p); err != nil {
+				return fmt.Sprintf("the template %q can't be read (%v), so %s is used", id, err, used.Name)
+			}
+		}
+	}
+	return fmt.Sprintf("there's no template %q, so %s is used", id, used.Name)
+}
+
 // Source is the template's Typst file (a custom template's base's).
 func (t Template) Source() ([]byte, error) {
 	if t.Builtin {
@@ -317,6 +337,11 @@ func loadUser(dir string) (Template, error) {
 	t.ID, t.dir = filepath.Base(dir), dir
 	if t.Name == "" {
 		t.Name = t.ID
+	}
+	for _, f := range []string{"template.typ", "template.json"} {
+		if fi, err := os.Stat(filepath.Join(dir, f)); err == nil {
+			t.Modified = max(t.Modified, fi.ModTime().UnixMilli())
+		}
 	}
 	return t, err
 }

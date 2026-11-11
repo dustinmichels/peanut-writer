@@ -1,0 +1,11 @@
+figure 1 fig:list
+figure 2
+figure 3 fig:ordered width=50
+table 1 tbl:ordered
+equation 1 eq:nested
+figure 4 fig:quote
+table 2 tbl:quote
+figure 5
+figure 6
+figure 7 fig:deep pictures=2 columns=2
+figure 8

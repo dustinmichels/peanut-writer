@@ -3,6 +3,8 @@ package docx
 import (
 	"encoding/xml"
 	"fmt"
+	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -125,19 +127,51 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline, p runProps) {
 	}
 }
 
+// link writes a link: to a heading, figure, table or equation (`#anchor`)
+// as a link within the document, and to anything else as an external one.
+// A link to an anchor that isn't there is plain text.
 func (w *writer) link(sb *strings.Builder, x doc.Inline, p runProps) {
-	url := strings.TrimSpace(x.URL)
-	if url == "" || strings.HasPrefix(url, "#") {
-		// Nothing outside the document to link to.
-		w.inline(sb, x.Children, p)
-		return
-	}
-	id := w.part.add(relHyperlink, strings.ReplaceAll(url, " ", "%20"), true)
+	target := strings.TrimSpace(x.URL)
 	q := p
 	q.style = "Hyperlink"
-	fmt.Fprintf(sb, `<w:hyperlink r:id="%s" w:history="1">`, id)
+	if anchor, ok := strings.CutPrefix(target, "#"); ok {
+		if a, err := url.PathUnescape(anchor); err == nil {
+			anchor = a
+		}
+		name := w.anchors[anchor]
+		if name == "" {
+			w.inline(sb, x.Children, p)
+			return
+		}
+		fmt.Fprintf(sb, `<w:hyperlink w:anchor="%s" w:history="1">`, name)
+	} else if target == "" {
+		w.inline(sb, x.Children, p)
+		return
+	} else {
+		id := w.part.add(relHyperlink, w.linkTarget(target), true)
+		fmt.Fprintf(sb, `<w:hyperlink r:id="%s" w:history="1">`, id)
+	}
 	w.inline(sb, x.Children, q)
 	sb.WriteString(`</w:hyperlink>`)
+}
+
+// linkTarget is where a link outside the document goes. A file path (no
+// scheme) is relative to the document's folder, not the Word file's, which
+// may be saved elsewhere: it becomes a file: URL to where the file is.
+func (w *writer) linkTarget(target string) string {
+	u, err := url.Parse(target)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.Path == "" || w.dir == "" {
+		return strings.ReplaceAll(target, " ", "%20")
+	}
+	p := filepath.FromSlash(u.Path)
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(w.dir, p)
+	}
+	p = filepath.ToSlash(p)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p // C:/… on Windows
+	}
+	return (&url.URL{Scheme: "file", Path: p, Fragment: u.Fragment}).String()
 }
 
 // ref is "Figure N", "Table N" or "Equation N" as a REF field to the
@@ -191,15 +225,51 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	}
 	id := len(w.notes) + 1
 	var body strings.Builder
-	out, part, style := w.out, w.part, w.paraStyle
+	out, part, style, indent, right := w.out, w.part, w.paraStyle, w.indent, w.right
 	w.out, w.part, w.paraStyle, w.inNote, w.prefix = &body, &w.noteRels, "FootnoteText", true, footnoteMark
+	w.indent, w.right = 0, 0 // the note starts at its own margin, wherever its mark is
+	// The mark starts the note's first paragraph, or is one of its own before
+	// a table, list, picture or the like (not in its first cell or item).
+	if len(x.Blocks) > 0 {
+		switch x.Blocks[0].Type {
+		case doc.BlockParagraph, doc.BlockHeading, doc.BlockQuote:
+		default:
+			w.para("FootnoteText", "", "")
+		}
+	}
 	w.blocks(x.Blocks)
 	if w.prefix != "" {
 		w.para("FootnoteText", "", "")
 	}
-	w.out, w.part, w.paraStyle, w.inNote = out, part, style, false
+	w.out, w.part, w.paraStyle, w.inNote, w.indent, w.right = out, part, style, false, indent, right
 	w.notes = append(w.notes, fmt.Sprintf(`<w:footnote w:id="%d">%s</w:footnote>`, id, body.String()))
 	fmt.Fprintf(sb, `<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="%d"/></w:r>`, id)
+	// The note's numbered figures, tables and equations show plain numbers;
+	// hidden SEQ fields here count them where the mark is, keeping Word's
+	// numbering of later ones in the text in step.
+	countNumbered(x.Blocks, func(kind string) { sb.WriteString(w.hiddenSeq(kind)) })
+}
+
+// countNumbered calls f with the SEQ name of each numbered figure, table and
+// equation in bs, in order. Notes within them are left out: Word has none.
+func countNumbered(bs []doc.Block, f func(kind string)) {
+	for i := range bs {
+		b := &bs[i]
+		if b.Number > 0 {
+			switch b.Type {
+			case doc.BlockFigure:
+				f("Figure")
+			case doc.BlockTable:
+				f("Table")
+			case doc.BlockEquation:
+				f("Equation")
+			}
+		}
+		countNumbered(b.Children, f)
+		for _, item := range b.Items {
+			countNumbered(item, f)
+		}
+	}
 }
 
 // clean drops characters XML can't hold (and carriage returns).

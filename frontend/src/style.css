@@ -533,9 +533,35 @@ select {
 .cm-editor .pw-footnote-ref {
   font-size: 0.75em;
   vertical-align: super;
+  line-height: 0;
   color: var(--accent);
   font-family: var(--ui);
   font-weight: 650;
+}
+.cm-editor .pw-footnote-mark {
+  padding: 0 1px;
+  cursor: pointer;
+}
+.cm-editor .pw-footnote-mark:hover {
+  text-decoration: underline;
+}
+.cm-editor .pw-footnote-ref.broken,
+.cm-editor .pw-note-head.orphan {
+  color: var(--danger);
+}
+.cm-editor .pw-note-line {
+  font-size: 0.88em;
+}
+.cm-editor .pw-note-head {
+  display: inline-block;
+  min-width: 1.6em;
+  font-family: var(--ui);
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+}
+.cm-editor .pw-note-head:hover {
+  text-decoration: underline;
 }
 .pw-props {
   display: flex;

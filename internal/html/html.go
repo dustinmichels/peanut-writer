@@ -1,6 +1,6 @@
 // Package html writes a document as a single, self-contained web page:
 // plain semantic HTML, styled from a template's DocxStyle, with pictures
-// embedded as data URLs and math as pictures drawn by Options.Equation.
+// embedded as data URLs and math as pictures drawn by Options.Equations.
 // Headings get ids, and the table of contents, cross-references and
 // footnotes link to what they point at.
 package html
@@ -27,10 +27,11 @@ import (
 type Options struct {
 	// Title is the page's title when the front matter has none.
 	Title string
-	// Equation draws LaTeX math with sizePt text as SVG; math in a line has
-	// its baseline at the picture's middle. Without it, or when it fails,
-	// math shows as its LaTeX source.
-	Equation func(tex string, display bool, sizePt float64) ([]byte, error)
+	// Equations draws each formula with sizePt text as SVG, math in a line
+	// with its baseline at the picture's middle; the pictures are in the
+	// formulas' order. Without it, or for a nil picture, math shows as its
+	// LaTeX source.
+	Equations func(ms []doc.Math, sizePt float64) [][]byte
 }
 
 // Write renders d as an HTML page in style st.
@@ -44,6 +45,7 @@ func Write(d *doc.Document, st templates.DocxStyle, opt Options) []byte {
 		math:     map[string]*mathPic{},
 	}
 	w.collectHeadings(d.Blocks)
+	w.drawMath(d.Blocks)
 	var body strings.Builder
 	w.out = &body
 	m := d.Meta.Shown()
@@ -95,13 +97,13 @@ type tocEntry struct {
 
 func (w *writer) printf(format string, a ...any) { fmt.Fprintf(w.out, format, a...) }
 
-// collectHeadings gives each heading outside footnotes an id, and a number
-// when the style numbers headings (levels 1–3: 1, 1.1, 1.1.1), and lists
-// levels 1–3 for the table of contents, before any of them is written: the
-// table of contents can come first.
+// collectHeadings gives each heading outside footnotes its id
+// (doc.HeadingIDs), and a number when the style numbers headings (levels
+// 1–3: 1, 1.1, 1.1.1), and lists levels 1–3 for the table of contents, before
+// any of them is written: the table of contents can come first.
 func (w *writer) collectHeadings(bs []doc.Block) {
 	var counts [3]int
-	used := map[string]bool{}
+	ids := doc.HeadingIDs(bs)
 	var walk func([]doc.Block)
 	walk = func(bs []doc.Block) {
 		for i := range bs {
@@ -110,7 +112,7 @@ func (w *writer) collectHeadings(bs []doc.Block) {
 			case doc.BlockHeading:
 				text := strings.TrimSpace(doc.PlainText(b.Inlines))
 				level := min(max(b.Level, 1), 6)
-				h := heading{id: uniqueSlug(text, used)}
+				h := heading{id: ids[b]}
 				if w.st.NumberedHeadings && level <= 3 {
 					counts[level-1]++
 					for j := level; j < 3; j++ {
@@ -136,35 +138,6 @@ func (w *writer) collectHeadings(bs []doc.Block) {
 		}
 	}
 	walk(bs)
-}
-
-// uniqueSlug is text as an id of lowercase letters, digits and hyphens,
-// with -2, -3… added when it's taken. It never has a colon, so it can't
-// clash with labels (fig:a) or footnotes (fn:1).
-func uniqueSlug(text string, used map[string]bool) string {
-	var sb strings.Builder
-	dash := false
-	for _, r := range strings.ToLower(text) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if dash && sb.Len() > 0 {
-				sb.WriteByte('-')
-			}
-			sb.WriteRune(r)
-			dash = false
-		} else {
-			dash = true
-		}
-	}
-	base := sb.String()
-	if base == "" {
-		base = "section"
-	}
-	id := base
-	for n := 2; used[id]; n++ {
-		id = base + "-" + strconv.Itoa(n)
-	}
-	used[id] = true
-	return id
 }
 
 // idAttr is ` id="label"` for the first block with label, else "".
@@ -569,23 +542,32 @@ type mathPic struct {
 	w, h float64
 }
 
-// mathPic is tex drawn by Options.Equation; nil when it can't be.
-func (w *writer) mathPic(tex string, display bool) *mathPic {
-	if w.opt.Equation == nil {
-		return nil
+func mathKey(tex string, display bool) string { return fmt.Sprintf("%t\x00%s", display, tex) }
+
+// drawMath draws all the math in bs, in one call of Options.Equations.
+func (w *writer) drawMath(bs []doc.Block) {
+	if w.opt.Equations == nil {
+		return
 	}
-	key := fmt.Sprintf("%t\x00%s", display, tex)
-	if p, ok := w.math[key]; ok {
-		return p
+	ms := doc.ReadableMath(bs)
+	if len(ms) == 0 {
+		return
 	}
-	var p *mathPic
-	if data, err := w.opt.Equation(tex, display, w.fontSize()); err == nil {
-		if wPt, hPt, ok := svgSize(data); ok {
-			p = &mathPic{dataURL("image/svg+xml", data), wPt, hPt}
+	pics := w.opt.Equations(ms, w.fontSize())
+	for i, m := range ms {
+		var p *mathPic
+		if i < len(pics) && pics[i] != nil {
+			if wPt, hPt, ok := svgSize(pics[i]); ok {
+				p = &mathPic{dataURL("image/svg+xml", pics[i]), wPt, hPt}
+			}
 		}
+		w.math[mathKey(m.TeX, m.Display)] = p
 	}
-	w.math[key] = p
-	return p
+}
+
+// mathPic is tex as drawMath drew it; nil when it couldn't be.
+func (w *writer) mathPic(tex string, display bool) *mathPic {
+	return w.math[mathKey(tex, display)]
 }
 
 // inlineMath is math in a line. Its picture's middle is its baseline, so

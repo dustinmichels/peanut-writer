@@ -16,6 +16,10 @@ export default defineConfig({
     nav: [
       { text: "Guide", link: "/guide/introduction" },
       { text: "Reference", link: "/reference/syntax" },
+      {
+        text: "Download",
+        link: "https://github.com/dustinmichels/peanut-writer/releases/latest/download/Peanut-Writer.dmg",
+      },
     ],
     sidebar: [
       {

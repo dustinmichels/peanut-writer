@@ -196,11 +196,22 @@ function saved(info: DocInfo) {
 
 // Saves run one at a time, so an autosave and ⌘S can't overlap.
 let saving: Promise<boolean> = Promise.resolve(true);
+// The save of an untitled document, which asks where to save it: saving
+// again meanwhile (⌘S twice) joins it rather than queueing a second dialog.
+let naming: Promise<boolean> | null = null;
 
 function queueSave(): Promise<boolean> {
   clearTimeout(autosaveTimer);
-  saving = saving.then(saveNow);
-  return saving;
+  if (naming) return naming;
+  const s = (saving = saving.then(saveNow));
+  if (!state.path) {
+    naming = s;
+    const done = () => {
+      if (naming === s) naming = null;
+    };
+    s.then(done, done);
+  }
+  return s;
 }
 
 async function saveNow(): Promise<boolean> {
@@ -408,7 +419,7 @@ export function menu(action: string) {
     case "welcome":
       return openWelcome();
     case "cheatsheet":
-      state.dialog = { kind: "cheatsheet" };
+      state.cheatSheet = true;
       return;
     case "about":
       state.dialog = { kind: "about" };
@@ -428,7 +439,8 @@ export function menu(action: string) {
       if (!fieldEdit("redo") && v && !state.dialog) redo(v);
       return;
     case "find":
-      if (v) openSearchPanel(v);
+      // The search panel is in the editor, under any dialog.
+      if (v && !state.dialog && !state.cheatSheet) openSearchPanel(v);
       return;
     case "zoomIn":
       state.zoom = Math.min(3, (state.zoom || state.fitZoom) * 1.15);
@@ -569,11 +581,13 @@ export function deleteBlock(from: number, to: number) {
 
 // --- Tables -------------------------------------------------------------------------
 
+// applyTable writes table in place of item's, or inserts it, with its caption
+// line; a table with neither caption nor name gets none.
 export function applyTable(item: Item | undefined, table: Table, caption: string, label: string) {
   const v = view();
   const items = v.state.field(itemsField);
-  const id = label || uniqueLabel("tbl", caption, items, item?.label ?? "");
-  const text = `${writeTable(table)}\n\n${captionMarkdown(caption, id)}`;
+  const id = label || (caption && uniqueLabel("tbl", caption, items, item?.label ?? ""));
+  const text = writeTable(table) + (caption || id ? `\n\n${captionMarkdown(caption, id)}` : "");
   if (item) {
     v.dispatch({
       changes: { from: item.tableFrom!, to: item.to, insert: text },
@@ -598,11 +612,13 @@ export function insertCrossRef(item: Item, at?: RefAt) {
   let label = item.label;
   if (!label) {
     label = uniqueLabel(labelPrefix[item.kind], item.caption, items);
+    // Inside a list or quote, new lines carry its markers.
+    const prefix = item.prefix ?? "";
     if (item.kind === "figure") {
       changes.push({
         from: item.from,
         to: item.to,
-        insert: figureMarkdown({ ...figureSpec(item), label }),
+        insert: figureMarkdown({ ...figureSpec(item), label }).replaceAll("\n", "\n" + prefix),
       });
     } else if (item.kind === "equation") {
       changes.push({ from: item.to, insert: ` {#${label}}` });
@@ -613,7 +629,10 @@ export function insertCrossRef(item: Item, at?: RefAt) {
         insert: captionMarkdown(item.caption, label),
       });
     } else {
-      changes.push({ from: item.tableTo!, insert: `\n\n${captionMarkdown("", label)}` });
+      changes.push({
+        from: item.tableTo!,
+        insert: `\n${prefix.trimEnd()}\n${prefix}${captionMarkdown("", label)}`,
+      });
     }
   }
   const { from, to } = at ?? v.state.selection.main;

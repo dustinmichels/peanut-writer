@@ -24,15 +24,15 @@ type pic struct {
 	name   string
 }
 
-// native is a PNG, JPEG or GIF image as it is; nil for anything else (or a
-// file that can't be read).
+// native is a PNG, JPEG or GIF image as it is (a JPEG turned upright, see
+// upright); nil for anything else (or a file that can't be read).
 func (w *writer) native(path string) *pic {
 	if p, ok := w.pics[path]; ok {
 		return p
 	}
 	var p *pic
 	if data, err := os.ReadFile(path); err == nil {
-		p = decodePic(data)
+		p = decodePic(upright(data))
 	}
 	w.pics[path] = p
 	return p
@@ -70,9 +70,10 @@ func decodePic(data []byte) *pic {
 }
 
 // picture is a figure's image as a run: widthPt wide (0 for its natural
-// size at 96 dpi), shrunk to fit the text width and most of the page height.
+// size at 96 dpi), shrunk to fit the width there is (see availW) and most of
+// the page height.
 func (w *writer) picture(path string, widthPt float64, alt string) string {
-	maxW, maxH := w.textWidthPt(), w.textHeightPt()*0.85
+	maxW, maxH := float64(w.availW())/20, w.textHeightPt()*0.85
 	p := w.native(path)
 	if p != nil {
 		if widthPt <= 0 {

@@ -119,18 +119,20 @@ func (equationParser) Open(parent ast.Node, reader text.Reader, pc gmparser.Cont
 	n := &equationNode{}
 	n.add(line[pos+2:])
 	reader.AdvanceToEOL()
-	if n.closed {
-		return n, gmparser.Close
-	}
 	return n, gmparser.NoChildren
 }
 
 func (equationParser) Continue(node ast.Node, reader text.Reader, pc gmparser.Context) gmparser.State {
+	n := node.(*equationNode)
+	// Closed on its first line: goldmark doesn't heed Close from Open, and
+	// would add the next line.
+	if n.closed {
+		return gmparser.Close
+	}
 	line, _ := reader.PeekLine()
 	if line == nil {
 		return gmparser.Close
 	}
-	n := node.(*equationNode)
 	n.add(line)
 	reader.AdvanceToEOL()
 	if n.closed {
@@ -177,6 +179,35 @@ func (p *parser) equation(n *equationNode) Block {
 func (p *parser) math(n *mathNode) Inline {
 	tex := strings.TrimSpace(n.tex)
 	return Inline{Type: InlineMath, Text: tex, Display: n.display, Error: p.checkTeX(tex)}
+}
+
+// Math is a formula to draw: equation blocks are display math.
+type Math struct {
+	TeX     string
+	Display bool
+}
+
+// ReadableMath lists the math in bs not known to be unreadable, each
+// formula once, in document order.
+func ReadableMath(bs []Block) []Math {
+	var out []Math
+	seen := map[Math]bool{}
+	add := func(m Math, known string) {
+		if m.TeX != "" && known == "" && !seen[m] {
+			seen[m] = true
+			out = append(out, m)
+		}
+	}
+	Walk(bs, func(b *Block) {
+		if b.Type == BlockEquation {
+			add(Math{b.Text, true}, b.Error)
+		}
+	}, func(x *Inline) {
+		if x.Type == InlineMath {
+			add(Math{x.Text, x.Display}, x.Error)
+		}
+	})
+	return out
 }
 
 // checkTeX finds what would stop the LaTeX being read (mitex rejects a

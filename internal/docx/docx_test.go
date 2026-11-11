@@ -44,6 +44,13 @@ break, an inline ![](dot.png) image, an unsized ![](blank.svg) one, ![](gone.png
 
     Its second paragraph.
 
+A second note holds blocks.[^blocks]
+
+[^blocks]: - a list
+    - in a note
+
+    > A quote in a note.
+
 ## Lists
 
 - one
@@ -162,9 +169,13 @@ func TestWrite(t *testing.T) {
 		}
 		rasterized++
 		return pngBytes, nil
-	}, Equation: func(tex string, display bool, sizePt float64) ([]byte, error) {
-		drawn++
-		return pngBytes, nil
+	}, Equations: func(ms []doc.Math, sizePt float64) [][]byte {
+		drawn += len(ms)
+		pics := make([][]byte, len(ms))
+		for i := range pics {
+			pics[i] = pngBytes
+		}
+		return pics
 	}}
 	tpls := templates.List()
 	if len(tpls) == 0 {
@@ -183,7 +194,7 @@ func TestWrite(t *testing.T) {
 		t.Error("Rasterize was never called for the SVG")
 	}
 	if drawn == 0 {
-		t.Error("Equation was never called")
+		t.Error("Equations was never called")
 	}
 }
 
@@ -399,5 +410,45 @@ func TestBookmarkName(t *testing.T) {
 	}
 	if len(used) != 5 {
 		t.Errorf("names not unique: %v", used)
+	}
+}
+
+// A note's figures and tables are counted in Word's numbering where its mark
+// is, not in the note (a separate story), and a note starting with a table
+// has its mark before the table, not in the first cell.
+func TestNumberedItemsInFootnotes(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtures(t, dir)
+	src := "Text.[^n] Then:\n\n![B](dot.png){#fig:b}\n\n" +
+		"[^n]: | A | B |\n    |---|---|\n    | 1 | 2 |\n\n    ![N](dot.png){#fig:n}\n"
+	out, err := Write(doc.Parse(src, dir), templates.List()[0].Docx, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	part := func(name string) string {
+		f, err := z.Open(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		b, _ := io.ReadAll(f)
+		return string(b)
+	}
+	body, notes := part("word/document.xml"), part("word/footnotes.xml")
+	if n := strings.Count(body, "SEQ Figure"); n != 2 {
+		t.Errorf("document has %d SEQ Figure fields, want 2 (the note's, hidden, and B's)", n)
+	}
+	if n := strings.Count(body, "SEQ Table"); n != 1 {
+		t.Errorf("document has %d SEQ Table fields, want 1 (the note's, hidden)", n)
+	}
+	if strings.Contains(notes, "SEQ ") {
+		t.Error("footnotes have SEQ fields")
+	}
+	if mark, tbl := strings.Index(notes, "<w:footnoteRef/>"), strings.Index(notes, "<w:tbl>"); mark < 0 || tbl < 0 || mark > tbl {
+		t.Errorf("note mark at %d, table at %d: the mark should come first", mark, tbl)
 	}
 }

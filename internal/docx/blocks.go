@@ -78,21 +78,31 @@ func (w *writer) blocks(bs []doc.Block) {
 func (w *writer) block(b *doc.Block) {
 	switch b.Type {
 	case doc.BlockParagraph:
-		w.para(w.paraStyle, "", w.inlines(b.Inlines, runProps{}))
+		w.para(w.paraStyle, w.ind(w.paraStyle, 0), w.inlines(b.Inlines, runProps{}))
 	case doc.BlockHeading:
 		if w.inNote {
 			// A heading in a footnote stays out of the outline and the TOC.
-			w.para(w.paraStyle, "", w.inlines(b.Inlines, runProps{b: true}))
+			w.para(w.paraStyle, w.ind(w.paraStyle, 0), w.inlines(b.Inlines, runProps{b: true}))
 			return
 		}
-		w.para(fmt.Sprintf("Heading%d", min(max(b.Level, 1), 6)), "", w.inlines(b.Inlines, runProps{}))
+		runs := w.inlines(b.Inlines, runProps{})
+		if name := w.headings[b]; name != "" {
+			w.bookmarkID++
+			runs = fmt.Sprintf(`<w:bookmarkStart w:id="%d" w:name="%s"/>%s<w:bookmarkEnd w:id="%[1]d"/>`, w.bookmarkID, name, runs)
+		}
+		style := fmt.Sprintf("Heading%d", min(max(b.Level, 1), 6))
+		w.para(style, w.ind(style, 0), runs)
 	case doc.BlockList:
-		w.list(b, 0)
+		w.list(b, 0, w.indent)
 	case doc.BlockQuote:
-		saved := w.paraStyle
+		style, left, right := w.paraStyle, w.indent, w.right
 		w.paraStyle = "Quote"
+		if w.inNote {
+			w.paraStyle = "FootnoteQuote"
+		}
+		w.indent, w.right = w.indent+quoteIndent, w.right+quoteIndent
 		w.blocks(b.Children)
-		w.paraStyle = saved
+		w.paraStyle, w.indent, w.right = style, left, right
 	case doc.BlockCode:
 		// The style has no space between lines; the block gets space above
 		// and below on its first and last lines.
@@ -109,14 +119,18 @@ func (w *writer) block(b *doc.Block) {
 			if before > 0 || after > 0 {
 				ppr = fmt.Sprintf(`<w:spacing w:before="%d" w:after="%d"/>`, before, after)
 			}
-			w.para("SourceCode", ppr, w.run(line, runProps{}))
+			w.para("SourceCode", ppr+w.ind("SourceCode", codePad), w.run(line, runProps{}))
 		}
 	case doc.BlockFigure:
 		w.figure(b)
 	case doc.BlockTable:
 		w.table(b)
 	case doc.BlockRule:
-		w.para("", fmt.Sprintf(`<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="%s"/></w:pBdr><w:ind w:firstLine="0"/>`, colorOr(w.st.AccentColor, "auto")), "")
+		ind := w.ind("", 0)
+		if ind == "" {
+			ind = `<w:ind w:firstLine="0"/>`
+		}
+		w.para("", fmt.Sprintf(`<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="%s"/></w:pBdr>`, colorOr(w.st.AccentColor, "auto"))+ind, "")
 	case doc.BlockPageBreak:
 		w.para("", "", `<w:r><w:br w:type="page"/></w:r>`)
 	case doc.BlockTOC:
@@ -126,9 +140,45 @@ func (w *writer) block(b *doc.Block) {
 	}
 }
 
-// list writes a list's items at level depth; nested lists go one deeper.
-// Each ordered list has its own numbering instance, so it starts at Start.
-func (w *writer) list(b *doc.Block, depth int) {
+// Indents, in twips: a quote's on each side, and a code block's text from
+// its shading.
+const (
+	quoteIndent = 720
+	codePad     = 115
+)
+
+// styleIndent is how far in from each margin a paragraph style sets its
+// text, in twips (see styles).
+func styleIndent(style string) (left, right int) {
+	switch style {
+	case "Quote", "FootnoteQuote":
+		return quoteIndent, quoteIndent
+	case "SourceCode":
+		return codePad, codePad
+	}
+	return 0, 0
+}
+
+// ind is the indent putting a paragraph in style pad twips inside where the
+// blocks being written start (w.indent and w.right: in a list item or a
+// quote); "" when the style puts it there already.
+func (w *writer) ind(style string, pad int) string {
+	left, right := w.indent+pad, w.right+pad
+	if l, r := styleIndent(style); l == left && r == right {
+		return ""
+	}
+	return fmt.Sprintf(`<w:ind w:left="%d" w:right="%d" w:firstLine="0"/>`, left, right)
+}
+
+// availW is the width blocks have where they're being written, in twips.
+func (w *writer) availW() int { return max(w.textW-w.indent-w.right, 1440) }
+
+// list writes a list's items at level depth, base twips in from the margin
+// (where the list's container starts); nested lists go one deeper, and other
+// blocks in an item start where its text does. Each ordered list has its own
+// numbering instance, so it starts at Start. In a quote, items keep the
+// quote's style.
+func (w *writer) list(b *doc.Block, depth, base int) {
 	depth = min(depth, 8)
 	num := numBullets
 	if b.Ordered {
@@ -139,25 +189,40 @@ func (w *writer) list(b *doc.Block, depth int) {
 	if !b.Tight {
 		loose = `<w:contextualSpacing w:val="0"/>`
 	}
+	text := base + listIndent(depth) // where the items' text starts
 	numPr := fmt.Sprintf(`<w:numPr><w:ilvl w:val="%d"/><w:numId w:val="%d"/></w:numPr>`, depth, num)
-	cont := fmt.Sprintf(`<w:ind w:left="%d" w:firstLine="0"/>`, listIndent(depth)) + loose
+	cont := fmt.Sprintf(`<w:ind w:left="%d" w:right="%d" w:firstLine="0"/>`, text, w.right) + loose
+	style, first := "ListParagraph", numPr+loose
+	// The numbering's indents are for a list at the margin in List
+	// Paragraph. Anywhere else, the indent is given here; in a footnote,
+	// items keep the note's size, and in a quote, its look.
+	quoted := w.paraStyle == "Quote" || w.paraStyle == "FootnoteQuote"
+	if w.inNote || quoted || base > 0 {
+		if w.inNote || quoted {
+			style = w.paraStyle
+		}
+		first = numPr + fmt.Sprintf(`<w:ind w:left="%d" w:right="%d" w:hanging="360"/>`, text, w.right) + loose
+	}
 	for _, item := range b.Items {
 		rest := item
 		if len(item) > 0 && item[0].Type == doc.BlockParagraph {
-			w.para("ListParagraph", numPr+loose, w.inlines(item[0].Inlines, runProps{}))
+			w.para(style, first, w.inlines(item[0].Inlines, runProps{}))
 			rest = item[1:]
 		} else {
-			w.para("ListParagraph", numPr+loose, "")
+			w.para(style, first, "")
 		}
 		for i := range rest {
 			c := &rest[i]
 			switch c.Type {
 			case doc.BlockList:
-				w.list(c, depth+1)
+				w.list(c, depth+1, base)
 			case doc.BlockParagraph:
-				w.para("ListParagraph", cont, w.inlines(c.Inlines, runProps{}))
+				w.para(style, cont, w.inlines(c.Inlines, runProps{}))
 			default:
+				saved := w.indent
+				w.indent = text
 				w.block(c)
+				w.indent = saved
 			}
 		}
 	}
@@ -170,14 +235,14 @@ func listIndent(level int) int { return 720 * (level + 1) }
 // left or right, then its caption, aligned with it.
 func (w *writer) figure(b *doc.Block) {
 	captioned := len(b.Caption) > 0 || b.Label != ""
-	jc := ""
+	place := w.ind("", 0) // indented in a list item or a quote, then aligned
 	if b.Position != "" {
-		jc = `<w:jc w:val="` + b.Position + `"/>`
+		place += `<w:jc w:val="` + b.Position + `"/>`
 	}
 	if len(b.Pictures) > 0 {
 		w.pictureGrid(b)
 		if captioned {
-			w.para("Caption", jc, w.captionRuns("Figure", b))
+			w.para("Caption", place, w.captionRuns("Figure", b))
 		} else {
 			// A little space under the grid, keeping Word's count of
 			// figures in step with the numbering.
@@ -195,20 +260,20 @@ func (w *writer) figure(b *doc.Block) {
 	} else {
 		want := 0.0
 		if b.Width > 0 {
-			want = b.Width / 100 * w.textWidthPt()
+			want = b.Width / 100 * float64(w.availW()) / 20
 		}
 		runs = w.picture(b.Src, want, doc.PlainText(b.Caption))
 	}
-	ppr := jc
+	ppr := place
 	if captioned {
-		ppr = "<w:keepNext/>" + jc
+		ppr = "<w:keepNext/>" + place
 	} else if b.Number > 0 {
 		// Keep Word's count of figures in step with the numbering.
 		runs += w.hiddenSeq("Figure")
 	}
 	w.para("Figure", ppr, runs)
 	if captioned {
-		w.para("Caption", jc, w.captionRuns("Figure", b))
+		w.para("Caption", place, w.captionRuns("Figure", b))
 	}
 }
 
@@ -219,16 +284,31 @@ const gridCellPad = 108
 // row, each picture as wide as its cell; the rows keep with what follows.
 func (w *writer) pictureGrid(b *doc.Block) {
 	cols := max(b.Columns, 1)
-	width := w.textW
+	avail := w.availW()
+	width := avail
 	if b.Width > 0 {
-		width = int(float64(w.textW) * b.Width / 100)
+		width = int(float64(avail) * b.Width / 100)
 	}
 	colW := width / cols
 	jc := "center"
 	if b.Position != "" {
 		jc = b.Position
 	}
-	fmt.Fprintf(w.out, `<w:tbl><w:tblPr><w:tblW w:w="%d" w:type="dxa"/><w:jc w:val="%s"/><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>`, colW*cols, jc)
+	// Word centers a table between the margins; in a list item or a quote,
+	// it's placed by its indent instead.
+	ind := ""
+	if w.indent > 0 || w.right > 0 {
+		at := w.indent
+		switch jc {
+		case "center":
+			at += (avail - colW*cols) / 2
+		case "right":
+			at += avail - colW*cols
+		}
+		jc = "left"
+		ind = fmt.Sprintf(`<w:tblInd w:w="%d" w:type="dxa"/>`, at)
+	}
+	fmt.Fprintf(w.out, `<w:tbl><w:tblPr><w:tblW w:w="%d" w:type="dxa"/><w:jc w:val="%s"/>%s<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>`, colW*cols, jc, ind)
 	for range cols {
 		fmt.Fprintf(w.out, `<w:gridCol w:w="%d"/>`, colW)
 	}
@@ -273,7 +353,7 @@ func (w *writer) captionRuns(kind string, b *doc.Block) string {
 			name = ""
 		}
 		sb.WriteString(w.run(kind+" ", runProps{}))
-		w.field(&sb, `SEQ `+kind+` \* ARABIC`, strconv.Itoa(b.Number), runProps{})
+		w.seq(&sb, kind, b.Number)
 		if name != "" {
 			fmt.Fprintf(&sb, `<w:bookmarkEnd w:id="%d"/>`, w.bookmarkID)
 		}
@@ -285,15 +365,31 @@ func (w *writer) captionRuns(kind string, b *doc.Block) string {
 	return sb.String()
 }
 
-// hiddenSeq counts a figure or table that has no caption without showing it.
+// seq writes a figure's, table's or equation's number n as a SEQ field, or
+// in a footnote as plain text: the note's mark counts it in the body (see
+// footnote), where Word's numbering of the rest can see it.
+func (w *writer) seq(sb *strings.Builder, kind string, n int) {
+	if w.inNote {
+		sb.WriteString(w.run(strconv.Itoa(n), runProps{}))
+		return
+	}
+	w.field(sb, `SEQ `+kind+` \* ARABIC`, strconv.Itoa(n), runProps{})
+}
+
+// hiddenSeq counts a figure or table that has no caption without showing it
+// (in a footnote, its mark counts it).
 func (w *writer) hiddenSeq(kind string) string {
+	if w.inNote {
+		return ""
+	}
 	var sb strings.Builder
 	w.field(&sb, `SEQ `+kind+` \* ARABIC \h`, "", runProps{})
 	return sb.String()
 }
 
-// table writes the caption above, then the table across the text width
-// with its header row repeated on each page.
+// table writes the caption above, then the table across the width there is
+// (indented in a list item or a quote) with its header row repeated on each
+// page.
 func (w *writer) table(b *doc.Block) {
 	cols := len(b.Align)
 	if cols == 0 {
@@ -301,11 +397,15 @@ func (w *writer) table(b *doc.Block) {
 	}
 	captioned := len(b.Caption) > 0 || b.Label != ""
 	if captioned {
-		w.para("Caption", "<w:keepNext/>", w.captionRuns("Table", b))
+		w.para("Caption", "<w:keepNext/>"+w.ind("", 0), w.captionRuns("Table", b))
 	}
-	colW := w.textW / cols
-	fmt.Fprintf(w.out, `<w:tbl><w:tblPr><w:tblStyle w:val="PeanutTable"/><w:tblW w:w="%d" w:type="dxa"/>`+
-		`<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/></w:tblPr><w:tblGrid>`, colW*cols)
+	colW := w.availW() / cols
+	ind := ""
+	if w.indent > 0 {
+		ind = fmt.Sprintf(`<w:tblInd w:w="%d" w:type="dxa"/>`, w.indent)
+	}
+	fmt.Fprintf(w.out, `<w:tbl><w:tblPr><w:tblStyle w:val="PeanutTable"/><w:tblW w:w="%d" w:type="dxa"/>%s`+
+		`<w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/></w:tblPr><w:tblGrid>`, colW*cols, ind)
 	for range cols {
 		fmt.Fprintf(w.out, `<w:gridCol w:w="%d"/>`, colW)
 	}
@@ -363,18 +463,27 @@ func (w *writer) toc() {
 
 // collectBookmarks names a bookmark for each labelled figure, table and
 // equation, the first one only when a label is used twice (as references
-// resolve).
+// resolve), and for each heading outside footnotes, for `#anchor` links to
+// reach them by their label or id (doc.HeadingIDs).
 func (w *writer) collectBookmarks(blocks []doc.Block) {
 	w.bookmarks = map[string]string{}
 	w.placed = map[string]bool{}
+	w.anchors = map[string]string{}
+	w.headings = map[*doc.Block]string{}
 	used := map[string]bool{}
+	ids := doc.HeadingIDs(blocks)
 	var walk func([]doc.Block)
 	walk = func(bs []doc.Block) {
 		for i := range bs {
 			b := &bs[i]
+			if id := ids[b]; id != "" {
+				w.headings[b] = bookmarkName(id, used)
+				w.anchors[id] = w.headings[b]
+			}
 			if (b.Type == doc.BlockFigure || b.Type == doc.BlockTable || b.Type == doc.BlockEquation) && b.Label != "" && b.Number > 0 {
 				if _, ok := w.bookmarks[b.Label]; !ok {
 					w.bookmarks[b.Label] = bookmarkName(b.Label, used)
+					w.anchors[b.Label] = w.bookmarks[b.Label]
 				}
 			}
 			walk(b.Children)

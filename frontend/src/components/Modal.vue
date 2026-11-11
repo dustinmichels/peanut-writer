@@ -1,19 +1,32 @@
+<script lang="ts">
+// The open modals, latest (on top) last: only the top one answers keys.
+const stack: symbol[] = [];
+</script>
+
 <script setup lang="ts">
 import { onMounted, onUnmounted } from "vue";
 import { X } from "lucide-vue-next";
 
 defineProps<{ title: string; wide?: boolean }>();
 const emit = defineEmits<{ close: []; submit: [] }>();
+const me = Symbol();
 
 function key(e: KeyboardEvent) {
+  if (stack.at(-1) !== me) return;
   if (e.key === "Escape") emit("close");
   else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
     e.preventDefault(); // or a focused field submits the form as well
     emit("submit");
   }
 }
-onMounted(() => window.addEventListener("keydown", key));
-onUnmounted(() => window.removeEventListener("keydown", key));
+onMounted(() => {
+  stack.push(me);
+  window.addEventListener("keydown", key);
+});
+onUnmounted(() => {
+  stack.splice(stack.indexOf(me), 1);
+  window.removeEventListener("keydown", key);
+});
 </script>
 
 <template>

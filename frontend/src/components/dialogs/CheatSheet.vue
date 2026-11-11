@@ -5,7 +5,7 @@ const emit = defineEmits<{ close: [] }>();
 const rows: [string, string][] = [
   ["**bold**  *italic*  ~~strike~~", "Bold (⌘B), italic (⌘I), strikethrough"],
   ["`code`", "Code in a sentence"],
-  ["# Heading 1   ## Heading 2", "Headings (⌥⌘1, ⌥⌘2, ⌥⌘3)"],
+  ["# Heading 1   ## Heading 2", "Headings (⌥⌘1 – ⌥⌘4)"],
   ["- item   1. item", "Bulleted and numbered lists; Tab nests"],
   ["> quoted", "A quotation"],
   ["[text](https://…)", "A link"],

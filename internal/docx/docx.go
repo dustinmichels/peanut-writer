@@ -23,18 +23,21 @@ type Options struct {
 	// nil, or an error → write a short italic placeholder
 	// "[image: <file name>]" instead.
 	Rasterize func(path string, widthPt float64) ([]byte, error)
-	// Equation draws LaTeX math with sizePt text as PNG at 192 dpi; math in
-	// a line (display false) with its baseline at the picture's middle.
-	// nil, or an error → the LaTeX source, in code style.
-	Equation func(tex string, display bool, sizePt float64) ([]byte, error)
+	// Equations draws each formula with sizePt text as PNG at 192 dpi, math
+	// in a line (Display false) with its baseline at the picture's middle;
+	// the pictures are in the formulas' order. nil, or a nil picture → the
+	// LaTeX source, in code style.
+	Equations func(ms []doc.Math, sizePt float64) [][]byte
 }
 
 // Write renders d as a .docx file in style st.
 func Write(d *doc.Document, st templates.DocxStyle, opt Options) ([]byte, error) {
 	w := newWriter(st, opt)
+	w.dir = d.Dir
 	shown := d.Meta.Shown()
 	w.headerText = strings.TrimSpace(shown.Header)
 	w.collectBookmarks(d.Blocks)
+	w.drawMath(d.Blocks)
 	var body strings.Builder
 	w.out = &body
 	w.titleBlock(shown)
@@ -91,15 +94,20 @@ type writer struct {
 	pics    map[string]*pic // image cache, by path (and raster width); nil for one Word can't show
 	drawing int             // last drawing id
 
-	bookmarks  map[string]string // figure/table/equation label → bookmark name
-	placed     map[string]bool   // labels whose bookmark is written
+	bookmarks  map[string]string     // figure/table/equation label → bookmark name
+	placed     map[string]bool       // labels whose bookmark is written
+	headings   map[*doc.Block]string // heading → bookmark name
+	anchors    map[string]string     // what `#anchor` links name (a label or heading id) → bookmark name
 	bookmarkID int
+	dir        string // the folder links to files are relative to; "" for none
 
 	notes  []string // footnote parts, in order
 	inNote bool
 	prefix string // runs that start the next paragraph (a footnote's mark)
 
 	paraStyle  string        // style of body paragraphs here: "" (Normal), Quote, FootnoteText
+	indent     int           // twips in from the left margin the blocks being written start: in list items and quotes
+	right      int           // and from the right margin: in quotes
 	ordered    []orderedList // ordered list numbering instances
 	hasTOC     bool
 	headerText string // the front matter's header, shown in the page header; "" for none
@@ -176,8 +184,6 @@ func half(pt float64) int { return int(math.Round(pt * 2)) }
 
 // emu converts points to English Metric Units, the unit of drawings.
 func emu(pt float64) int64 { return int64(math.Round(pt * 12700)) }
-
-func (w *writer) textWidthPt() float64 { return float64(w.textW) / 20 }
 
 func (w *writer) textHeightPt() float64 { return float64(w.pageH-2*w.margin) / 20 }
 

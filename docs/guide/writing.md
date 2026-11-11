@@ -69,8 +69,14 @@ template.
 
 ## Footnotes, contents and page breaks
 
-- **References → Footnote** adds a numbered note at the cursor; the note's text goes at the end of the document and the
-  template places it at the foot of the page.
+- **References → Footnote** adds a numbered note at the cursor; the note's text goes with the other notes at the end of
+  the document, in order, and the template places it at the foot of the page. The cursor moves to the note so you can
+  type it; click its number to go back to the text.
+- In the text, a footnote shows as its number. Point at it to read the note, and click it to go to the note. Notes are
+  numbered in the order they appear, and adding or deleting one renumbers the rest. Deleting a footnote's number deletes
+  its note too (cutting it doesn't, so it can be pasted elsewhere).
+- A number with no note shows as a red **?**: click it to write the note. A note nothing points to also shows a red
+  **?** and isn't printed. Both are listed in the status bar.
 - **References → Contents** inserts a table of contents built from your headings. It updates by itself.
 - **Insert → Page Break** starts a new page. **Insert → Divider** draws a line between sections.
 

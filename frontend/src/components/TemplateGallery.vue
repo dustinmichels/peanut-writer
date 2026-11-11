@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { onMounted, reactive, watch } from "vue";
+import { onMounted, onUnmounted, reactive, watch } from "vue";
 import { DocService } from "../../bindings/peanut-writer";
 import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
 import { setTemplate } from "../lib/actions";
 import { docTemplates, state } from "../lib/store";
 
-// Previews by key: a template's id, and for the document's own one its
-// changes too, so a changed one is drawn again.
+// Preview URLs by key: a template's id and when its files last changed, and
+// for the document's own one its changes too, so a changed one is drawn again.
 const previews = reactive<Record<string, string>>({});
-const key = (t: Template) => (t.base ? `${t.id}:${t.base}:${JSON.stringify(t.style)}` : t.id);
+const key = (t: Template) => `${t.id}:${t.modified}:${t.base}:${JSON.stringify(t.style)}`;
+let mounted = true;
 
 async function load() {
+  // Drop the previews of templates since changed or gone.
+  const keys = new Set(docTemplates.value.map(key));
+  for (const [k, url] of Object.entries(previews)) {
+    if (keys.has(k)) continue;
+    if (url) URL.revokeObjectURL(url);
+    delete previews[k];
+  }
   for (const t of docTemplates.value) {
     const k = key(t);
     if (k in previews) continue;
@@ -18,13 +26,20 @@ async function load() {
     try {
       const svg = await DocService.TemplatePreview(t.id);
       // An <img> keeps each SVG's ids to itself.
-      previews[k] = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+      // Unless it was dropped (or the gallery closed) meanwhile.
+      if (mounted && k in previews) previews[k] = url;
+      else URL.revokeObjectURL(url);
     } catch {
       // Shown as loading.
     }
   }
 }
 onMounted(load);
+onUnmounted(() => {
+  mounted = false;
+  for (const url of Object.values(previews)) if (url) URL.revokeObjectURL(url);
+});
 watch(() => docTemplates.value.map(key).join("\n"), load);
 </script>
 

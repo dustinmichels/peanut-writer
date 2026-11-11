@@ -15,6 +15,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
+	gmparser "github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 )
@@ -35,27 +36,54 @@ var markdown = goldmark.New(goldmark.WithExtensions(
 		extension.RightAngleQuote:  "»",
 		extension.Apostrophe:       "’",
 	})),
-), goldmark.WithParserOptions(mathParsers...))
+), goldmark.WithParserOptions(append(mathParsers,
+	gmparser.WithASTTransformers(util.Prioritized(unusedNotes{}, 100)))...))
+
+var unusedNotesKey = gmparser.NewContextKey()
+
+// unusedNotes records the labels of footnotes nothing refers to, before the
+// footnote extension drops them (it runs at priority 999).
+type unusedNotes struct{}
+
+func (unusedNotes) Transform(root *ast.Document, _ text.Reader, pc gmparser.Context) {
+	var labels []string
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if fn, ok := n.(*extast.Footnote); ok && entering {
+			if fn.Index < 0 {
+				labels = append(labels, string(fn.Ref))
+			}
+			return ast.WalkSkipChildren, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	pc.Set(unusedNotesKey, labels)
+}
 
 // Parse reads source, resolving image paths against baseDir (the document's
 // folder).
 func Parse(source, baseDir string) *Document {
 	meta, body := splitFrontMatter(source)
 	src := []byte(body)
-	root := markdown.Parser().Parse(text.NewReader(src))
+	pc := gmparser.NewContext()
+	root := markdown.Parser().Parse(text.NewReader(src), gmparser.WithContext(pc))
 
 	// Lines are counted in the whole source: the front matter comes first.
 	lineBase := strings.Count(source, "\n") - strings.Count(body, "\n")
-	p := &parser{src: src, baseDir: baseDir, lineBase: lineBase, notes: map[int]ast.Node{}}
-	ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+	p := &parser{src: src, baseDir: baseDir, lineBase: lineBase, notes: map[int]ast.Node{}, dangling: map[string]bool{}}
+	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if fn, ok := n.(*extast.Footnote); ok && entering {
 			p.notes[fn.Index] = fn
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
 	})
+	if labels, ok := pc.Get(unusedNotesKey).([]string); ok {
+		for _, l := range labels {
+			p.warn("footnote nothing refers to: [^%s]", l)
+		}
+	}
 
-	d := &Document{Meta: meta}
+	d := &Document{Meta: meta, Dir: baseDir}
 	d.Blocks = p.blocks(root)
 	p.number(d.Blocks)
 	p.resolve(d.Blocks)
@@ -69,6 +97,7 @@ type parser struct {
 	lineBase int              // source lines before src (the front matter)
 	notes    map[int]ast.Node // footnote content by index
 	labels   map[string]Inline
+	dangling map[string]bool // footnote markers with no note, warned about
 	warnings []string
 }
 
@@ -273,6 +302,8 @@ func (p *parser) figure(n ast.Node) (Block, bool) {
 			rest.Write(c.Segment.Value(p.src))
 		case *ast.String:
 			rest.Write(c.Value)
+		case *extast.FootnoteBacklink:
+			// Added to a footnote's last paragraph: a figure there is still one.
 		default:
 			return Block{}, false
 		}
@@ -652,78 +683,87 @@ func isWordByte(c byte) bool {
 
 // --- Numbering and references ---------------------------------------------
 
-// number numbers figures, tables and labelled equations in document order
-// and records their labels.
-func (p *parser) number(blocks []Block) {
-	p.labels = map[string]Inline{}
-	figs, tables, eqs := 0, 0, 0
-	var walk func([]Block)
-	walk = func(bs []Block) {
-		for i := range bs {
-			b := &bs[i]
-			kind := ""
-			switch b.Type {
-			case BlockFigure:
-				figs++
-				b.Number, kind = figs, KindFigure
-			case BlockTable:
-				tables++
-				b.Number, kind = tables, KindTable
-			case BlockEquation:
-				if b.Label != "" && b.Error == "" { // one that can't be read isn't drawn as an equation
-					eqs++
-					b.Number, kind = eqs, KindEquation
-				}
-			}
-			if kind != "" && b.Label != "" {
-				if _, dup := p.labels[b.Label]; dup {
-					p.warn("label used twice: %s", b.Label)
-				} else {
-					p.labels[b.Label] = Inline{Kind: kind, Number: b.Number}
-				}
-			}
-			walk(b.Children)
-			for _, item := range b.Items {
-				walk(item)
-			}
-		}
-	}
-	walk(blocks)
-}
-
-// resolve fills in what each reference points to.
-func (p *parser) resolve(blocks []Block) {
+// walk visits blocks in document order, each before its text, and inlines
+// within it, including footnotes' blocks where their marks are: the order
+// Typst lays them out and counts them in.
+func walk(bs []Block, block func(*Block), inline func(*Inline)) {
 	var inl func([]Inline)
-	var blk func([]Block)
 	inl = func(xs []Inline) {
 		for i := range xs {
 			x := &xs[i]
-			if x.Type == InlineRef {
-				if t, ok := p.labels[x.Label]; ok {
-					x.Kind, x.Number = t.Kind, t.Number
-				} else {
-					p.warn("reference to unknown label: @%s", x.Label)
-				}
-			}
+			inline(x)
 			inl(x.Children)
-			blk(x.Blocks)
+			walk(x.Blocks, block, inline)
 		}
 	}
-	blk = func(bs []Block) {
-		for i := range bs {
-			b := &bs[i]
-			inl(b.Inlines)
-			inl(b.Caption)
-			for _, row := range append([][][]Inline{b.Header}, b.Rows...) {
-				for _, cell := range row {
-					inl(cell)
+	for i := range bs {
+		b := &bs[i]
+		block(b)
+		inl(b.Inlines)
+		inl(b.Caption)
+		for _, row := range append([][][]Inline{b.Header}, b.Rows...) {
+			for _, cell := range row {
+				inl(cell)
+			}
+		}
+		walk(b.Children, block, inline)
+		for _, item := range b.Items {
+			walk(item, block, inline)
+		}
+	}
+}
+
+// number numbers figures, tables and labelled equations in document order
+// (those in footnotes where the note's mark is) and records their labels.
+func (p *parser) number(blocks []Block) {
+	p.labels = map[string]Inline{}
+	figs, tables, eqs := 0, 0, 0
+	walk(blocks, func(b *Block) {
+		kind := ""
+		switch b.Type {
+		case BlockFigure:
+			figs++
+			b.Number, kind = figs, KindFigure
+		case BlockTable:
+			tables++
+			b.Number, kind = tables, KindTable
+		case BlockEquation:
+			if b.Label != "" && b.Error == "" { // one that can't be read isn't drawn as an equation
+				eqs++
+				b.Number, kind = eqs, KindEquation
+			}
+		}
+		if kind != "" && b.Label != "" {
+			if _, dup := p.labels[b.Label]; dup {
+				p.warn("label used twice: %s", b.Label)
+			} else {
+				p.labels[b.Label] = Inline{Kind: kind, Number: b.Number}
+			}
+		}
+	}, func(*Inline) {})
+}
+
+// danglingRe is a footnote mark left as text: no note has its label.
+var danglingRe = regexp.MustCompile(`\[\^([^\]\s]+)\]`)
+
+// resolve fills in what each reference points to, and warns about
+// footnote marks with no note.
+func (p *parser) resolve(blocks []Block) {
+	walk(blocks, func(*Block) {}, func(x *Inline) {
+		switch x.Type {
+		case InlineRef:
+			if t, ok := p.labels[x.Label]; ok {
+				x.Kind, x.Number = t.Kind, t.Number
+			} else {
+				p.warn("reference to unknown label: @%s", x.Label)
+			}
+		case InlineText:
+			for _, m := range danglingRe.FindAllStringSubmatch(x.Text, -1) {
+				if !p.dangling[m[1]] {
+					p.dangling[m[1]] = true
+					p.warn("footnote with no note: [^%s]", m[1])
 				}
 			}
-			blk(b.Children)
-			for _, item := range b.Items {
-				blk(item)
-			}
 		}
-	}
-	blk(blocks)
+	})
 }

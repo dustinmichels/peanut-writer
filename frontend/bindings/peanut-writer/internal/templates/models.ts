@@ -159,4 +159,9 @@ export interface Template {
      * a custom template's changes to its base; a saved one's (see Save) to the template it was made from
      */
     "style": Style;
+
+    /**
+     * when a user template's files last changed, in Unix milliseconds; 0 for a built-in one
+     */
+    "modified": number;
 }

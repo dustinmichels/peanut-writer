@@ -1,0 +1,9 @@
+figure 1 fig:peanut width=60 align=right
+figure 2 fig:px
+figure 3 fig:quoted width=40 align=left
+figure 4 fig:next width=30
+table 1 tbl:sales
+table 2
+table 3 tbl:colon
+equation 1 eq:energy
+equation 2 eq:pythagoras

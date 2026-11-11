@@ -21,6 +21,7 @@ import {
 } from "@codemirror/language";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import {
+  ChangeSet,
   type ChangeSpec,
   Compartment,
   EditorSelection,
@@ -52,6 +53,8 @@ import {
   figureMarkdown,
   figureSpec,
   type FigureSpec,
+  type FootnoteMark,
+  type Footnotes,
   type Item,
   type Kind,
   type RefAt,
@@ -61,7 +64,9 @@ import {
   type Position,
   readFrontMatter,
   relabelChanges,
+  renumberFootnotes,
   scan,
+  scanFootnotes,
   type Table,
 } from "./markdown";
 import { math, mathTag } from "./math";
@@ -88,6 +93,12 @@ export const itemsField = StateField.define<Item[]>({
 const frontMatterEnd = StateField.define<number>({
   create: (s) => readFrontMatter(s.doc.toString()).to,
   update: (end, tr) => (tr.docChanged ? readFrontMatter(tr.state.doc.toString()).to : end),
+});
+
+// The footnote marks and notes.
+const footnotesField = StateField.define<Footnotes>({
+  create: (s) => scanFootnotes(s.doc.toString()),
+  update: (fn, tr) => (tr.docChanged ? scanFootnotes(tr.state.doc.toString()) : fn),
 });
 
 // bodyHint shows "Begin typing…" where the text goes while there's none, under
@@ -649,6 +660,86 @@ class RefWidget extends WidgetType {
   }
 }
 
+// goTo puts the cursor at pos and scrolls it to the middle of the editor.
+function goTo(view: EditorView, pos: number) {
+  view.dispatch({
+    selection: { anchor: pos },
+    effects: EditorView.scrollIntoView(pos, { y: "center" }),
+  });
+  view.focus();
+}
+
+// noteTip is a note's text for a tooltip: plain, on one line, not too long.
+function noteTip(text: string): string {
+  const t = plain(text.replace(/\s+/g, " ")).trim();
+  return t.length > 300 ? `${t.slice(0, 300)}…` : t;
+}
+
+// FootnoteMarkWidget stands in for a footnote mark: its number, raised, which
+// shows the note's text on hover and goes to the note on a click. A mark with
+// no note reads "?", and a click adds the note.
+class FootnoteMarkWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly number: number,
+    readonly note: string | null,
+  ) {
+    super();
+  }
+  eq(o: FootnoteMarkWidget) {
+    return o.label === this.label && o.number === this.number && o.note === this.note;
+  }
+  toDOM(view: EditorView) {
+    const el = document.createElement("span");
+    el.className =
+      this.note === null
+        ? "pw-footnote-ref pw-footnote-mark broken"
+        : "pw-footnote-ref pw-footnote-mark";
+    el.textContent = this.number > 0 ? String(this.number) : "?";
+    el.title =
+      this.note === null
+        ? `No note is labelled ${this.label}. Click to add it.`
+        : `${noteTip(this.note) || "(The note is empty.)"}\n\nClick to go to the note.`;
+    el.onmousedown = (e) => e.preventDefault();
+    el.onclick = () => {
+      const note = view.state.field(footnotesField).notes.find((n) => n.label === this.label);
+      if (note) goTo(view, note.textFrom);
+      else addNote(view, this.label, view.posAtDOM(el), false);
+    };
+    return el;
+  }
+}
+
+// NoteHeadWidget stands in for a note's `[^label]: `: the note's number, a
+// click going back to its mark. A note nothing marks reads "?".
+class NoteHeadWidget extends WidgetType {
+  constructor(
+    readonly label: string,
+    readonly number: number,
+    readonly marked: boolean,
+  ) {
+    super();
+  }
+  eq(o: NoteHeadWidget) {
+    return o.label === this.label && o.number === this.number && o.marked === this.marked;
+  }
+  toDOM(view: EditorView) {
+    const el = document.createElement("span");
+    el.className = this.marked ? "pw-note-head" : "pw-note-head orphan";
+    el.textContent = this.number > 0 ? String(this.number) : this.marked ? this.label : "?";
+    el.title = this.marked
+      ? "Click to go back to the footnote's mark."
+      : `Nothing in the text marks this note (${this.label}): it isn't printed.`;
+    el.onmousedown = (e) => e.preventDefault();
+    el.onclick = () => {
+      const marks = view.state.field(footnotesField).marks.filter((m) => m.label === this.label);
+      const mark = marks.find((m) => !m.inNote) ?? marks[0];
+      if (mark) goTo(view, mark.to);
+    };
+    return el;
+  }
+}
+
 class PropertiesCard extends WidgetType {
   constructor(
     readonly title: string,
@@ -687,7 +778,6 @@ class PropertiesCard extends WidgetType {
 }
 
 const refRe = /(^|[^\w])@((?:fig|tbl|eq):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
-const footRe = /\[\^[^\]\s]+\](?!:)/g;
 
 // Whether the editor shows the document's Markdown as plain text (mono, only
 // syntax colors), or hides its marks and puts figures and tables in place
@@ -715,6 +805,17 @@ export function setShowMarkdown(view: EditorView, show: boolean) {
 interface Decos {
   deco: DecorationSet;
   atomic: DecorationSet;
+}
+
+// shownDate is the date as the document shows it: `today` is today's date,
+// written as internal/doc writes it ("January 2, 2006").
+function shownDate(date: string | undefined): string | undefined {
+  if (date?.trim().toLowerCase() !== "today") return date;
+  return new Date().toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function buildDecorations(state: EditorState, handlers: Handlers): Decos {
@@ -746,7 +847,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       }),
     });
   } else {
-    const by = [fm.meta.author, fm.meta.topic, fm.meta.date].filter(Boolean).join(" · ");
+    const by = [fm.meta.author, fm.meta.topic, shownDate(fm.meta.date)].filter(Boolean).join(" · ");
     const end = doc.lineAt(Math.max(fm.to - 1, 0)).to;
     ranges.push({
       from: 0,
@@ -760,10 +861,11 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   }
 
   // Figures and tables replace their Markdown; nothing else is decorated
-  // inside them. Equations stay as their TeX.
+  // inside them. Equations stay as their TeX, and figures and tables in lists
+  // and quotes as their Markdown.
   const hidden: Item[] = [];
   for (const it of items) {
-    if (it.kind === "equation") continue;
+    if (it.kind === "equation" || it.prefix !== undefined) continue;
     hidden.push(it);
     if (it.kind === "figure") {
       ranges.push({
@@ -786,7 +888,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     }
   }
 
-  // Cross-references and footnote markers, outside code and math.
+  // Cross-references and footnote marks, outside code and math.
   const text = doc.toString();
   const tree = syntaxTree(state);
   const inCode = (pos: number) => {
@@ -795,11 +897,11 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     }
     return false;
   };
+  const out = (pos: number) => pos < fm.to || hidden.some((h) => pos >= h.from && pos <= h.to);
   for (const m of text.matchAll(refRe)) {
     const from = m.index! + m[1].length;
     const to = from + m[2].length + 1;
-    if (from < fm.to || inCode(from) || hidden.some((h) => from >= h.from && from <= h.to))
-      continue;
+    if (out(from) || inCode(from)) continue;
     const target = labels.get(m[2]);
     const label = target ? `${kindName[target.kind]} ${target.number}` : `?? ${m[2]}`;
     ranges.push({
@@ -811,13 +913,45 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       atomic: true,
     });
   }
-  for (const m of text.matchAll(footRe)) {
-    const at = m.index!;
-    if (at < fm.to || inCode(at) || hidden.some((h) => at >= h.from && at <= h.to)) continue;
+  const { marks, notes } = state.field(footnotesField);
+  const noteText = new Map<string, string>();
+  for (const n of notes) if (!noteText.has(n.label)) noteText.set(n.label, n.text);
+  for (const m of marks) {
+    if (out(m.from)) continue;
+    if (m.inNote) {
+      // A note within a note is printed in brackets (Word, the web) or as
+      // a note of its own: its mark stays as written.
+      ranges.push({ from: m.from, to: m.to, deco: Decoration.mark({ class: "pw-footnote-ref" }) });
+      continue;
+    }
     ranges.push({
-      from: m.index!,
-      to: m.index! + m[0].length,
-      deco: Decoration.mark({ class: "pw-footnote-ref" }),
+      from: m.from,
+      to: m.to,
+      deco: Decoration.replace({
+        widget: new FootnoteMarkWidget(m.label, m.number, noteText.get(m.label) ?? null),
+      }),
+      atomic: true,
+    });
+  }
+  // Notes: smaller text, the `[^label]: ` shown as the note's number.
+  const first = new Map<string, FootnoteMark>();
+  for (const m of marks)
+    if (!first.has(m.label) || (first.get(m.label)!.inNote && !m.inNote)) first.set(m.label, m);
+  for (const n of notes) {
+    if (out(n.from)) continue;
+    const last = doc.lineAt(Math.max(n.to, n.textFrom)).number;
+    for (let l = n.line; l <= last; l++) {
+      const at = doc.line(l).from;
+      ranges.push({ from: at, to: at, deco: Decoration.line({ class: "pw-note-line" }) });
+    }
+    const mark = first.get(n.label);
+    ranges.push({
+      from: n.from,
+      to: n.textFrom,
+      deco: Decoration.replace({
+        widget: new NoteHeadWidget(n.label, mark && !mark.inNote ? mark.number : 0, !!mark),
+      }),
+      atomic: true,
     });
   }
 
@@ -1026,12 +1160,14 @@ function deadLine(state: EditorState, line: Line): "hr" | "fence" | null {
   return null;
 }
 
-// covered tells whether pos is in the front matter or a figure or table,
-// which stand in for their Markdown whole.
+// covered tells whether pos is in the front matter or a figure or table
+// shown as a widget, which stands in for its Markdown whole.
 function covered(state: EditorState, pos: number): boolean {
   return (
     pos < state.field(frontMatterEnd) ||
-    state.field(itemsField).some((x) => x.kind !== "equation" && pos >= x.from && pos <= x.to)
+    state
+      .field(itemsField)
+      .some((x) => x.kind !== "equation" && x.prefix === undefined && pos >= x.from && pos <= x.to)
   );
 }
 
@@ -1293,6 +1429,59 @@ const followLabels = EditorState.transactionFilter.of((tr) => {
   return changes.length ? [tr, { changes, sequential: true }] : tr;
 });
 
+// followFootnotes keeps numbered footnotes numbered 1, 2, 3… in order, in the
+// same undoable step: deleting a mark whole (as the editor shows it) deletes
+// its note too, unless another mark shares it, and pasting or dropping text
+// with marks renumbers them. Cutting leaves the note, for the mark to be
+// pasted back; deleting part of a mark in the Markdown leaves it alone.
+const followFootnotes = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged) return tr;
+  const paste = tr.isUserEvent("input.paste") || tr.isUserEvent("move.drop");
+  const edit =
+    (tr.isUserEvent("input") || tr.isUserEvent("delete")) && !tr.isUserEvent("delete.cut");
+  if (!paste && !edit) return tr;
+  const before = tr.startState.field(footnotesField);
+  const after = tr.state.field(footnotesField);
+  const whole = (m: FootnoteMark) => {
+    let hit = false;
+    tr.changes.iterChangedRanges((fromA, toA) => {
+      if (fromA <= m.from && toA >= m.to) hit = true;
+    });
+    return hit;
+  };
+  const gone = new Set<string>();
+  for (const m of before.marks) {
+    if (gone.has(m.label) || after.marks.some((x) => x.label === m.label)) continue;
+    if (before.marks.every((x) => x.label !== m.label || whole(x))) gone.add(m.label);
+  }
+  if (!paste && !gone.size) return tr;
+
+  // Each note going takes the blank lines after it (or, at the end, before it).
+  const doc = tr.newDoc;
+  const text = doc.toString();
+  const spans: { from: number; to: number }[] = [];
+  for (const n of after.notes) {
+    if (!gone.has(n.label)) continue;
+    let { from, to } = n;
+    while (to < text.length && /\s/.test(text[to])) to++;
+    if (to === text.length) while (from > 0 && /\s/.test(text[from - 1])) from--;
+    spans.push({ from, to });
+  }
+  spans.sort((a, b) => a.from - b.from);
+  const cuts: { from: number; to: number; insert?: string }[] = [];
+  for (const s of spans) {
+    const last = cuts[cuts.length - 1];
+    if (last && s.from <= last.to) last.to = Math.max(last.to, s.to);
+    else cuts.push({ ...s });
+  }
+  const end = cuts[cuts.length - 1];
+  if (end && end.to === text.length && end.from > 0) end.insert = "\n";
+  const removed = ChangeSet.of(cuts, doc.length);
+  const rest = removed.apply(doc);
+  const changes = removed.compose(ChangeSet.of(renumberFootnotes(rest.toString()), rest.length));
+  return changes.empty ? tr : [tr, { changes, sequential: true }];
+});
+
 // moveChar moves the cursor one character, stepping over hidden marks as if
 // they weren't there. Marks at the end (or start) of a line are a step of
 // their own, out of (or into) the styled text, before the line break.
@@ -1356,8 +1545,9 @@ function emptied(
 
 // deleteChar deletes the character before (or after) the cursor as it reads,
 // past hidden marks: a heading, quote or bullet goes whole from the start of
-// its text, a rule from the line after, and styled text with its last
-// character. Code fences are stepped into, not broken.
+// its text, a rule from the line after, styled text with its last character,
+// and a widget standing in for text (a reference, a footnote mark) whole.
+// Code fences are stepped into, not broken.
 function deleteChar(view: EditorView, forward: boolean): boolean {
   const state = view.state;
   if (state.facet(showMarkdown)) return false;
@@ -1397,9 +1587,15 @@ function deleteChar(view: EditorView, forward: boolean): boolean {
     return forward ? del(p, p + 1) : del(p - 1, p);
   }
   const q = line.from + findClusterBreak(line.text, p - line.from, forward);
-  const [from, to] = forward ? [p, q] : [q, p];
+  let [from, to] = forward ? [p, q] : [q, p];
   const whole = emptied(state, from, to);
-  return whole ? del(whole.from, whole.to) : del(from, to);
+  if (whole) return del(whole.from, whole.to);
+  for (const atomic of state.facet(EditorView.atomicRanges)) {
+    atomic(view).between(from, to, (a, b) => {
+      if (a < to && b > from) [from, to] = [Math.min(from, a), Math.max(to, b)];
+    });
+  }
+  return del(from, to);
 }
 
 const hiddenKeymap = keymap.of([
@@ -1665,10 +1861,11 @@ export function toggleCodeBlock(view: EditorView) {
 }
 
 // insertBlock puts text in a paragraph of its own at the cursor (or in place
-// of replace), with blank lines around it, and returns where it starts.
+// of replace), with blank lines around it, and returns where it starts. text
+// may depend on where that is.
 export function insertBlock(
   view: EditorView,
-  text: string,
+  text: string | ((start: number) => string),
   opts: {
     replace?: { from: number; to: number };
     at?: number;
@@ -1706,6 +1903,7 @@ export function insertBlock(
           ? "\n"
           : "\n\n";
   const start = from + lead.length;
+  if (typeof text === "function") text = text(start);
   const cursor = start + (opts.cursorOffset ?? text.length);
   view.dispatch({
     changes: { from, to, insert: lead + text + trail },
@@ -1715,6 +1913,13 @@ export function insertBlock(
   });
   view.focus();
   return start;
+}
+
+// insertDivider puts a divider at the cursor: `---`, or `***` at the very
+// start of the document, where `---` would open front matter (taking the
+// text up to a later `---` line with it).
+export function insertDivider(view: EditorView) {
+  insertBlock(view, (start) => (start === 0 ? "***" : "---"));
 }
 
 export function insertText(view: EditorView, text: string, select = false) {
@@ -1727,23 +1932,57 @@ export function insertText(view: EditorView, text: string, select = false) {
   view.focus();
 }
 
-// insertFootnote adds a marker at the cursor and the note at the end of the
-// document, and moves the cursor there to type it.
+// insertFootnote adds a numbered mark at the cursor and its note with the
+// others, in order, renumbering the notes after it, and moves the cursor
+// there to type it (a click on its number goes back).
 export function insertFootnote(view: EditorView) {
-  const doc = view.state.doc.toString();
-  let n = 1;
-  while (doc.includes(`[^${n}]`)) n++;
-  const pos = view.state.selection.main.head;
-  const end = view.state.doc.length;
-  const tail = doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n";
-  const note = `${tail}[^${n}]: `;
+  const fn = view.state.field(footnotesField);
+  const used = [...fn.marks, ...fn.notes].map((x) => x.label).filter((l) => /^\d+$/.test(l));
+  const label = String(Math.max(0, ...used.map(Number)) + 1);
+  addNote(view, label, view.state.selection.main.head, true);
+}
+
+// addNote adds an empty note for label (and its mark at pos, if mark): after
+// the note of the nearest mark before pos, or before the first note, or at
+// the end, then renumbers, and puts the cursor in the note.
+function addNote(view: EditorView, label: string, pos: number, mark: boolean) {
+  const state = view.state;
+  const { marks, notes } = state.field(footnotesField);
+  const head = `[^${label}]: `;
+  const prev = marks.filter(
+    (m) => !m.inNote && m.to <= pos && m.label !== label && notes.some((n) => n.label === m.label),
+  );
+  const after = prev.length
+    ? notes.find((n) => n.label === prev[prev.length - 1].label)
+    : undefined;
+  let at: number;
+  let note: string;
+  let cursor: number; // in note
+  if (after) {
+    at = after.to;
+    note = `\n\n${head}`;
+    cursor = note.length;
+  } else if (notes.length) {
+    at = notes[0].from;
+    note = `${head}\n\n`;
+    cursor = head.length;
+  } else {
+    const doc = state.doc.toString();
+    at = doc.length;
+    note = `${doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n"}${head}`;
+    cursor = note.length;
+  }
+  const added = state.changes([
+    ...(mark ? [{ from: pos, insert: `[^${label}]` }] : []),
+    { from: at, insert: note },
+  ]);
+  const doc = added.apply(state.doc);
+  const renumbered = ChangeSet.of(renumberFootnotes(doc.toString()), doc.length);
+  const anchor = renumbered.mapPos(added.mapPos(at, 1) - note.length + cursor, 1);
   view.dispatch({
-    changes: [
-      { from: pos, insert: `[^${n}]` },
-      { from: end, insert: note },
-    ],
-    selection: { anchor: end + `[^${n}]`.length + note.length },
-    scrollIntoView: true,
+    changes: added.compose(renumbered),
+    selection: { anchor },
+    effects: EditorView.scrollIntoView(anchor, { y: "center" }),
     userEvent: "input",
   });
   view.focus();
@@ -1815,12 +2054,14 @@ export function createEditor(
     { key: "Mod-Alt-1", run: (v) => (setBlockStyle(v, "h1"), true) },
     { key: "Mod-Alt-2", run: (v) => (setBlockStyle(v, "h2"), true) },
     { key: "Mod-Alt-3", run: (v) => (setBlockStyle(v, "h3"), true) },
+    { key: "Mod-Alt-4", run: (v) => (setBlockStyle(v, "h4"), true) },
     { key: "Mod-Alt-0", run: (v) => (setBlockStyle(v, "p"), true) },
     { key: "Tab", run: indentMore, shift: indentLess },
   ]);
 
   const extensions: Extension[] = [
     itemsField,
+    footnotesField,
     frontMatterEnd,
     history(),
     drawSelection(),
@@ -1844,6 +2085,7 @@ export function createEditor(
     settleCursor,
     guardProperties,
     followLabels,
+    followFootnotes,
     EditorView.contentAttributes.of({
       spellcheck: "true",
       autocorrect: "on",

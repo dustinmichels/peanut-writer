@@ -2,41 +2,49 @@ package docx
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"peanut-writer/internal/doc"
 )
 
-// Word gets LaTeX math as pictures drawn by Options.Equation (Word's own
+// Word gets LaTeX math as pictures drawn by Options.Equations (Word's own
 // equations would need the LaTeX converted to Office Math), or as its
 // source when it can't be drawn.
 
-// mathPPI is the resolution Options.Equation draws at.
+// mathPPI is the resolution Options.Equations draws at.
 const mathPPI = 192
 
-// equationPic is tex drawn by Options.Equation; nil when it can't be.
-func (w *writer) equationPic(tex string, display bool) *pic {
-	if w.opt.Equation == nil {
-		return nil
+func mathKey(tex string, display bool) string { return fmt.Sprintf("math\x00%t\x00%s", display, tex) }
+
+// drawMath draws all the math in bs, in one call of Options.Equations.
+func (w *writer) drawMath(bs []doc.Block) {
+	if w.opt.Equations == nil {
+		return
 	}
-	key := fmt.Sprintf("math\x00%t\x00%s", display, tex)
-	if p, ok := w.pics[key]; ok {
-		return p
+	ms := doc.ReadableMath(bs)
+	if len(ms) == 0 {
+		return
 	}
-	var p *pic
-	if data, err := w.opt.Equation(tex, display, w.st.FontSize); err == nil {
-		p = decodePic(data)
+	pics := w.opt.Equations(ms, w.st.FontSize)
+	for i, m := range ms {
+		var p *pic
+		if i < len(pics) && pics[i] != nil {
+			p = decodePic(pics[i])
+		}
+		w.pics[mathKey(m.TeX, m.Display)] = p
 	}
-	w.pics[key] = p
-	return p
 }
 
-// picSize is p's size in points as drawn by Options.Equation, shrunk to
+// equationPic is tex as drawMath drew it; nil when it couldn't be.
+func (w *writer) equationPic(tex string, display bool) *pic {
+	return w.pics[mathKey(tex, display)]
+}
+
+// picSize is p's size in points as drawn by Options.Equations, shrunk to
 // fit the text width.
 func (w *writer) picSize(p *pic) (float64, float64) {
 	wPt, hPt := float64(p.px)*72/mathPPI, float64(p.py)*72/mathPPI
-	if maxW := w.textWidthPt(); wPt > maxW {
+	if maxW := float64(w.availW()) / 20; wPt > maxW {
 		wPt, hPt = maxW, hPt*maxW/wPt
 	}
 	return wPt, hPt
@@ -74,7 +82,7 @@ func (w *writer) equation(b *doc.Block) {
 		runs = w.run(b.Text, runProps{code: true})
 	}
 	if b.Number == 0 {
-		w.para("Equation", "", runs)
+		w.para("Equation", w.ind("", 0), runs)
 		return
 	}
 	var sb strings.Builder
@@ -87,10 +95,12 @@ func (w *writer) equation(b *doc.Block) {
 	} else {
 		name = ""
 	}
-	w.field(&sb, `SEQ Equation \* ARABIC`, strconv.Itoa(b.Number), runProps{})
+	w.seq(&sb, "Equation", b.Number)
 	if name != "" {
 		fmt.Fprintf(&sb, `<w:bookmarkEnd w:id="%d"/>`, w.bookmarkID)
 	}
 	sb.WriteString(w.run(")", runProps{}))
-	w.para("Equation", fmt.Sprintf(`<w:tabs><w:tab w:val="center" w:pos="%d"/><w:tab w:val="right" w:pos="%d"/></w:tabs><w:jc w:val="left"/>`, w.textW/2, w.textW), sb.String())
+	// Tab stops are measured from the margin, not the indent.
+	w.para("Equation", fmt.Sprintf(`<w:tabs><w:tab w:val="center" w:pos="%d"/><w:tab w:val="right" w:pos="%d"/></w:tabs>%s<w:jc w:val="left"/>`,
+		w.indent+w.availW()/2, w.textW-w.right, w.ind("", 0)), sb.String())
 }

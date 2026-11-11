@@ -13,7 +13,7 @@ import StatusBar from "./components/StatusBar.vue";
 import VersionsPane from "./components/VersionsPane.vue";
 import Dialogs from "./components/Dialogs.vue";
 import Toasts from "./components/Toasts.vue";
-import { loadDoc, menu, openRecent } from "./lib/actions";
+import { loadDoc, menu, openRecent, refreshTemplates } from "./lib/actions";
 import { revealLine, revealSource } from "./lib/editor";
 import { syncScroll } from "./lib/scrollsync";
 import { editor, errorText, state, toast } from "./lib/store";
@@ -89,6 +89,9 @@ onMounted(async () => {
   // A file dropped outside the editor mustn't replace the page.
   window.addEventListener("dragover", (e) => e.preventDefault());
   window.addEventListener("drop", (e) => e.preventDefault());
+  // User templates are edited in a text editor (Design → Edit): coming back
+  // picks up their changes.
+  window.addEventListener("focus", () => void refreshTemplates());
   try {
     const info = await DocService.Startup();
     state.templates = info.templates ?? [];

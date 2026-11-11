@@ -10,17 +10,15 @@
 // The live preview (not PDF export) compiles with `--input peanut-preview=1`.
 #let _preview = sys.inputs.at("peanut-preview", default: "") == "1"
 
-// `--input peanut-math=source` shows all math as its LaTeX source: the
-// preview's fallback when mitex can't read some of it.
-#let _math_source = sys.inputs.at("peanut-math", default: "") == "source"
-
 // _math is LaTeX math (display: on its own line), or its source in red when
-// it can't be read. Empty math has no text (doc.json omits empty fields).
+// it can't be read: displayed, still an equation, so its number and the
+// references to it stay. Empty math has no text (doc.json omits empty
+// fields).
 #let _math(n, display: false, ..args) = {
   let tex = n.at("text", default: "")
-  if n.at("error", default: "") != "" or _math_source {
+  if n.at("error", default: "") != "" {
     let src = text(fill: rgb("#b42318"), raw(tex))
-    if display { block(width: 100%, align(center, src)) } else { src }
+    if display { math.equation(block: true, src, ..args) } else { src }
   } else {
     mimath(tex, block: display, ..args)
   }
@@ -73,8 +71,7 @@
     if n.at("src", default: "") != "" { box(image(n.src, height: 1.2em), baseline: 20%) } else { [\[image\]] }
   }
   else if t == "ref" {
-    if n.at("kind", default: "") == "equation" and _math_source { text(weight: "bold")[??] }
-    else if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
+    if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
   }
   else if t == "footnote" {
     // A note whose text isn't typed yet ("[^1]: ") has no blocks.
@@ -109,7 +106,7 @@
   else if t == "toc" { outline() }
   else if t == "equation" {
     // Only a labelled equation is numbered.
-    let numbered = n.at("number", default: 0) > 0 and not _math_source
+    let numbered = n.at("number", default: 0) > 0
     let eq = _math(n, display: true, numbering: if numbered { "(1)" } else { none })
     if numbered [#eq#label(n.label)] else { eq }
   }

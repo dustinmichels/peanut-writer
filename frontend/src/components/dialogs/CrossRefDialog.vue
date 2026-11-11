@@ -37,7 +37,7 @@ function unlink() {
 }
 
 function key(e: KeyboardEvent) {
-  if (e.metaKey || e.ctrlKey) return; // ⌘↩ is the Modal's
+  if (e.metaKey || e.ctrlKey || state.cheatSheet) return; // ⌘↩ is the Modal's; the cheat sheet is on top
   if (e.key === "ArrowDown") picked.value = Math.min(picked.value + 1, list.value.length - 1);
   else if (e.key === "ArrowUp") picked.value = Math.max(picked.value - 1, 0);
   else if (e.key === "Enter") insert(list.value[picked.value]);

@@ -1,0 +1,7 @@
+table 1 tbl:multi
+table 2
+figure 1 fig:grid pictures=3 columns=2
+figure 2 fig:grid2 pictures=2 columns=2 width=80 align=left
+figure 3 fig:tight pictures=2 columns=2
+figure 4 fig:lower pictures=2 columns=2
+figure 5 fig:bare pictures=2 columns=2

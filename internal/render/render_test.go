@@ -28,7 +28,7 @@ abstract: Short.
 
 Text with **bold**, *emph*, ~~strike~~, ` + "`code`" + `, a [link](https://example.com),
 a hard  
-break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b, @eq:e and @fig:nope.
+break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b, @eq:e, @fig:noted and @fig:nope.
 
 Math: $\frac{a}{b}$, $$\sum_{i=1}^n i$$ in a line, and $x}$ that can't be read.
 
@@ -68,7 +68,10 @@ Table: Numbers {#tbl:b}
 
 ## Two[^h]
 
-[^n]: The *note*.
+[^n]: The *note*, with a figure.
+
+    ![In a note](images/p.svg){#fig:noted}
+
 [^h]: A heading's note.
 [^e]:
 `
@@ -115,31 +118,45 @@ func TestEveryTemplateRendersEverything(t *testing.T) {
 	if !bytes.HasPrefix(png, []byte("\x89PNG")) {
 		t.Error("PNG: not a PNG")
 	}
-	for _, display := range []bool{false, true} {
-		png, err := ty.Equation(ctx, `\frac{a}{b}`, display, 11, "png")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !bytes.HasPrefix(png, []byte("\x89PNG")) {
-			t.Error("Equation: not a PNG")
-		}
+	// Math mitex can't read gets no picture; the rest keep their places.
+	ms := []doc.Math{{TeX: `\frac{a}{b}`}, {TeX: `\left( x`}, {TeX: `\frac{a}{b}`, Display: true}}
+	pics, err := ty.Equations(ctx, ms, 11, "png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pics) != 3 || pics[1] != nil || !bytes.HasPrefix(pics[0], []byte("\x89PNG")) || !bytes.HasPrefix(pics[2], []byte("\x89PNG")) {
+		t.Fatalf("Equations: want PNG, nil, PNG; got %d pictures", len(pics))
+	}
+	if bytes.Equal(pics[0], pics[2]) {
+		t.Error("Equations: inline and display math drawn the same")
 	}
 }
 
-// Math mitex can't read shows as LaTeX, with a warning, rather than
-// stopping the preview.
+// Math mitex can't read shows as LaTeX, with a warning naming it, rather
+// than stopping the preview or PDF; the rest of the math is still drawn,
+// and a reference to the unreadable equation still has its number.
 func TestUnreadableMathFallsBack(t *testing.T) {
 	ty, err := Find()
 	if err != nil {
 		t.Skip(err)
 	}
-	d := doc.Parse("See @eq:a.\n\n$$ \\text{a $ b} $$ {#eq:a}\n", "")
+	bad1, bad2 := `\text{a $ b}`, `\left( x`
+	d := doc.Parse("See @eq:a and $x^2$ and $"+bad2+"$.\n\n$$ "+bad1+" $$ {#eq:a}\n\n$$ \\frac{1}{2} $$\n", "")
 	pages, warnings, err := ty.Preview(context.Background(), d, templates.List()[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pages) == 0 || len(warnings) == 0 || !strings.Contains(warnings[len(warnings)-1], "math can't be read") {
-		t.Errorf("%d pages, warnings %q", len(pages), warnings)
+	var unreadable []string
+	for _, w := range warnings {
+		if strings.HasPrefix(w, "math can't be read") {
+			unreadable = append(unreadable, w)
+		}
+	}
+	if len(pages) == 0 || len(unreadable) != 2 || !strings.HasSuffix(unreadable[0], bad2) || !strings.HasSuffix(unreadable[1], bad1) {
+		t.Fatalf("%d pages, warnings %q", len(pages), warnings)
+	}
+	if _, err := ty.PDF(context.Background(), d, templates.List()[0]); err != nil {
+		t.Errorf("PDF: %v", err)
 	}
 }
 
@@ -201,9 +218,9 @@ func TestTypstCantReadOtherFiles(t *testing.T) {
 		`\raisebox{2pt * 2}{x}`,
 	} {
 		d := doc.Parse("$"+tex+"$", "")
-		_, _, err := ty.Preview(ctx, d, templates.List()[0])
-		if err == nil || !strings.Contains(err.Error(), "not a length") {
-			t.Errorf("%s: err = %v", tex, err)
+		_, warnings, err := ty.Preview(ctx, d, templates.List()[0])
+		if err != nil || !strings.Contains(strings.Join(warnings, "\n"), "not a length") {
+			t.Errorf("%s: err = %v, warnings %q", tex, err, warnings)
 		}
 	}
 	d := doc.Parse(`$a \hspace{-1.5em} b \raisebox{2pt}{c}$`, "")

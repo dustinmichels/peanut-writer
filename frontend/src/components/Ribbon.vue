@@ -79,6 +79,7 @@ import {
   type BlockStyle,
   clearFormatting,
   insertBlock,
+  insertDivider,
   insertEquation,
   insertFootnote,
   type Mark,
@@ -127,6 +128,7 @@ const styles: { id: BlockStyle; label: string; cls: string }[] = [
   { id: "h1", label: "Heading 1", cls: "s-h1" },
   { id: "h2", label: "Heading 2", cls: "s-h2" },
   { id: "h3", label: "Heading 3", cls: "s-h3" },
+  { id: "h4", label: "Heading 4", cls: "s-h4" },
   { id: "quote", label: "Quote", cls: "s-quote" },
 ];
 
@@ -346,11 +348,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
                 :active="state.block === 'code'"
                 @click="withView(toggleCodeBlock)"
               />
-              <RibbonButton
-                :icon="Minus"
-                title="Divider"
-                @click="withView((v) => insertBlock(v, '---'))"
-              />
+              <RibbonButton :icon="Minus" title="Divider" @click="withView(insertDivider)" />
             </div>
           </div>
           <label>Paragraph</label>
@@ -452,12 +450,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         <div class="group">
           <div class="row">
             <RibbonButton big :icon="CodeXml" label="Code" @click="withView(toggleCodeBlock)" />
-            <RibbonButton
-              big
-              :icon="Minus"
-              label="Divider"
-              @click="withView((v) => insertBlock(v, '---'))"
-            />
+            <RibbonButton big :icon="Minus" label="Divider" @click="withView(insertDivider)" />
             <RibbonButton
               big
               :icon="SquareSplitVertical"
@@ -829,6 +822,11 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
 .s-h3 .sample {
   color: var(--roast);
   font-weight: 650;
+}
+.s-h4 .sample {
+  color: var(--roast);
+  font-weight: 650;
+  font-style: italic;
 }
 .s-quote .sample {
   font-style: italic;

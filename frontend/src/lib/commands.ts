@@ -21,6 +21,7 @@ import {
   type BlockStyle,
   clearFormatting,
   insertBlock,
+  insertDivider,
   insertEquation,
   insertFootnote,
   setBlockStyle,
@@ -165,6 +166,7 @@ const fixed: Command[] = [
   { id: "h1", group: "Format", label: "Heading 1", shortcut: "⌥⌘1", run: style("h1") },
   { id: "h2", group: "Format", label: "Heading 2", shortcut: "⌥⌘2", run: style("h2") },
   { id: "h3", group: "Format", label: "Heading 3", shortcut: "⌥⌘3", run: style("h3") },
+  { id: "h4", group: "Format", label: "Heading 4", shortcut: "⌥⌘4", run: style("h4") },
   {
     id: "quote",
     group: "Format",
@@ -211,7 +213,7 @@ const fixed: Command[] = [
   { id: "footnote", group: "Insert", label: "Footnote", run: inEditor(insertFootnote) },
   { id: "equation", group: "Insert", label: "Equation", run: inEditor(insertEquation) },
   { id: "codeBlock", group: "Insert", label: "Code Block", run: inEditor(toggleCodeBlock) },
-  { id: "divider", group: "Insert", label: "Divider", run: inEditor((v) => insertBlock(v, "---")) },
+  { id: "divider", group: "Insert", label: "Divider", run: inEditor(insertDivider) },
   {
     id: "pageBreak",
     group: "Insert",
