@@ -3,10 +3,10 @@
 `mise run docs:demo` writes two files here, both gitignored. `mise run docs:demo -- <name>` names them `<name>` instead,
 so a new take doesn't replace an earlier one.
 
-| File                                     | What                                                           |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `peanut-writer-demo.mp4`                 | The demo: 1920×1080, 30 fps, H.264 + AAC, about 3 minutes      |
-| `peanut-writer-demo-soundtrack.wav`      | Its music on its own: 48 kHz stereo, original and royalty-free |
+| File                                | What                                                           |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `peanut-writer-demo.mp4`            | The demo: 1920×1080, 30 fps, H.264 + AAC, about 3 minutes      |
+| `peanut-writer-demo-soundtrack.wav` | Its music on its own: 48 kHz stereo, original and royalty-free |
 
 Nothing in the video is edited by hand. Re-run the task whenever the UI changes; it takes about four minutes.
 

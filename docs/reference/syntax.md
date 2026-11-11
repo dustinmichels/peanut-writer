@@ -33,8 +33,8 @@ braces gives it a reference name, a size and a position:
 - `align` is `left` or `right`; leave it out to center the figure.
 
 A picture's path is relative to the document, and the picture must be in the document's folder (its `.peanut`
-package, or the folder holding its Markdown file): pictures elsewhere on your computer, named by a full path or with
-`../`, aren't shown. Pictures you paste, drop or insert are copied into `images/` for you.
+package, or the folder holding its Markdown file). Pictures elsewhere on your computer or on the web aren't shown; the
+status bar says so. Pictures you paste, drop or insert are copied into `images/` for you.
 
 ## Picture grids
 
@@ -88,16 +88,12 @@ $$ {#eq:euler}
 
 - Only named equations are numbered. A name must start `eq:`.
 - A short equation can be one line: `$$ E = mc^2 $$`.
-- In the editor an equation on lines of its own is a block drawn as it will print: **Edit equation** (or a double
-  click) opens its LaTeX and name, and its grip (⠿) moves it. **Insert → Equation** asks for a new one; with text
-  selected in a line, it makes that text math in the sentence instead. One being typed stays as its Markdown until
-  the cursor leaves it.
+- An equation being typed stays as its Markdown until the cursor leaves it. To insert one with a dialog, see
+  [Equations](../guide/figures-and-tables#equations).
 - Dollar signs in ordinary text stay as they are: math must start right after its `$` (no space) and end right before
   a `$` that isn't followed by a digit, with no other `$` in between. So "$5 or $10" and "from $5–$10" are text. To be
   sure, write `\$`.
 - Math that can't be read shows as its LaTeX, in red, with a note in the status bar.
-- In the Word file each piece of math is a picture of the typeset formula, so it looks right but can't be edited in
-  Word's equation editor.
 
 ## Properties
 
@@ -117,18 +113,18 @@ hide: subtitle, date
 ---
 ```
 
-`date` is `today` or any fixed text. There are no comments: everything after `key:` is the value.
+The block is read one `key: value` line at a time, not as full YAML: no lists, nested values or comments (a `#` is part
+of the value). Double quotes are allowed around a value. Unknown keys are kept but ignored. `date` is `today` or any
+fixed text.
 
-`template` is one of `classic` (the default), `wordy`, `academic`, `report`, `technical`, `memo`, `minimal`,
-`manuscript`, `book`, `elegant`, `editorial`, `journal`, `peanut`,
-`custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
+`template` is a [built-in template](../guide/templates#built-in-templates)'s name in lowercase (`classic` is the
+default), `custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
 [your own templates](./custom-templates).
 
 `hide` lists properties (`title`, `subtitle`, `author`, `topic`, `date`, `header`, `abstract`), separated by commas, that
 the document keeps but doesn't show.
 
-## The rest
+## Everything else
 
-Everything else is standard Markdown ([CommonMark](https://commonmark.org)) with GitHub-style tables and
-strikethrough, and footnotes, so the file reads well in any other Markdown app. `==highlight==` is Pandoc's and
-Obsidian's.
+Standard Markdown, as in any other Markdown app. What differs is in
+[Coming from other Markdown apps](./markdown-flavor).

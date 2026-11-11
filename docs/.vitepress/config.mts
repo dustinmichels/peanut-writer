@@ -8,7 +8,7 @@ export default defineConfig({
   base,
   title: "Peanut Writer",
   description:
-    "A word processor that feels like Word but writes Markdown, with a few good ideas from LaTeX.",
+    "A word processor that keeps what you write apart from how it looks, and saves it as plain text.",
   cleanUrls: true,
   head: [["link", { rel: "icon", type: "image/png", href: `${base}logo.png` }]],
   themeConfig: {
@@ -23,11 +23,17 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: "Ideas",
+        text: "Getting started",
         items: [
           { text: "Introduction", link: "/guide/introduction" },
+          { text: "Install", link: "/guide/install" },
+        ],
+      },
+      {
+        text: "Ideas",
+        items: [
           { text: "Style apart from content", link: "/guide/style-and-content" },
-          { text: "Markdown and LaTeX, without the fuss", link: "/guide/markdown-and-latex" },
+          { text: "The .peanut format", link: "/guide/peanut-format" },
         ],
       },
       {
@@ -38,12 +44,14 @@ export default defineConfig({
           { text: "Templates", link: "/guide/templates" },
           { text: "Documents, saving and export", link: "/guide/documents" },
           { text: "Settings", link: "/guide/settings" },
+          { text: "Peanut", link: "/guide/peanut" },
         ],
       },
       {
         text: "Reference",
         items: [
           { text: "Markdown syntax", link: "/reference/syntax" },
+          { text: "Coming from other Markdown apps", link: "/reference/markdown-flavor" },
           { text: "Keyboard shortcuts", link: "/reference/shortcuts" },
           { text: "Making your own template", link: "/reference/custom-templates" },
           { text: "Development", link: "/reference/development" },

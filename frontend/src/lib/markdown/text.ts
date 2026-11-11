@@ -17,7 +17,9 @@ export function wordCount(text: string): number {
     .replace(/[#>*_`~|:]+/g, " ");
   let n = 0;
   const rest = body.replace(cjk, () => (n++, " "));
-  return n + (rest.match(/[\p{L}\p{N}][\p{L}\p{N}'’]*(?:-[\p{L}\p{N}][\p{L}\p{N}'’]*)*/gu)?.length ?? 0);
+  return (
+    n + (rest.match(/[\p{L}\p{N}][\p{L}\p{N}'’]*(?:-[\p{L}\p{N}][\p{L}\p{N}'’]*)*/gu)?.length ?? 0)
+  );
 }
 
 // plain strips Markdown inline marks, for showing captions in lists.

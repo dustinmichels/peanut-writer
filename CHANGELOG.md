@@ -19,7 +19,7 @@
 - **Highlight** (`==text==`, ⇧⌘H, Home tab): yellow in the editor, preview, PDF, Word and web page. Quote lines show
   their `>` in the editor. **Tab / ⇧Tab on a list item** (bulleted or numbered) nests it under the item above or lifts
   it out, with its sub-items, numbering the sub-list from 1.
-- Refine passes (details in `refine.md`): fixed a crash on self-marking footnotes, an editor crash loop on links split
+- Refine passes: fixed a crash on self-marking footnotes, an editor crash loop on links split
   across lines, `javascript:` links in web pages, and data-loss paths (New Document over the open file, saving with a
   dialog open, failed backups before restores, backups pruned after the clock went back, concurrent `state.json`
   writes, silent export overwrites, Save As under another case, a Customize change landing in the next document,
@@ -33,6 +33,9 @@
 - Faster on long documents: Markdown parsing (13×), typing (the editor rereads only around each edit: 15× less work
   per keystroke) and cursor moves, and the preview reuses unchanged pages instead of reloading them.
 - Go 1.27.4 and `golang.org/x/mod` v0.42.0.
+- Docs rewritten around keeping content apart from style, each fact in one place: the Markdown and LaTeX page is gone,
+  built-in templates live under **Templates**, equations under **Figures, tables and references**, and new pages cover
+  **Install** (disk image, Homebrew tap), **Peanut**, **The .peanut format** and **Coming from other Markdown apps**.
 - `mise run docs:demo` records a captioned demo video of the app (server mode in WebKit, drawn cursor, title cards)
   with a generated soundtrack into `demo/` (gitignored; how it's made in `demo/README.md`). The tour starts from a
   blank saved document, gets a pep talk from Peanut, pastes a table from a spreadsheet, adds the title block late and

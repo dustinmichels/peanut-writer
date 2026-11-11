@@ -400,7 +400,10 @@ export function readBlocks(
       if (/^#{1,6}(?:[ \t]|$)/.test(r)) {
         commit();
         const at = start + cur.pos;
-        add({ type: "heading", line: { text: r, indent: ind, from: at, lineFrom: start, to: end, line: i } });
+        add({
+          type: "heading",
+          line: { text: r, indent: ind, from: at, lineFrom: start, to: end, line: i },
+        });
         taken = true;
         break;
       }
@@ -453,7 +456,14 @@ export function readBlocks(
           textFrom: at + note[0].length + space,
           to: end,
         };
-        const c: Container = { type: "note", indent: 4, children: [], empty: false, line: i, note: head };
+        const c: Container = {
+          type: "note",
+          indent: 4,
+          children: [],
+          empty: false,
+          line: i,
+          note: head,
+        };
         add(c);
         open.push(c);
         matched = open.length;
@@ -556,7 +566,7 @@ export function splitParagraph(
   underlined = false,
 ): { text: ParaLine[]; table: ParaLine[] | null } {
   let k = 0;
-  for (let n; k < lines.length && (n = definitionLines(lines, k)); ) k += n;
+  for (let n; k < lines.length && (n = definitionLines(lines, k));) k += n;
   lines = lines.slice(k);
   let table: ParaLine[] | null = null;
   for (let i = 1; i < lines.length; i++) {
@@ -579,7 +589,11 @@ export function splitParagraph(
 // nothing open): not after a table, whose caption is the block after it.
 function restartable(root: Container): boolean {
   const last = root.children[root.children.length - 1];
-  return last?.type !== "paragraph" || !!last.heading || !splitParagraph(last.lines, last.underlined).table;
+  return (
+    last?.type !== "paragraph" ||
+    !!last.heading ||
+    !splitParagraph(last.lines, last.underlined).table
+  );
 }
 
 // paragraphs splits paragraphs into text and tables. An underlined one is a

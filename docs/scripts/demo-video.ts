@@ -429,8 +429,8 @@ async function perform(page: Page, d: Demo) {
 
   // Title card, with the document opened behind it.
   await d.card(`<img src="/peanut.svg" alt=""><h1>Peanut Writer</h1>
-    <p>The word processor that writes Markdown</p>
-    <p class="small">Figures, tables and equations that number themselves · PDF, Word and web export</p>`);
+    <p>A lightweight, open-source, markdown-based writing tool that's fun &amp; user-friendly</p>
+    <p class="small">Focus on content, easily adjust the style</p>`);
   await d.wait(1200);
   await page.locator(".modal button.open", { hasText: docName }).click();
   await modal.waitFor({ state: "detached" });
@@ -497,8 +497,10 @@ async function perform(page: Page, d: Demo) {
   await modal.waitFor();
   await d.wait(400);
   await d.click(modal.locator('[data-cell="-1:0"]'), 450);
+  // Header cells start as "Column 1", "Column 2"…: select it so typing replaces it.
   for (const [i, text] of ["Variety", "Grown in"].entries()) {
     if (i) await page.keyboard.press("Tab");
+    await page.keyboard.press("Meta+A");
     await d.type(text, 1.6);
   }
   await d.wait(300);
@@ -569,7 +571,7 @@ async function perform(page: Page, d: Demo) {
     "Add a title, author and abstract",
     "Each template lays out the title block its own way.",
   );
-  await d.click(page.locator("button", { hasText: "Edit header" }));
+  await d.click(page.locator(".pw-props-edit"));
   await modal.waitFor();
   await d.click(field("Title"), 500);
   await d.type("A Field Guide to Peanuts", 1.4);

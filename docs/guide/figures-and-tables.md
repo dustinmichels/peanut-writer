@@ -1,55 +1,52 @@
 # Figures, tables and references
 
-This is where Peanut Writer borrows most from LaTeX: you never type a figure number. You give things captions, refer to
-them, and let Peanut Writer count.
+You never type a number. Caption a picture, table or equation, refer to it, and Peanut Writer counts.
 
 ## Pictures
 
-Drag a picture onto the editor, paste one, or use **Insert → Picture**. It's copied into an `images/` folder beside
-your document and shown right in the editor.
+Drag a picture onto the editor, paste one, or use **Insert → Picture**. It's copied into the document's `images/`
+folder and shown in the editor.
 
 - **Hover** a picture to place it left, centered or right.
-- **Drag its corner** to resize it.
-- **Drag its grip (⠿)** to move it elsewhere in the document.
-- **Edit figure** sets its caption, its reference name, its size and its position.
+- **Drag its corner** to resize it. Its size is a percentage of the text width, so it fits every template.
+- **Drag its grip (⠿)** to move it.
+- **Edit figure** sets its caption, reference name, size and position.
 
-A picture with a caption becomes a numbered figure: "Figure 1: Sales over time". Its size is a percentage of the text
-width, so it looks right in every template.
+A picture with a caption becomes a numbered figure: "Figure 1: Sales over time".
 
-## Picture grids
-
-**Insert → Picture Grid** takes several pictures and sets them side by side as one figure, with one caption and one
-number. **Edit figure** on a grid adds, removes, reorders and replaces its pictures and sets the number of columns.
-Adding a picture to an ordinary figure turns it into a grid.
+**Insert → Picture Grid** sets several pictures side by side as one figure, with one caption and one number. **Edit
+figure** on a grid adds, removes, reorders and replaces pictures and sets the number of columns. Adding a picture to an
+ordinary figure turns it into a grid.
 
 ## Tables
 
-**Insert → Table**, pick a size, and fill in the grid. **Edit table** above any table reopens the grid, where you can
-add and remove rows and columns, align columns and set the caption. Drag the grip (⠿) at the left of its bar to move
-the table, caption and all.
+**Insert → Table**, pick a size, and fill in the grid. **Edit table** reopens the grid to add and remove rows and
+columns, align columns and set the caption. Drag the grip (⠿) at the left of its bar to move it. Tables are numbered
+separately from figures.
 
-Tables are numbered separately from figures: "Table 1", "Table 2", and so on.
+## Equations
+
+**Insert → Equation** opens the equation dialog: write the math in LaTeX (with buttons for fractions, roots, sums, Greek
+letters and symbols), see it drawn as you type, and give it a reference name to number it "(1)". With text selected in
+a line, it makes that text math in the sentence instead. In the editor an equation is a block drawn as it will print:
+**Edit equation** (or a double click) reopens the dialog, and its grip (⠿) moves it. To type it instead, see
+[Math](../reference/syntax#math).
 
 ## Cross-references
 
-**References → Cross-reference** lists every figure and table with its current number. Pick one and a reference is
-inserted at the cursor. You can also type `@` and choose from the suggestions.
+**References → Cross-reference**, or typing `@`, lists every figure and table with its current number; pick one to
+insert a reference. It reads "Figure 2" and updates when things are added, removed or moved. Renaming a reference name,
+in its dialog or in the Markdown, updates the references to it, unless the new name is already taken.
 
-In the editor a reference reads "Figure 2". When figures are added, removed or moved, every reference updates.
-Renaming a figure's, table's or equation's reference name updates the references to it, too, whether in its dialog or
-by editing the `{#fig:…}` label in the Markdown. Renaming to a name something else already uses leaves the references
-alone.
+Click a reference to point it somewhere else, or **Unlink** it to keep "Figure 2" as plain text. A reference to
+something that no longer exists shows as **??** in the preview and is listed in the status bar's notes; clicking it
+offers **Remove**.
 
-Click a reference to change it: pick another figure, table or equation to point it there, or choose **Unlink** to
-leave its words ("Figure 2") as plain text that no longer updates. A reference to nothing offers **Remove** instead.
-
-A reference to something that no longer exists shows as **??** in the preview, as in LaTeX, and is listed in the status
-bar's notes so you can find it.
-
-**References** previews every figure and table in the document, in order; click one to open its dialog. A figure's
-dialog lists, beside it, each sentence that refers to it. Click one to go there in the text.
+**References** previews every figure and table in order; click one to open its dialog, which lists each sentence that
+refers to it. Click a sentence to go there.
 
 ## In Word
 
-The exported Word file keeps all of this working: captions are real Word captions with live numbers, and references
-are real cross-reference fields, so the numbers still update if someone edits the document in Word.
+Captions are real Word captions and references are real cross-reference fields, so numbers still update when someone
+edits the Word file. Math, inline or not, is a picture of the typeset formula: it looks right but can't be edited in
+Word's equation editor.

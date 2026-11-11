@@ -25,23 +25,34 @@ features:
     details: You write the words; a template decides how they look. Switch from a business report to an academic paper in one click without touching a sentence.
     link: /guide/style-and-content
   - icon: 📝
-    title: Markdown underneath, no Markdown required
-    details: Bold, headings, lists and pictures look like what they are. The plain text behind them is there if you ever want it, and never if you don't.
-    link: /guide/markdown-and-latex
+    title: Plain text you own
+    details: Your words are saved as plain text that opens in any app, today and in twenty years. Pictures, style and backups travel with it in one package.
+    link: /guide/peanut-format
   - icon: 🔢
-    title: The good parts of LaTeX
-    details: Figures and tables number themselves, cross-references keep up when things move, and a table of contents writes itself.
+    title: Numbers that keep up
+    details: Figures, tables and equations number themselves, cross-references follow when things move, and a table of contents writes itself.
     link: /guide/figures-and-tables
   - icon: 📄
     title: Typeset as you type
     details: The page on the right is the real thing, set by Typst. What you see is exactly the PDF you export.
     link: /guide/writing
   - icon: 📤
-    title: PDF and Word
-    details: Export a PDF, or a .docx with real Word styles, numbered captions and live cross-references, so colleagues can keep editing.
+    title: PDF, Word and web
+    details: Export a PDF, a web page, or a .docx with real Word styles, numbered captions and live cross-references, so colleagues can keep editing.
     link: /guide/documents
   - icon: 🥜
     title: A little company
     details: Peanut keeps you company at the top of the window, with a word of encouragement when you click him.
-    link: /guide/writing#peanut
+    link: /guide/peanut
 ---
+
+## See it in action
+
+<iframe
+  src="https://www.youtube-nocookie.com/embed/36JKYaSnXhE"
+  title="Peanut Writer: My friendly markdown app - Demo"
+  style="width: 100%; aspect-ratio: 16 / 9; border: 0; border-radius: 12px"
+  allow="encrypted-media; picture-in-picture; web-share"
+  referrerpolicy="strict-origin-when-cross-origin"
+  allowfullscreen
+></iframe>

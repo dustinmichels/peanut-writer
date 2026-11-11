@@ -1,6 +1,6 @@
 # Making your own template
 
-Most people never need this: pick a [built-in template](../guide/style-and-content#the-built-in-templates) and
+Most people never need this: pick a [built-in template](../guide/templates#built-in-templates) and
 [customize](../guide/templates#customizing-one-document) its fonts and colors. But if you want a look that's entirely
 your own, a template is a small folder you can write, share and import.
 

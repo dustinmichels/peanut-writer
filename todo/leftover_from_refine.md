@@ -1,6 +1,6 @@
 # Leftover from refine (2026-11-11)
 
-Open items from `refine.md` that need a decision before fixing.
+Open items from the 2026-11-11 refine passes that need a decision before fixing.
 
 - [ ] **`---` rule vs front matter**: a document opening with a `---` rule and another `---` later reads as front
       matter (Go, TS, `fillProperties`). Pandoc's rule (no front matter if a blank line follows the opening `---`)
