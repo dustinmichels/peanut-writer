@@ -41,6 +41,10 @@ const (
 	updateCheckInterval = 24 * time.Hour
 )
 
+// updateWindowCSS fixes Wails' update window: its button hover rule outranks
+// the primary button's blue, leaving Restart & Apply white on light gray.
+const updateWindowCSS = `.u__btn--primary:hover:not(:disabled) { background: var(--accent); }`
+
 var releaseTag = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // releaseVersion is buildVersion without its "v" (1.2.3) in builds of a
@@ -100,7 +104,11 @@ func startUpdates(app *application.App, docs *DocService) *updates {
 		},
 	})
 	if err == nil {
-		err = app.Updater.Init(updater.Config{CurrentVersion: version, Providers: []updater.Provider{src}})
+		err = app.Updater.Init(updater.Config{
+			CurrentVersion: version,
+			Providers:      []updater.Provider{src},
+			Window:         &updater.BuiltinWindow{CSS: updateWindowCSS},
+		})
 	}
 	if err != nil {
 		log.Printf("updates: %v", err)
