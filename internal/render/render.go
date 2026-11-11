@@ -165,10 +165,10 @@ func (t *Typst) PNG(ctx context.Context, path string, widthPt float64) ([]byte, 
 	return os.ReadFile(filepath.Join(dir, "out.png"))
 }
 
-// Equation draws LaTeX math with sizePt text, at 2x, as PNG. Math in a line
-// gets as much room below its baseline as above, so its baseline is the
-// picture's middle.
-func (t *Typst) Equation(ctx context.Context, tex string, display bool, sizePt float64) ([]byte, error) {
+// Equation draws LaTeX math with sizePt text, as format "png" (at 2x) or
+// "svg". Math in a line gets as much room below its baseline as above, so
+// its baseline is the picture's middle.
+func (t *Typst) Equation(ctx context.Context, tex string, display bool, sizePt float64, format string) ([]byte, error) {
 	dir, err := os.MkdirTemp("", "peanut-math-*")
 	if err != nil {
 		return nil, err
@@ -194,10 +194,15 @@ func (t *Typst) Equation(ctx context.Context, tex string, display bool, sizePt f
 	if err := os.WriteFile(filepath.Join(dir, "main.typ"), []byte(src), 0o600); err != nil {
 		return nil, err
 	}
-	if _, err := t.compile(ctx, dir, "main.typ", "out.png", "--ppi", "192"); err != nil {
+	out := "out." + format
+	var flags []string
+	if format == "png" {
+		flags = []string{"--ppi", "192"}
+	}
+	if _, err := t.compile(ctx, dir, "main.typ", out, flags...); err != nil {
 		return nil, err
 	}
-	return os.ReadFile(filepath.Join(dir, "out.png"))
+	return os.ReadFile(filepath.Join(dir, out))
 }
 
 // Fonts lists the font families Typst can use, by name.

@@ -85,11 +85,9 @@ export function syncScroll(
 
   // A new render or zoom moves the headings in the preview: line it up again
   // (after the pages are laid out).
-  const stop = watch(
-    () => [state.pages, state.outline, state.zoom, state.fitZoom],
-    follow,
-    { flush: "post" },
-  );
+  const stop = watch(() => [state.pages, state.outline, state.zoom, state.fitZoom], follow, {
+    flush: "post",
+  });
 
   return {
     stop() {

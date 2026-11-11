@@ -20,6 +20,30 @@ const Folder = "backups"
 
 const stampLayout = "2006-01-02T15-04-05"
 
+// Backup is one backup of a document.
+type Backup struct {
+	Saved int64  `json:"saved"` // when it was made, in Unix milliseconds
+	Path  string `json:"path"`  // its Markdown copy, or its Word one if it has none
+}
+
+// List returns the document's backups, newest first.
+func List(docPath string) []Backup {
+	stamps := list(docPath)
+	bs := make([]Backup, 0, len(stamps))
+	for _, stamp := range slices.Backward(stamps) {
+		at, err := time.ParseInLocation(stampLayout, stamp, time.Local)
+		if err != nil {
+			continue
+		}
+		p := file(docPath, stamp, ".md")
+		if _, err := os.Stat(p); err != nil {
+			p = file(docPath, stamp, ".docx")
+		}
+		bs = append(bs, Backup{Saved: at.UnixMilli(), Path: p})
+	}
+	return bs
+}
+
 // Changed reports whether content differs from the newest backup of the
 // document at docPath (true if it has none).
 func Changed(docPath, content string) bool {

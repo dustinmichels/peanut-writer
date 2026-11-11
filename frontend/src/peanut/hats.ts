@@ -407,11 +407,18 @@ function createKnitTextures(base: string, size = 256): KnitTextures {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
-      const dx = (heights[y * size + ((x + 1) % size)] - heights[y * size + ((x - 1 + size) % size)]) * 1.8;
-      const dy = (heights[((y + 1) % size) * size + x] - heights[((y - 1 + size) % size) * size + x]) * 1.8;
+      const dx =
+        (heights[y * size + ((x + 1) % size)] - heights[y * size + ((x - 1 + size) % size)]) * 1.8;
+      const dy =
+        (heights[((y + 1) % size) * size + x] - heights[((y - 1 + size) % size) * size + x]) * 1.8;
       const len = Math.hypot(dx, dy, 1);
       normal.data.set(
-        [((-dx / len) * 0.5 + 0.5) * 255, ((-dy / len) * 0.5 + 0.5) * 255, (0.5 / len + 0.5) * 255, 255],
+        [
+          ((-dx / len) * 0.5 + 0.5) * 255,
+          ((-dy / len) * 0.5 + 0.5) * 255,
+          (0.5 / len + 0.5) * 255,
+          255,
+        ],
         i * 4,
       );
       const r = heights[i] > 0.85 ? 175 : 215; // sprinkles a little sleeker
@@ -488,7 +495,9 @@ export function createBirthdayHat(): HatHandle {
   // Usually deep navy, but now and then dyed another dark festive hue, so the
   // hat stands out against his light fleece.
   const base =
-    Math.random() < 0.25 ? `#${new THREE.Color().setHSL(Math.random(), 0.6, 0.3).getHexString()}` : "#1f2f6b";
+    Math.random() < 0.25
+      ? `#${new THREE.Color().setHSL(Math.random(), 0.6, 0.3).getHexString()}`
+      : "#1f2f6b";
   const textures = createKnitTextures(base);
   // Enclosing the top nub, with a little celebratory wobble as it lands.
   const h = hat(

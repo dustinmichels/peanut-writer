@@ -2,7 +2,7 @@
 
 A word processor that feels like Word but writes Markdown, with a few good ideas from LaTeX: figures, tables and
 equations that number themselves, cross-references that keep up, LaTeX math, footnotes, and a table of contents. You
-type on the left and see the typeset pages on the right. Export to **PDF** or **Word (.docx)**.
+type on the left and see the typeset pages on the right. Export to **PDF**, **Word (.docx)** or a **web page (.html)**.
 
 **Documentation: [dustinmichels.github.io/peanut-writer](https://dustinmichels.github.io/peanut-writer/)**
 

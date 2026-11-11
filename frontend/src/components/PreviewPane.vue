@@ -58,7 +58,10 @@ const zoom = computed(() => state.zoom || fit.value);
 
 let ro: ResizeObserver | undefined;
 onMounted(() => {
-  ro = new ResizeObserver(([e]) => (paneWidth.value = e.contentRect.width));
+  // Collapsed, the pane has no width; keep fitting to the last one.
+  ro = new ResizeObserver(([e]) => {
+    if (e.contentRect.width) paneWidth.value = e.contentRect.width;
+  });
   ro.observe(scroller.value!);
 });
 onBeforeUnmount(() => {
@@ -118,13 +121,15 @@ function headingTops(): Map<number, number> {
   return tops;
 }
 
-// clicked finds where in the source a click on page i is. The block it's in
+// clicked finds where in the source a click on page i is, when the panes
+// aren't scrolling together (linked, the editor is already there). The block it's in
 // is the last one (in source order) starting before it: on an earlier page,
 // or above and left of it (in an earlier column, a block lower down is still
 // before it, but in the same column one to its right is a nested item or in
 // the next column). The click is then as far between that block's line and
 // the next block's as it is down the page between them.
 function clicked(e: MouseEvent, i: number) {
+  if (!pickable.value) return;
   const els = scroller.value?.querySelectorAll<HTMLElement>(".page");
   const el = els?.[i];
   if (!el) return;
@@ -146,6 +151,8 @@ function clicked(e: MouseEvent, i: number) {
   const t = span > 0 ? Math.min(1, Math.max(0, (el.offsetTop + y * scale - from) / span)) : 0;
   emit("pick", line, next, t);
 }
+// pickable: a click on a page shows that spot in the editor.
+const pickable = computed(() => !state.scrollLinked && !state.customizing);
 defineExpose({ scroller, headingTops });
 </script>
 
@@ -165,7 +172,7 @@ defineExpose({ scroller, headingTops });
         <pre>{{ state.renderError }}</pre>
       </div>
     </div>
-    <div class="pages">
+    <div class="pages" :class="{ pickable }">
       <div
         v-for="(p, i) in pages"
         :key="i"
@@ -204,6 +211,9 @@ defineExpose({ scroller, headingTops });
   box-shadow:
     0 1px 2px rgba(60, 35, 15, 0.12),
     0 8px 24px -6px rgba(60, 35, 15, 0.2);
+}
+.pickable .page {
+  cursor: pointer;
 }
 .page img {
   display: block;

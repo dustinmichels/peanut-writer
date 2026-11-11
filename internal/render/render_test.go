@@ -116,7 +116,7 @@ func TestEveryTemplateRendersEverything(t *testing.T) {
 		t.Error("PNG: not a PNG")
 	}
 	for _, display := range []bool{false, true} {
-		png, err := ty.Equation(ctx, `\frac{a}{b}`, display, 11)
+		png, err := ty.Equation(ctx, `\frac{a}{b}`, display, 11, "png")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -150,6 +150,20 @@ func TestEmptyHeadingRenders(t *testing.T) {
 		t.Skip(err)
 	}
 	for _, src := range []string{"#", "## ", "- #", "> #"} {
+		d := doc.Parse(src, t.TempDir())
+		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
+			t.Errorf("%q: %v", src, err)
+		}
+	}
+}
+
+// Empty math (`$$` just typed opens an equation) has no text in doc.json.
+func TestEmptyMathRenders(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, src := range []string{"$$", "$$\n$$ {#eq:a}", "a $$$$ b"} {
 		d := doc.Parse(src, t.TempDir())
 		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
 			t.Errorf("%q: %v", src, err)

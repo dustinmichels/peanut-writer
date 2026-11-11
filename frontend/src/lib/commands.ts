@@ -86,6 +86,13 @@ const fixed: Command[] = [
     run: () => menu("exportDocx"),
   },
   {
+    id: "exportHtml",
+    group: "File",
+    label: "Export as Web Page…",
+    shortcut: "⌥⌘E",
+    run: () => menu("exportHtml"),
+  },
+  {
     id: "syncFiles",
     group: "File",
     label: "Sync Files",
@@ -113,7 +120,13 @@ const fixed: Command[] = [
     label: "Properties…",
     run: () => (state.dialog = { kind: "properties" }),
   },
-  { id: "settings", group: "File", label: "Settings…", shortcut: "⌘,", run: () => menu("settings") },
+  {
+    id: "settings",
+    group: "File",
+    label: "Settings…",
+    shortcut: "⌘,",
+    run: () => menu("settings"),
+  },
 
   { id: "undo", group: "Edit", label: "Undo", shortcut: "⌘Z", run: () => menu("undo") },
   { id: "redo", group: "Edit", label: "Redo", shortcut: "⇧⌘Z", run: () => menu("redo") },
@@ -170,7 +183,13 @@ const fixed: Command[] = [
     label: "Numbering",
     run: inEditor((v) => toggleList(v, "ordered")),
   },
-  { id: "indent", group: "Format", label: "Increase Indent", shortcut: "⇥", run: inEditor(indentMore) },
+  {
+    id: "indent",
+    group: "Format",
+    label: "Increase Indent",
+    shortcut: "⇥",
+    run: inEditor(indentMore),
+  },
   {
     id: "outdent",
     group: "Format",
@@ -215,6 +234,13 @@ const fixed: Command[] = [
 
   { id: "customize", group: "Design", label: "Customize Template", run: customizeTemplate },
   {
+    id: "saveTemplate",
+    group: "Design",
+    label: "Save as Template…",
+    run: () => (state.dialog = { kind: "saveTemplate" }),
+    enabled: () => !!state.custom,
+  },
+  {
     id: "manageTemplates",
     group: "Design",
     label: "Manage Templates…",
@@ -236,6 +262,7 @@ const fixed: Command[] = [
     run: () => menu("markdown"),
   },
   { id: "outline", group: "View", label: "Toggle Outline", run: () => menu("outline") },
+  { id: "preview", group: "View", label: "Toggle Preview", run: () => menu("preview") },
   { id: "versions", group: "View", label: "Toggle Versions", run: () => menu("versions") },
   { id: "zoomIn", group: "View", label: "Zoom In", shortcut: "⌘=", run: () => menu("zoomIn") },
   { id: "zoomOut", group: "View", label: "Zoom Out", shortcut: "⌘-", run: () => menu("zoomOut") },
@@ -255,15 +282,13 @@ const fixed: Command[] = [
 
 // commands lists every command, with one per template to switch to it.
 export function commands(): Command[] {
-  const templates = docTemplates.value.map(
-    (t): Command => ({
-      id: `template:${t.id}`,
-      group: "Template",
-      label: t.name,
-      run: () => setTemplate(t.id),
-      enabled: () => state.template !== t.id,
-    }),
-  );
+  const templates = docTemplates.value.map((t): Command => ({
+    id: `template:${t.id}`,
+    group: "Template",
+    label: t.name,
+    run: () => setTemplate(t.id),
+    enabled: () => state.template !== t.id,
+  }));
   return [...fixed, ...templates];
 }
 

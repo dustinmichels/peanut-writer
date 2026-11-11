@@ -11,7 +11,11 @@ const emit = defineEmits<{ toggle: [] }>();
     type="button"
     class="eye"
     :class="{ hidden }"
-    :title="hidden ? 'Hidden in the document: click to show it' : 'Shown in the document: click to hide it'"
+    :title="
+      hidden
+        ? 'Hidden in the document: click to show it'
+        : 'Shown in the document: click to hide it'
+    "
     :aria-pressed="!hidden"
     @click="emit('toggle')"
   >

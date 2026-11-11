@@ -7,6 +7,8 @@ import { DocService } from "../../bindings/peanut-writer";
 import type { RecentFile } from "../../bindings/peanut-writer/models";
 import type { Template } from "../../bindings/peanut-writer/internal/templates/models";
 import type { Heading } from "../../bindings/peanut-writer/internal/doc/models";
+import type { Version } from "../../bindings/peanut-writer/internal/versions/models";
+import type { Backup } from "../../bindings/peanut-writer/internal/backup/models";
 import type { BlockStyle, Mark } from "./editor";
 import type { Item, RefAt, Table } from "./markdown";
 
@@ -21,7 +23,9 @@ type Dialog =
   | { kind: "cheatsheet" }
   | { kind: "about" }
   | { kind: "recent"; files: RecentFile[] }
+  | { kind: "start"; files: RecentFile[] }
   | { kind: "templates" }
+  | { kind: "saveTemplate" }
   | { kind: "commands" };
 
 interface Toast {
@@ -52,6 +56,9 @@ export const state = reactive({
   currentHeading: 0, // source line of the outline heading the editor is scrolled to; 0 for none
   scrollLinked: true, // the editor and preview scroll together; only the link button unlinks them
   versionsOpen: localStorage.getItem("versions") === "1", // the named versions beside the editor
+  versions: [] as Version[], // the document's named versions, newest first
+  backups: [] as Backup[], // its automatic backups, newest first
+  previewOpen: localStorage.getItem("preview") !== "0", // the preview beside the editor; always shown while customizing
 
   templates: [] as Template[],
   template: "classic", // the template the preview used
@@ -92,6 +99,21 @@ watch(
 export const docTemplates = computed(() =>
   state.custom ? [state.custom, ...state.templates] : state.templates,
 );
+
+// refreshVersions lists the open document's named versions and backups,
+// unless another is opened meanwhile.
+export async function refreshVersions() {
+  const path = state.path;
+  try {
+    const [vs, bs] = await Promise.all([DocService.Versions(), DocService.Backups()]);
+    if (state.path !== path) return;
+    state.versions = vs ?? [];
+    state.backups = bs ?? [];
+  } catch (e) {
+    toast(`Versions: ${errorText(e)}`, "error");
+  }
+}
+watch(() => state.path, refreshVersions);
 
 export const editor = shallowRef<EditorView | null>(null);
 

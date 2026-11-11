@@ -7,6 +7,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  Globe,
   Redo2,
   RefreshCw,
   Save,
@@ -15,6 +16,7 @@ import {
 } from "lucide-vue-next";
 import {
   exportDocx,
+  exportHtml,
   exportPdf,
   menu,
   packageOf,
@@ -97,6 +99,11 @@ function pick(f: () => unknown) {
           <button @click="pick(exportDocx)">
             <FileText :size="16" /> <span
               ><b>Word document</b><small>Editable .docx · ⇧⌘E</small></span
+            >
+          </button>
+          <button @click="pick(exportHtml)">
+            <Globe :size="16" /> <span
+              ><b>Web page</b><small>Self-contained .html · ⌥⌘E</small></span
             >
           </button>
         </div>

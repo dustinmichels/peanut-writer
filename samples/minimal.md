@@ -23,11 +23,11 @@ reader to do that work; a calm one does it for them.
 Line length matters more than font size. Most readers are most comfortable with lines of 50 to 75 characters
 (@tbl:measure).
 
-| Characters per line | Effect on reading              |
-| :------------------ | :----------------------------- |
+| Characters per line | Effect on reading               |
+| :------------------ | :------------------------------ |
 | Under 45            | Choppy; the eye jumps too often |
-| 50 to 75            | Comfortable                    |
-| Over 90             | Tiring; easy to lose the line  |
+| 50 to 75            | Comfortable                     |
+| Over 90             | Tiring; easy to lose the line   |
 
 Table: Line length and readability {#tbl:measure}
 

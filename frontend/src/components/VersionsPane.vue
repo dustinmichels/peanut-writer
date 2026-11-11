@@ -1,26 +1,12 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 import { FolderSearch, PanelLeftClose, RotateCcw } from "lucide-vue-next";
 import { DocService } from "../../bindings/peanut-writer";
-import type { Version } from "../../bindings/peanut-writer/internal/versions/models";
 import { loadVersion, saveVersion, toggleVersions } from "../lib/actions";
-import { errorText, state, toast } from "../lib/store";
+import { state } from "../lib/store";
 
-const versions = ref<Version[]>([]);
 const name = ref("");
 const busy = ref(false);
-
-// refresh lists the open document's versions, unless another is opened meanwhile.
-async function refresh() {
-  const path = state.path;
-  try {
-    const vs = (await DocService.Versions()) ?? [];
-    if (state.path === path) versions.value = vs;
-  } catch (e) {
-    toast(`Versions: ${errorText(e)}`, "error");
-  }
-}
-watch(() => state.path, refresh, { immediate: true });
 
 async function save() {
   if (!name.value.trim() || busy.value) return;
@@ -30,7 +16,6 @@ async function save() {
   } finally {
     busy.value = false;
   }
-  await refresh();
 }
 
 const when = (ms: number) =>
@@ -55,13 +40,13 @@ const when = (ms: number) =>
         {{ busy ? "Saving…" : "Save Version" }}
       </button>
     </form>
-    <ul v-if="versions.length">
-      <li v-for="v in versions" :key="v.name">
+    <ul v-if="state.versions.length">
+      <li v-for="v in state.versions" :key="v.name">
         <div class="info" :title="v.name">
           <span class="name">{{ v.name }}</span>
           <span class="when">{{ when(v.saved) }}</span>
         </div>
-        <button title="Load this version" @click="loadVersion(v.name)">
+        <button title="Open this version" @click="loadVersion(v.name)">
           <RotateCcw :size="14" />
         </button>
         <button

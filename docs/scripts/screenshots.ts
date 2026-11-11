@@ -4,9 +4,10 @@
 //   mise run docs:screenshots -- editor  only the named scenes
 //
 // Each scene runs the app in Wails server mode (bin/peanut-writer-server, built
-// by the mise task) with a fresh, empty home folder, so it starts on the welcome
-// guide with default settings, and drives it in WebKit (what the macOS app
-// renders with). Pages reference the images as /screenshots/<name>.png.
+// by the mise task) with a fresh, empty home folder and default settings, opens
+// the sample (the welcome guide) from the start dialog, and drives it in WebKit
+// (what the macOS app renders with). Pages reference the images as
+// /screenshots/<name>.png.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
@@ -97,7 +98,12 @@ async function freePort(): Promise<number> {
 // once it answers on port.
 async function startApp(home: string, port: number): Promise<ChildProcess> {
   const app = spawn(server, [], {
-    env: { ...process.env, HOME: home, WAILS_SERVER_HOST: "127.0.0.1", WAILS_SERVER_PORT: String(port) },
+    env: {
+      ...process.env,
+      HOME: home,
+      WAILS_SERVER_HOST: "127.0.0.1",
+      WAILS_SERVER_PORT: String(port),
+    },
     stdio: ["ignore", "ignore", "pipe"],
   });
   let log = "";
@@ -134,8 +140,13 @@ async function shoot(browser: Browser, scene: Scene) {
   const home = await mkdtemp(join(tmpdir(), "peanut-shots-"));
   // The default author is otherwise the computer user's full name.
   const config =
-    process.platform === "darwin" ? join(home, "Library/Application Support") : join(home, ".config");
-  await Bun.write(join(config, "Peanut Writer/settings.json"), JSON.stringify({ author: "Peanut" }));
+    process.platform === "darwin"
+      ? join(home, "Library/Application Support")
+      : join(home, ".config");
+  await Bun.write(
+    join(config, "Peanut Writer/settings.json"),
+    JSON.stringify({ author: "Peanut" }),
+  );
   const port = await freePort();
   const app = await startApp(home, port);
   const context = await browser.newContext({ viewport, deviceScaleFactor });
@@ -143,6 +154,7 @@ async function shoot(browser: Browser, scene: Scene) {
     const page = await context.newPage();
     page.on("pageerror", (e) => console.error(`  ${scene.name}: page error: ${e.message}`));
     await page.goto(`http://127.0.0.1:${port}/`);
+    await page.locator(".modal button", { hasText: "Open Sample" }).click();
     await settle(page);
     await scene.setup?.(page);
     await settle(page);
@@ -172,7 +184,9 @@ async function shoot(browser: Browser, scene: Scene) {
 const wanted = process.argv.slice(2);
 const unknown = wanted.filter((n) => !scenes.some((s) => s.name === n));
 if (unknown.length) {
-  console.error(`unknown scene(s): ${unknown.join(", ")}\nscenes: ${scenes.map((s) => s.name).join(", ")}`);
+  console.error(
+    `unknown scene(s): ${unknown.join(", ")}\nscenes: ${scenes.map((s) => s.name).join(", ")}`,
+  );
   process.exit(2);
 }
 if (!(await Bun.file(server).exists())) {

@@ -37,6 +37,11 @@ func (w *writer) titleBlock(m doc.Meta) {
 			lines = append(lines, l)
 		}
 	}
+	// The rule goes under the title and byline, above the abstract.
+	ruleAt := -1
+	if w.st.TitleRule {
+		ruleAt = len(lines) - 1
+	}
 	if strings.TrimSpace(m.Abstract) != "" {
 		lines = append(lines, line{"AbstractTitle", "Abstract"})
 		for _, p := range strings.Split(m.Abstract, "\n") {
@@ -45,11 +50,17 @@ func (w *writer) titleBlock(m doc.Meta) {
 			}
 		}
 	}
+	// A gap between the title block and the text.
+	gap := fmt.Sprintf(`<w:spacing w:after="%d"/>`, twips(max(w.st.SpaceAfter*2, 18)))
 	for i, l := range lines {
 		ppr := ""
+		if i == ruleAt {
+			ppr = fmt.Sprintf(`<w:pBdr><w:bottom w:val="single" w:sz="4" w:space="8" w:color="%s"/></w:pBdr>`, colorOr(w.st.AccentColor, "auto")) + gap
+		}
 		if i == len(lines)-1 {
-			// A gap between the title block and the text.
-			ppr = fmt.Sprintf(`<w:spacing w:after="%d"/>`, twips(max(w.st.SpaceAfter*2, 18)))
+			if i != ruleAt {
+				ppr = gap
+			}
 			if w.cols > 1 {
 				ppr += w.sectPr(1, false)
 			}

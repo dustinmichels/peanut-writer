@@ -41,8 +41,8 @@ unavailable until an untitled document is saved.
 A document that has a file **saves itself** 2 seconds after you stop typing, and before you open another or quit.
 Nothing asks. An untitled document needs ⌘S the first time, and asks before its changes are lost.
 
-**File → Open Recent…** (⇧⌘O), the **File → Open Recent** submenu, or the ribbon's File → Recent lists the last 10
-documents you opened or saved. In the ribbon's list, the × beside a document takes it off.
+The start dialog, **File → Open Recent…** (⇧⌘O), the **File → Open Recent** submenu, or the ribbon's File → Recent
+lists the last 10 documents you opened or saved. In the dialogs, the × beside a document takes it off.
 
 ## Backups
 
@@ -70,18 +70,26 @@ versions/Sent to Ana/
 ```
 
 Saving a version saves the document first (an untitled one asks where). Each name is used once. The pane lists the
-versions newest first: the arrow button **loads** one, replacing the document's text, customized template and settings
-(after asking; the text it replaces goes into backups first), and the folder button shows its files in Finder.
-Versions are never removed automatically. Like backups, they don't copy pictures: the Word and PDF copies embed them,
-and a loaded version uses the document's own `images/`.
+versions newest first: the arrow button **opens** one, replacing the document's text, customized template and settings
+(after asking "Open this version?"; the text it replaces goes into backups first), and the folder button shows its
+files in Finder. Versions are never removed automatically. Like backups, they don't copy pictures: the Word and PDF
+copies embed them, and an opened version uses the document's own `images/`.
+
+The ribbon's **Versions** tab shows the 5 newest named versions and, after a dividing line, the 5 newest backups.
+**New Version** asks for a name and saves a version, like the pane. Click a named version or a backup to open it, after
+the same question; a backup replaces only the document's text, and the text it replaces goes into backups first. **All
+Versions** opens the pane.
 
 ## Export
 
-The **Export** button (⌘E for PDF, ⇧⌘E for Word) saves a copy wherever you choose:
+The **Export** button (⌘E for PDF, ⇧⌘E for Word, ⌥⌘E for a web page) saves a copy wherever you choose:
 
 - **PDF** is exactly the preview.
 - **Word (.docx)** uses real Word styles (Title, Heading 1–6, Caption, Quote…), numbered captions and live
   cross-reference fields, so whoever opens it can keep editing properly. No copy of Word is needed to make it.
+- **Web page (.html)** is a single file with the pictures and equations inside, styled after the template's fonts and
+  colors. The table of contents, cross-references and footnotes are links. It has no text columns or page numbers, and
+  page breaks apply only when it's printed.
 
 ## Sync files
 

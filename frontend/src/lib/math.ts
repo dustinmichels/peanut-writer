@@ -36,10 +36,7 @@ function inlineMath(cx: InlineContext, next: number, pos: number): number {
     } else if (space(cx.char(i - 1)) || digit(cx.char(i + 1))) return -1;
     const end = i + open;
     return cx.addElement(
-      cx.elt("InlineMath", pos, end, [
-        cx.elt("MathMark", pos, start),
-        cx.elt("MathMark", i, end),
-      ]),
+      cx.elt("InlineMath", pos, end, [cx.elt("MathMark", pos, start), cx.elt("MathMark", i, end)]),
     );
   }
   return -1;

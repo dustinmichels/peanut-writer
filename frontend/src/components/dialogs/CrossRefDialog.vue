@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import { Image, Sigma, Table, Unlink } from "lucide-vue-next";
+import { Check, Image, Sigma, Table, Unlink } from "lucide-vue-next";
 import Modal from "../Modal.vue";
 import { insertCrossRef, unlinkCrossRef } from "../../lib/actions";
 import { type Item, type Kind, kindName, plain, type RefAt } from "../../lib/markdown";
@@ -20,7 +20,10 @@ const kind = ref<"all" | Kind>("all");
 const list = computed(() =>
   state.items.filter((x) => kind.value === "all" || x.kind === kind.value),
 );
-const picked = ref(Math.max(0, list.value.findIndex((x) => x.label === props.at?.label)));
+// The item the reference being changed points to now, if any.
+const isCurrent = (x: Item) => !!props.at?.label && x.label === props.at.label;
+const picked = ref(Math.max(0, list.value.findIndex(isCurrent)));
+const listEl = ref<HTMLElement>();
 
 function insert(item: Item | undefined) {
   if (!item) return;
@@ -41,7 +44,10 @@ function key(e: KeyboardEvent) {
   else return;
   e.preventDefault();
 }
-onMounted(() => window.addEventListener("keydown", key));
+onMounted(() => {
+  window.addEventListener("keydown", key);
+  listEl.value?.querySelector(".current")?.scrollIntoView({ block: "nearest" });
+});
 onUnmounted(() => window.removeEventListener("keydown", key));
 </script>
 
@@ -62,13 +68,14 @@ onUnmounted(() => window.removeEventListener("keydown", key));
         {{ k.label }}
       </button>
     </div>
-    <div v-if="list.length" class="list">
+    <div v-if="list.length" ref="listEl" class="list">
       <button
         v-for="(it, i) in list"
         :key="it.from"
         type="button"
         class="row"
-        :class="{ on: i === picked }"
+        :class="{ on: i === picked, current: isCurrent(it) }"
+        :aria-current="isCurrent(it) || undefined"
         @mouseenter="picked = i"
         @click="insert(it)"
       >
@@ -77,6 +84,7 @@ onUnmounted(() => window.removeEventListener("keydown", key));
         <code v-if="it.kind === 'equation'" class="cap tex">{{ it.caption }}</code>
         <span v-else class="cap">{{ plain(it.caption) || "No caption" }}</span>
         <code v-if="it.label">@{{ it.label }}</code>
+        <span v-if="isCurrent(it)" class="now"><Check :size="12" /> Current</span>
       </button>
     </div>
     <div v-else class="none">
@@ -155,6 +163,24 @@ onUnmounted(() => window.removeEventListener("keydown", key));
 }
 .row.on {
   background: var(--cream);
+}
+.row.current {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+.now {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+.row .now svg {
+  color: white;
 }
 .row b {
   color: var(--roast);

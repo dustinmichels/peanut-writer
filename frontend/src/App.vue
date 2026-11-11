@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { Events } from "@wailsio/runtime";
 import { Link, Unlink } from "lucide-vue-next";
 import { DocService } from "../bindings/peanut-writer";
@@ -41,10 +41,23 @@ function startResize(e: PointerEvent) {
   target.addEventListener("lostpointercapture", done, { once: true });
 }
 
+// The customize pane needs the preview to show its changes, so it stays open then.
+const previewShown = computed(() => state.previewOpen || state.customizing);
+
 const side = "clamp(150px, 16%, 240px) ";
 const columns = computed(
   () =>
-    `${state.outlineOpen ? side : ""}${state.versionsOpen ? side : ""}${split.value}fr 6px ${1 - split.value}fr`,
+    `${state.outlineOpen ? side : ""}${state.versionsOpen ? side : ""}` +
+    (previewShown.value ? `${split.value}fr 6px ${1 - split.value}fr` : "1fr"),
+);
+
+// Hidden, the preview can't scroll; shown again, it lines up with the editor.
+watch(
+  previewShown,
+  (shown) => {
+    if (shown && state.scrollLinked) sync?.link();
+  },
+  { flush: "post" },
 );
 
 // jump shows a heading from the outline in the editor, and the preview
@@ -57,7 +70,7 @@ function jump(line: number) {
 
 // pick shows where a click on the preview is in the editor.
 function pick(line: number, next: number, t: number) {
-  if (editor.value && !state.customizing) revealSource(editor.value, line, next, t);
+  if (editor.value) revealSource(editor.value, line, next, t);
 }
 
 const preview = ref<InstanceType<typeof PreviewPane>>();
@@ -82,7 +95,8 @@ onMounted(async () => {
     state.typstError = info.typstError;
     state.version = info.version;
     loadDoc(info.document);
-    if (info.recent?.length) state.dialog = { kind: "recent", files: info.recent };
+    // Unless Finder opened a document, offer what to open.
+    if (!info.document.path) state.dialog = { kind: "start", files: info.recent ?? [] };
   } catch (e) {
     toast(`Couldn't start: ${errorText(e)}`, "error");
   }
@@ -105,7 +119,7 @@ onUnmounted(() => {
       <!-- The editor stays mounted (hidden) while the template is customized. -->
       <EditorPane v-show="!state.customizing" />
       <CustomizePane v-if="state.customizing" />
-      <div class="splitter" @pointerdown="startResize">
+      <div v-show="previewShown" class="splitter" @pointerdown="startResize">
         <button
           v-if="!state.customizing"
           class="link"
@@ -124,7 +138,7 @@ onUnmounted(() => {
         </button>
         <span v-else />
       </div>
-      <PreviewPane ref="preview" @pick="pick" />
+      <PreviewPane v-show="previewShown" ref="preview" @pick="pick" />
     </main>
     <StatusBar />
     <Dialogs />

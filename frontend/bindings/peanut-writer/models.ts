@@ -117,7 +117,7 @@ export interface StartupInfo {
     "typstError": string;
 
     /**
-     * offered on opening; none on the first run
+     * offered on opening, unless Finder opened a document
      */
     "recent": RecentFile[] | null;
 

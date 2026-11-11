@@ -2,7 +2,8 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { Events } from "@wailsio/runtime";
 import { DocService } from "../../bindings/peanut-writer";
-import { contentChanged, insertImageFiles, insertImages } from "../lib/actions";
+import { X } from "lucide-vue-next";
+import { contentChanged, insertImageFiles, insertImages, toggleMarkdown } from "../lib/actions";
 import { activeMarks, blockStyleAt, createEditor } from "../lib/editor";
 import { editor, state } from "../lib/store";
 
@@ -55,6 +56,17 @@ onBeforeUnmount(() => {
   <!-- Wails adds file-drop-target-active while files are dragged over the pane. -->
   <section class="pane" data-file-drop-target>
     <div ref="host" class="host" />
+    <button
+      v-if="state.showMarkdown"
+      type="button"
+      class="exit-markdown"
+      title="Hide the Markdown again (⌘/)"
+      @mousedown.prevent
+      @click="toggleMarkdown"
+    >
+      <X :size="13" :stroke-width="2.5" />
+      Exit Markdown mode
+    </button>
     <div class="drop">
       <img src="/peanut.svg" alt="" />
       <span>Drop a picture to add a figure</span>
@@ -73,6 +85,28 @@ onBeforeUnmount(() => {
   height: 100%;
   user-select: text;
   -webkit-user-select: text;
+}
+.exit-markdown {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+.exit-markdown:hover {
+  filter: brightness(1.1);
 }
 .drop {
   position: absolute;

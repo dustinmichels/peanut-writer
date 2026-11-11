@@ -189,7 +189,8 @@ async function submit() {
             <input v-model="user.author" placeholder="None" />
           </label>
           <span class="hint"
-            >Put in the properties of each new document. Starts as this computer's user name.</span
+            >Put in the properties of each new document, and of any saved without an author. Starts
+            as this computer's user name.</span
           >
         </div>
         <p class="hint">For every document. Kept in {{ info.userFile }}</p>

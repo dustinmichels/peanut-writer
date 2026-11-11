@@ -64,8 +64,8 @@ app ad hoc and skips notarization: it runs on the Mac that built it, but Gatekee
 ## Screenshots
 
 `mise run docs:screenshots` builds the app in Wails server mode (`bin/peanut-writer-server`) and drives it in headless
-WebKit with Playwright (`docs/scripts/screenshots.ts`). Each scene starts the app with a fresh, empty home folder, so
-it opens on the welcome guide with default settings, then clicks its way to what the picture shows. Pages use them as
+WebKit with Playwright (`docs/scripts/screenshots.ts`). Each scene starts the app with a fresh, empty home folder and
+default settings, opens the sample from the start dialog, then clicks its way to what the picture shows. Pages use them as
 `/screenshots/<name>.png`. Name scenes to redo only those: `mise run docs:screenshots -- settings outline`. To add one,
 add a scene to the `scenes` list.
 
@@ -74,7 +74,8 @@ add a scene to the `scenes` list.
 ```text
 Name.md ──► internal/doc ──► document model ──┬──► internal/render ──► Typst ──► preview (SVG) and PDF
             (figures, captions,               │      (peanut.typ renders, template.typ styles)
-             numbering, references)           └──► internal/docx ──► Word file
+             numbering, references)           ├──► internal/docx ──► Word file
+                                              └──► internal/html ──► web page
 ```
 
 The document model is the single source of truth for numbering and references, which is why the PDF and the Word file
@@ -88,6 +89,7 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/render`: the model → Typst → SVG pages and PDF. Finds `typst` beside the executable, on `PATH`, or where
   Homebrew and mise install it.
 - `internal/docx`: the model → .docx, written directly (no Word or pandoc needed).
+- `internal/html`: the model → a single self-contained .html page, styled from the template's Word style.
 - `internal/templates`: built-in and user templates, and per-document customization.
 - `internal/backup`: `.md` + `.docx` backups in timestamped `backups/<datetime>/` folders.
 - `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).

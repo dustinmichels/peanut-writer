@@ -106,15 +106,15 @@ Cross-reference** and pick the figure.
 
 ## The best of both
 
-|                                   | Word | Markdown | LaTeX | Peanut Writer |
-| --------------------------------- | :--: | :------: | :---: | :-----------: |
-| Point-and-click editing           |  ✅  |          |       |      ✅       |
-| Plain-text file that lasts        |      |    ✅    |  ✅   |      ✅       |
-| Style kept apart from content     |  ➖  |    ✅    |  ✅   |      ✅       |
-| Numbered figures and tables       |  ➖  |          |  ✅   |      ✅       |
-| Cross-references that keep up     |  ➖  |          |  ✅   |      ✅       |
-| Professionally typeset pages      |      |          |  ✅   |      ✅       |
-| See the page as you type          |  ✅  |          |       |      ✅       |
-| Exports an editable Word file     |  ✅  |          |       |      ✅       |
+|                               | Word | Markdown | LaTeX | Peanut Writer |
+| ----------------------------- | :--: | :------: | :---: | :-----------: |
+| Point-and-click editing       |  ✅  |          |       |      ✅       |
+| Plain-text file that lasts    |      |    ✅    |  ✅   |      ✅       |
+| Style kept apart from content |  ➖  |    ✅    |  ✅   |      ✅       |
+| Numbered figures and tables   |  ➖  |          |  ✅   |      ✅       |
+| Cross-references that keep up |  ➖  |          |  ✅   |      ✅       |
+| Professionally typeset pages  |      |          |  ✅   |      ✅       |
+| See the page as you type      |  ✅  |          |       |      ✅       |
+| Exports an editable Word file |  ✅  |          |       |      ✅       |
 
 ➖ possible, but only if you're careful with styles and fields.

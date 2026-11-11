@@ -409,8 +409,7 @@ class FigureWidget extends WidgetType {
     const el = document.createElement("div");
     el.className = "pw-figure";
     if (this.item.position) el.classList.add(this.item.position);
-    // The item as the document has it now (this widget may be older). The
-    // widget sits after the figure's Markdown, or in its place.
+    // The item as the document has it now (this widget may be older).
     const current = () => {
       const pos = view.posAtDOM(el);
       return view.state
@@ -540,13 +539,13 @@ class FigureWidget extends WidgetType {
   }
 }
 
-// TableBar names a table and opens it for editing. Unless the Markdown is
-// shown, it stands in for the table's Markdown and draws the table below.
+// TableBar stands in for a table's Markdown: it names the table, opens it
+// for editing and draws it below.
 class TableBar extends WidgetType {
   constructor(
     readonly item: Item,
     readonly handlers: Handlers,
-    readonly table?: Table,
+    readonly table: Table,
   ) {
     super();
   }
@@ -560,7 +559,7 @@ class TableBar extends WidgetType {
   toDOM(view: EditorView) {
     const bar = document.createElement("div");
     bar.className = "pw-tablebar";
-    const root = this.table ? document.createElement("div") : bar;
+    const root = document.createElement("div");
     const badge = document.createElement("span");
     badge.className = "pw-badge";
     badge.textContent = `Table ${this.item.number}`;
@@ -588,7 +587,6 @@ class TableBar extends WidgetType {
     grip.append(gripIcon());
     grip.onpointerdown = (e) => startMove(view, root, grip, e, current);
     bar.append(grip, badge, cap, edit);
-    if (!this.table) return block(bar, "pw-tablebar-block");
 
     root.className = "pw-table";
     const grid = document.createElement("table");
@@ -675,7 +673,7 @@ class PropertiesCard extends WidgetType {
     text.append(title, by);
     const btn = document.createElement("button");
     btn.className = "pw-widget-btn";
-    btn.textContent = "Edit properties";
+    btn.textContent = "Edit header";
     btn.onmousedown = (e) => e.preventDefault();
     const open = () => this.handlers.editProperties();
     btn.onclick = open;
@@ -691,16 +689,27 @@ class PropertiesCard extends WidgetType {
 const refRe = /(^|[^\w])@((?:fig|tbl|eq):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
 const footRe = /\[\^[^\]\s]+\](?!:)/g;
 
-// Whether the editor shows the document's Markdown, or hides its marks and
-// puts figures and tables in place of theirs.
+// Whether the editor shows the document's Markdown as plain text (mono, only
+// syntax colors), or hides its marks and puts figures and tables in place
+// of theirs.
 const showMarkdown = Facet.define<boolean, boolean>({
   combine: (v) => v.some(Boolean),
 });
 const showSlot = new Compartment();
 
+function showExtension(show: boolean): Extension {
+  return show
+    ? [
+        showMarkdown.of(true),
+        syntaxHighlighting(sourceHighlight),
+        EditorView.editorAttributes.of({ class: "pw-source" }),
+      ]
+    : syntaxHighlighting(highlight);
+}
+
 // setShowMarkdown shows or hides the document's Markdown.
 export function setShowMarkdown(view: EditorView, show: boolean) {
-  view.dispatch({ effects: showSlot.reconfigure(showMarkdown.of(show)) });
+  view.dispatch({ effects: showSlot.reconfigure(showExtension(show)) });
 }
 
 interface Decos {
@@ -709,6 +718,8 @@ interface Decos {
 }
 
 function buildDecorations(state: EditorState, handlers: Handlers): Decos {
+  // Shown Markdown is plain text.
+  if (state.facet(showMarkdown)) return { deco: Decoration.none, atomic: Decoration.none };
   const doc = state.doc;
   const items = state.field(itemsField);
   // The first of a label wins, as in internal/doc.
@@ -721,9 +732,8 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     atomic?: boolean;
   }[] = [];
 
-  const show = state.facet(showMarkdown);
   const fm = readFrontMatter(doc.toString());
-  if (fm.to === 0 && !show) {
+  if (fm.to === 0) {
     // No properties yet (a new document, or one on the default template):
     // the card still sits on top, so they can be added.
     ranges.push({
@@ -735,7 +745,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
         side: -1,
       }),
     });
-  } else if (!show) {
+  } else {
     const by = [fm.meta.author, fm.meta.topic, fm.meta.date].filter(Boolean).join(" · ");
     const end = doc.lineAt(Math.max(fm.to - 1, 0)).to;
     ranges.push({
@@ -747,51 +757,22 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       }),
       atomic: true,
     });
-  } else if (fm.to > 0) {
-    for (let p = 0; p < fm.to;) {
-      const line = doc.lineAt(p);
-      ranges.push({
-        from: line.from,
-        to: line.from,
-        deco: Decoration.line({ class: "pw-meta-line" }),
-      });
-      p = line.to + 1;
-    }
   }
 
-  // Figures and tables replace their Markdown unless it's shown; nothing
-  // else is decorated inside them then. Equations stay as their TeX.
+  // Figures and tables replace their Markdown; nothing else is decorated
+  // inside them. Equations stay as their TeX.
   const hidden: Item[] = [];
   for (const it of items) {
     if (it.kind === "equation") continue;
+    hidden.push(it);
     if (it.kind === "figure") {
-      const widget = new FigureWidget(it, handlers);
-      if (!show) {
-        hidden.push(it);
-        ranges.push({
-          from: it.from,
-          to: it.to,
-          deco: Decoration.replace({ widget, block: true }),
-          atomic: true,
-        });
-        continue;
-      }
       ranges.push({
-        from: it.to,
+        from: it.from,
         to: it.to,
-        deco: Decoration.widget({ widget, block: true, side: 1 }),
+        deco: Decoration.replace({ widget: new FigureWidget(it, handlers), block: true }),
+        atomic: true,
       });
-      for (let p = it.from; p <= it.to;) {
-        const line = doc.lineAt(p);
-        ranges.push({
-          from: line.from,
-          to: line.from,
-          deco: Decoration.line({ class: "pw-figure-line" }),
-        });
-        p = line.to + 1;
-      }
-    } else if (!show) {
-      hidden.push(it);
+    } else {
       const table = parseTable(doc.sliceString(it.tableFrom!, it.tableTo!));
       ranges.push({
         from: it.from,
@@ -802,32 +783,6 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
         }),
         atomic: true,
       });
-    } else {
-      ranges.push({
-        from: it.from,
-        to: it.from,
-        deco: Decoration.widget({
-          widget: new TableBar(it, handlers),
-          block: true,
-          side: -1,
-        }),
-      });
-      for (let p = it.tableFrom!; p <= it.tableTo!;) {
-        const line = doc.lineAt(p);
-        ranges.push({
-          from: line.from,
-          to: line.from,
-          deco: Decoration.line({ class: "pw-table-line" }),
-        });
-        p = line.to + 1;
-      }
-      if (it.captionFrom !== undefined) {
-        ranges.push({
-          from: it.captionFrom,
-          to: it.captionFrom,
-          deco: Decoration.line({ class: "pw-caption-line" }),
-        });
-      }
     }
   }
 
@@ -840,24 +795,21 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     }
     return false;
   };
-  // Shown Markdown keeps cross-references as written.
-  if (!show) {
-    for (const m of text.matchAll(refRe)) {
-      const from = m.index! + m[1].length;
-      const to = from + m[2].length + 1;
-      if (from < fm.to || inCode(from) || hidden.some((h) => from >= h.from && from <= h.to))
-        continue;
-      const target = labels.get(m[2]);
-      const label = target ? `${kindName[target.kind]} ${target.number}` : `?? ${m[2]}`;
-      ranges.push({
-        from,
-        to,
-        deco: Decoration.replace({
-          widget: new RefWidget(m[2], label, !!target, handlers),
-        }),
-        atomic: true,
-      });
-    }
+  for (const m of text.matchAll(refRe)) {
+    const from = m.index! + m[1].length;
+    const to = from + m[2].length + 1;
+    if (from < fm.to || inCode(from) || hidden.some((h) => from >= h.from && from <= h.to))
+      continue;
+    const target = labels.get(m[2]);
+    const label = target ? `${kindName[target.kind]} ${target.number}` : `?? ${m[2]}`;
+    ranges.push({
+      from,
+      to,
+      deco: Decoration.replace({
+        widget: new RefWidget(m[2], label, !!target, handlers),
+      }),
+      atomic: true,
+    });
   }
   for (const m of text.matchAll(footRe)) {
     const at = m.index!;
@@ -909,7 +861,12 @@ const lineStyles = ViewPlugin.fromClass(
       this.decorations = this.build(view);
     }
     update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || syntaxTree(u.state) !== syntaxTree(u.startState))
+      if (
+        u.docChanged ||
+        u.viewportChanged ||
+        syntaxTree(u.state) !== syntaxTree(u.startState) ||
+        u.state.facet(showMarkdown) !== u.startState.facet(showMarkdown)
+      )
         this.decorations = this.build(u.view);
     }
     build(view: EditorView) {
@@ -921,6 +878,14 @@ const lineStyles = ViewPlugin.fromClass(
         seen.add(line.from);
         b.add(line.from, line.from, Decoration.line({ class: cls }));
       };
+      // Shown Markdown dims its front matter (otherwise a card covers it).
+      if (view.state.facet(showMarkdown)) {
+        const end = view.state.field(frontMatterEnd);
+        for (let p = 0; p < end;) {
+          add(p, "pw-meta-line");
+          p = view.state.doc.lineAt(p).to + 1;
+        }
+      }
       for (const { from, to } of view.visibleRanges) {
         syntaxTree(view.state).iterate({
           from,
@@ -1116,11 +1081,7 @@ function buildHidden(view: EditorView): Hidden {
             m.from,
             m.to,
             "prefix",
-            m.level
-              ? new HeadingMarkWidget(m.level)
-              : m.bullet
-                ? new BulletWidget()
-                : undefined,
+            m.level ? new HeadingMarkWidget(m.level) : m.bullet ? new BulletWidget() : undefined,
           );
       }
       p = line.to + 1;
@@ -1458,32 +1419,30 @@ const hiddenKeymap = keymap.of([
 
 // --- Highlighting and theme ----------------------------------------------
 
-const highlight = HighlightStyle.define([
-  { tag: t.heading1, fontWeight: "700" },
-  { tag: t.heading2, fontWeight: "700" },
-  { tag: t.heading3, fontWeight: "650" },
-  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: "650" },
-  { tag: t.strong, fontWeight: "700" },
+const highlightCommon = [
+  { tag: [t.heading1, t.heading2, t.strong], fontWeight: "700" },
+  { tag: [t.heading3, t.heading4, t.heading5, t.heading6], fontWeight: "650" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--accent-ink)", textDecoration: "underline" },
   { tag: t.url, color: "var(--muted)" },
-  {
-    tag: t.monospace,
-    fontFamily: "var(--mono)",
-    fontSize: "0.92em",
-    color: "var(--roast)",
-  },
-  {
-    tag: mathTag,
-    fontFamily: "var(--mono)",
-    fontSize: "0.92em",
-    color: "var(--math)",
-  },
   { tag: [t.processingInstruction, t.meta], color: "var(--marks)" },
   { tag: t.contentSeparator, color: "var(--marks)" },
   { tag: t.quote, color: "var(--quote)" },
   { tag: t.list, color: "var(--accent-ink)" },
+];
+
+const highlight = HighlightStyle.define([
+  ...highlightCommon,
+  { tag: t.monospace, fontFamily: "var(--mono)", fontSize: "0.92em", color: "var(--roast)" },
+  { tag: mathTag, fontFamily: "var(--mono)", fontSize: "0.92em", color: "var(--math)" },
+]);
+
+// Shown Markdown is all mono already: only colors and weights.
+const sourceHighlight = HighlightStyle.define([
+  ...highlightCommon,
+  { tag: t.monospace, color: "var(--roast)" },
+  { tag: mathTag, color: "var(--math)" },
 ]);
 
 const theme = EditorView.theme({
@@ -1873,7 +1832,7 @@ export function createEditor(
     EditorState.allowMultipleSelections.of(false),
     bodyHint,
     markdown({ base: markdownLanguage, addKeymap: false, extensions: [math] }),
-    syntaxHighlighting(highlight),
+    // Highlighting comes with showSlot.
     theme,
     hiddenKeymap,
     formatting,
@@ -1910,7 +1869,7 @@ export function createEditor(
     state: EditorState.create({
       doc,
       selection: startSelection(doc),
-      extensions: [extensions, showSlot.of(showMarkdown.of(show))],
+      extensions: [extensions, showSlot.of(showExtension(show))],
     }),
   });
   editorSetup.set(view, { extensions, handlers });
@@ -1923,7 +1882,7 @@ const editorSetup = new WeakMap<EditorView, { extensions: Extension[]; handlers:
 export function replaceDoc(view: EditorView, doc: string) {
   imageCache.clear(); // picture paths are relative to the document
   const { extensions, handlers } = editorSetup.get(view)!;
-  const show = showSlot.of(showMarkdown.of(view.state.facet(showMarkdown)));
+  const show = showSlot.of(showExtension(view.state.facet(showMarkdown)));
   view.setState(
     EditorState.create({ doc, selection: startSelection(doc), extensions: [extensions, show] }),
   );

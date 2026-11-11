@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as backup$0 from "./internal/backup/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as templates$0 from "./internal/templates/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -36,6 +39,14 @@ export function AddImage(name: string, data: string): $CancellablePromise<string
  */
 export function AddImageFile(path: string): $CancellablePromise<string> {
     return $Call.ByID(1382889653, path);
+}
+
+/**
+ * Backups lists the open document's backups, newest first; none while it's
+ * untitled.
+ */
+export function Backups(): $CancellablePromise<backup$0.Backup[] | null> {
+    return $Call.ByID(2661405750);
 }
 
 /**
@@ -111,6 +122,14 @@ export function ExportDOCX(content: string): $CancellablePromise<string> {
 }
 
 /**
+ * ExportHTML asks where to save a web page of the document and writes it;
+ * returns the path, or "" if the user canceled.
+ */
+export function ExportHTML(content: string): $CancellablePromise<string> {
+    return $Call.ByID(3706447804, content);
+}
+
+/**
  * ExportPDF asks where to save a PDF of the document and writes it; returns
  * the path, or "" if the user canceled.
  */
@@ -155,6 +174,14 @@ export function ImageURL(ref: string): $CancellablePromise<string> {
  */
 export function ImportTemplate(): $CancellablePromise<string> {
     return $Call.ByID(1039486284);
+}
+
+/**
+ * LoadBackup asks, then replaces the saved document's text with that of its
+ * backup at path (a Backup's Path), after backing the document up.
+ */
+export function LoadBackup(path: string): $CancellablePromise<$models.DocInfo> {
+    return $Call.ByID(1923796929, path);
 }
 
 /**
@@ -250,6 +277,8 @@ export function Reveal(p: string): $CancellablePromise<void> {
 
 /**
  * Save writes the document to its file, asking where first if it has none.
+ * Core properties it lacks are filled in (see fillProperties); the returned
+ * Content is what was written.
  */
 export function Save(content: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(925905422, content);
@@ -257,7 +286,8 @@ export function Save(content: string): $CancellablePromise<$models.DocInfo> {
 
 /**
  * SaveAs asks for a name and a place and saves the document in a package of
- * that name there, bringing its images along.
+ * that name there, bringing its images along and filling in core properties
+ * it lacks.
  */
 export function SaveAs(content: string): $CancellablePromise<$models.DocInfo> {
     return $Call.ByID(2321284714, content);
@@ -345,9 +375,8 @@ export function ShareTemplate(id: string): $CancellablePromise<string> {
 }
 
 /**
- * Startup opens the document Finder launched the app with, if any; else the
- * welcome guide on the first run, and a blank document (offering the recent
- * ones) after that.
+ * Startup opens the document Finder launched the app with, if any; else a
+ * blank document, with the recent ones for the editor to offer beside it.
  */
 export function Startup(): $CancellablePromise<$models.StartupInfo> {
     return $Call.ByID(1598475524);

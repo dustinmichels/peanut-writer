@@ -184,25 +184,40 @@ select {
   font-size: 0.94em;
   padding-left: 12px !important;
 }
-.cm-editor .pw-table-line {
-  font-family: var(--mono);
-  font-size: 0.82em;
-  white-space: pre;
-  color: #4d3d30;
-  background: #fdf8f1;
+/* Markdown mode: the document's Markdown in mono, with lighter versions of
+   the line styles above. */
+.cm-editor.pw-source {
+  font-size: 14px;
 }
-.cm-editor .pw-caption-line,
-.cm-editor .pw-figure-line {
+.cm-editor.pw-source .cm-scroller {
+  font-family: var(--mono);
+  line-height: 1.6;
+}
+.cm-editor.pw-source .pw-h {
+  font-family: var(--mono);
+  line-height: 1.5;
+}
+.cm-editor.pw-source .pw-h1 {
+  font-size: 1.3em;
+  padding-top: 0.3em !important;
+}
+.cm-editor.pw-source .pw-h2 {
+  font-size: 1.15em;
+  padding-top: 0.2em !important;
+}
+.cm-editor.pw-source .pw-h3 {
+  font-size: 1.05em;
+  padding-top: 0.1em !important;
+}
+.cm-editor.pw-source .pw-quote-line {
+  font-style: normal;
+}
+.cm-editor.pw-source .pw-code-line,
+.cm-editor.pw-source .pw-math-line {
+  font-size: 1em;
+}
+.cm-editor.pw-source .pw-meta-line {
   color: var(--muted);
-  font-size: 0.85em;
-  font-family: var(--ui);
-}
-.cm-editor .pw-meta-line,
-.cm-editor .pw-meta-line span {
-  font-family: var(--mono);
-  font-size: 0.85em !important;
-  font-weight: 400 !important;
-  color: var(--muted) !important;
 }
 .cm-editor .pw-code-fence {
   font-size: 0.68em;
@@ -239,9 +254,6 @@ select {
 }
 .pw-figure-block {
   padding: 4px 0 14px;
-}
-.pw-tablebar-block {
-  padding: 10px 0 4px;
 }
 .pw-table {
   padding: 10px 0 14px;

@@ -40,7 +40,7 @@ const Default = "classic"
 const CustomID = "custom"
 
 // Order of the built-in templates in the gallery.
-var builtinOrder = []string{"classic", "academic", "report", "minimal", "manuscript", "elegant", "editorial", "journal", "peanut"}
+var builtinOrder = []string{"classic", "wordy", "academic", "report", "minimal", "manuscript", "elegant", "editorial", "journal", "peanut"}
 
 // reserved reports whether a user template folder can't be named id.
 func reserved(id string) bool { return id == CustomID || slices.Contains(builtinOrder, id) }
@@ -223,6 +223,7 @@ type DocxStyle struct {
 	TitleSize        float64   `json:"titleSize"`        // points
 	TitleColor       string    `json:"titleColor"`       //
 	TitleAlign       string    `json:"titleAlign"`       // "left" or "center"
+	TitleRule        bool      `json:"titleRule"`        // a hairline under the title and byline
 	CaptionSize      float64   `json:"captionSize"`      // points
 	CaptionColor     string    `json:"captionColor"`     //
 	CaptionItalic    bool      `json:"captionItalic"`    //
@@ -320,7 +321,7 @@ func loadUser(dir string) (Template, error) {
 	return t, err
 }
 
-// decode reads template.json; Word styles left out take the classic look.
+// decode reads template.json; Word styles left out take Wordy's look.
 func decode(b []byte) (Template, error) {
 	t := Template{Docx: DocxStyle{
 		Paper: "letter", Margin: 1, BodyFont: "Aptos", HeadingFont: "Aptos Display", MonoFont: "Menlo",

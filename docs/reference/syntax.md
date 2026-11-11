@@ -5,18 +5,18 @@ it's what you'll see in **View → Markdown** (⌘/). This is the same list as H
 
 ## Everyday formatting
 
-| Type this                         | To get                                         |
-| --------------------------------- | ---------------------------------------------- |
-| `**bold**` `*italic*` `~~strike~~` | Bold (⌘B), italic (⌘I), strikethrough          |
-| `` `code` ``                      | Code in a sentence                             |
-| `# Heading 1` `## Heading 2`      | Headings (⌥⌘1, ⌥⌘2, ⌥⌘3)                       |
-| `- item` `1. item`                | Bulleted and numbered lists; Tab nests          |
-| `> quoted`                        | A quotation                                    |
-| `[text](https://…)`               | A link                                         |
-| `Text[^1]` … `[^1]: The note.`    | A footnote                                     |
-| `[TOC]`                           | Table of contents                              |
-| `\pagebreak`                      | Start a new page                               |
-| `---`                             | A divider line                                 |
+| Type this                          | To get                                 |
+| ---------------------------------- | -------------------------------------- |
+| `**bold**` `*italic*` `~~strike~~` | Bold (⌘B), italic (⌘I), strikethrough  |
+| `` `code` ``                       | Code in a sentence                     |
+| `# Heading 1` `## Heading 2`       | Headings (⌥⌘1, ⌥⌘2, ⌥⌘3)               |
+| `- item` `1. item`                 | Bulleted and numbered lists; Tab nests |
+| `> quoted`                         | A quotation                            |
+| `[text](https://…)`                | A link                                 |
+| `Text[^1]` … `[^1]: The note.`     | A footnote                             |
+| `[TOC]`                            | Table of contents                      |
+| `\pagebreak`                       | Start a new page                       |
+| `---`                              | A divider line                         |
 
 ## Figures
 
@@ -112,7 +112,8 @@ hide: subtitle, date
 ---
 ```
 
-`template` is one of `classic` (the default), `academic`, `report`, `minimal`, `manuscript`, `elegant`, `editorial`,
+`template` is one of `classic` (the default), `wordy`, `academic`, `report`, `minimal`, `manuscript`, `elegant`,
+`editorial`,
 `journal`, `peanut`,
 `custom` for a [customized document](../guide/templates#customizing-one-document), or the name of one of
 [your own templates](./custom-templates).

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref } from "vue";
-import { RotateCcw } from "lucide-vue-next";
+import { RotateCcw, X } from "lucide-vue-next";
 import { DocService } from "../../bindings/peanut-writer";
 import type { DocxStyle, Style } from "../../bindings/peanut-writer/internal/templates/models";
 import {
+  customizeTemplate,
   removeCustomTemplate,
-  saveCustomTemplate,
   setTemplateBase,
   setTemplateStyle,
 } from "../lib/actions";
 import { errorText, state, toast } from "../lib/store";
+import FontSelect from "./FontSelect.vue";
 
 // Shown in place of the editor while the document's own template is being
 // customized; the preview beside it shows each change.
@@ -50,12 +51,6 @@ DocService.Fonts()
   .then((f) => (fonts.value = f ?? []))
   .catch((e) => toast(`Fonts: ${errorText(e)}`, "error"));
 
-// A chosen font Typst can't find is still offered, so it shows as chosen.
-const fontOptions = (k: FontKey) => {
-  const v = style[k];
-  return v && !fonts.value.includes(v) ? [v, ...fonts.value] : fonts.value;
-};
-
 let timer: ReturnType<typeof setTimeout> | undefined;
 function save() {
   clearTimeout(timer);
@@ -83,13 +78,10 @@ function changeBase(id: string) {
   setTemplateBase(id);
 }
 
-// Saving as a template of the user's own, for any document to use.
-const saving = reactive({ name: "", description: "" });
-async function saveAsTemplate() {
-  if (!saving.name.trim()) return;
+// A change still waiting is saved first, so the new template has it.
+function saveAsTemplate() {
   flush();
-  if (await saveCustomTemplate(saving.name, saving.description))
-    Object.assign(saving, { name: "", description: "" });
+  state.dialog = { kind: "saveTemplate" };
 }
 
 function set<K extends keyof Style>(k: K, v: Style[K] | undefined) {
@@ -114,6 +106,9 @@ const fileHint = computed(() =>
 <template>
   <section class="customize">
     <header>
+      <button class="close" title="Close" aria-label="Close" @click="customizeTemplate">
+        <X :size="18" :stroke-width="2.5" />
+      </button>
       <h2>Customize {{ base?.name ?? "template" }}</h2>
       <p class="hint">Changes are for this document only. {{ fileHint }}</p>
     </header>
@@ -134,18 +129,16 @@ const fileHint = computed(() =>
 
       <fieldset>
         <legend>Fonts</legend>
-        <label v-for="f in fontFields" :key="f.key" class="row">
+        <div v-for="f in fontFields" :key="f.key" class="row">
           <span>{{ f.label }}</span>
-          <select
+          <FontSelect
             :value="style[f.key] ?? ''"
-            @change="set(f.key, ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">Template's ({{ baseStyle?.[f.key] }})</option>
-            <option v-for="name in fontOptions(f.key)" :key="name" :value="name">
-              {{ name }}{{ fonts.includes(name) ? "" : " (not found)" }}
-            </option>
-          </select>
-        </label>
+            :fonts="fonts"
+            :inherited="baseStyle?.[f.key]"
+            :label="f.label"
+            @change="set(f.key, $event)"
+          />
+        </div>
         <label class="row">
           <span>Body size</span>
           <select
@@ -185,29 +178,12 @@ const fileHint = computed(() =>
           </div>
         </div>
       </fieldset>
-
-      <fieldset>
-        <legend>Save as template</legend>
-        <p class="hint">Adds these fonts and colors to your templates, for any document to use.</p>
-        <form @submit.prevent="saveAsTemplate">
-          <label class="row">
-            <span>Name</span>
-            <input v-model="saving.name" type="text" :placeholder="`My ${base?.name ?? 'template'}`" />
-          </label>
-          <label class="row">
-            <span>Description</span>
-            <input v-model="saving.description" type="text" placeholder="Optional" />
-          </label>
-          <div class="row">
-            <span />
-            <button type="submit" class="btn" :disabled="!saving.name.trim()">Save as Template</button>
-          </div>
-        </form>
-      </fieldset>
     </div>
 
     <footer>
       <button type="button" class="btn danger" @click="remove">Remove Customization</button>
+      <span class="spacer" />
+      <button type="button" class="btn" @click="saveAsTemplate">Save as Template</button>
       <button type="button" class="btn primary" @click="state.customizing = false">Done</button>
     </footer>
   </section>
@@ -222,8 +198,27 @@ const fileHint = computed(() =>
   background: var(--surface);
 }
 header {
-  padding: 18px 22px 10px;
+  position: relative;
+  padding: 18px 48px 10px 22px;
   border-bottom: 1px solid var(--border);
+}
+.close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  cursor: pointer;
+}
+.close:hover {
+  background: #fbe3dc;
 }
 h2 {
   margin: 0 0 4px;
@@ -289,6 +284,9 @@ input[type="color"] {
 .changed {
   color: var(--accent);
   font-weight: 600;
+}
+.spacer {
+  flex: 1;
 }
 footer {
   display: flex;

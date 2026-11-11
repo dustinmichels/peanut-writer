@@ -137,7 +137,8 @@ export function createPeanutStage(
       // The raycaster ignores visibility, so skip a hat that's off.
       return raycaster.intersectObject(peanut.group, true).some((hit) => {
         if (hit.object.userData.isShadow) return false;
-        for (let o: THREE.Object3D | null = hit.object; o; o = o.parent) if (!o.visible) return false;
+        for (let o: THREE.Object3D | null = hit.object; o; o = o.parent)
+          if (!o.visible) return false;
         return true;
       });
     },

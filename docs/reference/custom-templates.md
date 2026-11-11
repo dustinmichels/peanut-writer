@@ -88,6 +88,7 @@ from **Customize** also has a `style` block: its font and color changes, passed 
     "titleSize": 32,
     "titleColor": "111111",
     "titleAlign": "left",
+    "titleRule": true,
     "captionSize": 8.5,
     "captionColor": "737373",
     "captionItalic": false,
@@ -98,25 +99,26 @@ from **Customize** also has a `style` block: its font and color changes, passed 
 }
 ```
 
-| Key                | Meaning                                                    |
-| ------------------ | ---------------------------------------------------------- |
-| `paper`            | `letter` or `a4`                                           |
-| `margin`           | Inches, every side                                         |
-| `columns`          | Text columns below the title block; leave out for one. The PDF needs `page(columns: 2)` in `template.typ` too |
-| `bodyFont`, `headingFont`, `monoFont` | Body text; headings and title; code      |
-| `fontSize`         | Body text, points                                          |
-| `lineSpacing`      | Multiple of single spacing                                 |
-| `spaceAfter`       | Points after each paragraph                                |
-| `firstLineIndent`  | Inches; `0` for none                                       |
-| `justify`          | Justify body text                                          |
-| `headingSizes`     | Points for levels 1–3; deeper levels use the last          |
-| `headingBold`      | Bold headings                                              |
-| `numberedHeadings` | Number headings 1, 1.1, 1.1.1                              |
-| `titleSize`, `titleColor`, `titleAlign` | Title block; align is `left` or `center` |
-| `captionSize`, `captionColor`, `captionItalic` | Figure and table captions         |
-| `accentColor`      | Rules and table borders                                    |
-| `tableHeaderFill`  | Table header background; `""` for none                     |
-| `pageNumbers`      | Page numbers centered in the footer                        |
+| Key                                            | Meaning                                                                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `paper`                                        | `letter` or `a4`                                                                                              |
+| `margin`                                       | Inches, every side                                                                                            |
+| `columns`                                      | Text columns below the title block; leave out for one. The PDF needs `page(columns: 2)` in `template.typ` too |
+| `bodyFont`, `headingFont`, `monoFont`          | Body text; headings and title; code                                                                           |
+| `fontSize`                                     | Body text, points                                                                                             |
+| `lineSpacing`                                  | Multiple of single spacing                                                                                    |
+| `spaceAfter`                                   | Points after each paragraph                                                                                   |
+| `firstLineIndent`                              | Inches; `0` for none                                                                                          |
+| `justify`                                      | Justify body text                                                                                             |
+| `headingSizes`                                 | Points for levels 1–3; deeper levels use the last                                                             |
+| `headingBold`                                  | Bold headings                                                                                                 |
+| `numberedHeadings`                             | Number headings 1, 1.1, 1.1.1                                                                                 |
+| `titleSize`, `titleColor`, `titleAlign`        | Title block; align is `left` or `center`                                                                      |
+| `titleRule`                                    | Hairline in `accentColor` under the title and byline                                                          |
+| `captionSize`, `captionColor`, `captionItalic` | Figure and table captions                                                                                     |
+| `accentColor`                                  | Rules and table borders                                                                                       |
+| `tableHeaderFill`                              | Table header background; `""` for none                                                                        |
+| `pageNumbers`                                  | Page numbers centered in the footer                                                                           |
 
 ## Sharing
 

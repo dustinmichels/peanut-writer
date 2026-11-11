@@ -20,6 +20,7 @@
     "titleSize": 32,
     "titleColor": "111111",
     "titleAlign": "left",
+    "titleRule": true,
     "captionSize": 8.5,
     "captionColor": "737373",
     "captionItalic": false,

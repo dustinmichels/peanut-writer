@@ -16,10 +16,10 @@ Word has a cure for this, styles, but it's optional, so it rarely survives a bus
 
 In Peanut Writer, there is no font menu next to your text. Instead, you say what each part of the document **is**:
 
-| You say…                 | You don't say…                                 |
-| ------------------------ | ---------------------------------------------- |
-| This is a heading.       | 16 pt, bold, dark blue, 12 pt space above.     |
-| This is a quotation.     | Indented 0.5 inch, italic, gray.               |
+| You say…                 | You don't say…                                  |
+| ------------------------ | ----------------------------------------------- |
+| This is a heading.       | 16 pt, bold, dark blue, 12 pt space above.      |
+| This is a quotation.     | Indented 0.5 inch, italic, gray.                |
 | This picture is a figure | Centered, with "Figure 3:" in small type below. |
 | This is the title.       | 24 pt, centered, followed by the author's name. |
 
@@ -44,17 +44,18 @@ Caption, Quote and so on. Whoever opens the Word file can keep editing it proper
 
 ## The built-in templates
 
-| Template       | Looks like                                                                                |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| **Classic**    | A fresh Word document: Aptos, blue headings, 1-inch margins. The default.                 |
-| **Academic**   | A LaTeX article: Computer Modern, numbered sections, justified text, centered title.      |
-| **Report**     | A business report: serif body, crisp sans headings, a teal accent, running headers.       |
-| **Minimal**    | Quiet Swiss-style sans: black and grays, generous white space, hairline rules.            |
-| **Manuscript** | An APA-style paper ready to submit: Times 12 pt, double spaced, indented paragraphs.      |
-| **Elegant**    | A finely set book page: old-style serif, justified text, small-caps headings, claret.     |
+| Template       | Looks like                                                                                      |
+| -------------- | ----------------------------------------------------------------------------------------------- |
+| **Classic**    | Timeless and calm: Optima, pine-green headings, italic subheads, 1-inch margins. Default.       |
+| **Wordy**      | A fresh Word document: Aptos, blue headings, 1-inch margins.                                    |
+| **Academic**   | A LaTeX article: Computer Modern, numbered sections, justified text, centered title.            |
+| **Report**     | A business report: serif body, crisp sans headings, a teal accent, running headers.             |
+| **Minimal**    | Quiet Swiss-style sans: black and grays, generous white space, hairline rules.                  |
+| **Manuscript** | An APA-style paper ready to submit: Times 12 pt, double spaced, indented paragraphs.            |
+| **Elegant**    | A finely set book page: old-style serif, justified text, small-caps headings, claret.           |
 | **Editorial**  | A modern magazine feature: Iowan Old Style text, Avenir Next headlines, brick red, pull quotes. |
-| **Journal**    | A two-column paper: STIX Two at 10 pt, numbered sections, title and abstract across the top. |
-| **Peanut**     | Warm and friendly: rounded headings, roasted-peanut browns, soft cream table headers.     |
+| **Journal**    | A two-column paper: STIX Two at 10 pt, numbered sections, title and abstract across the top.    |
+| **Peanut**     | Warm and friendly: rounded headings, roasted-peanut browns, soft cream table headers.           |
 
 ## "But I want a different font"
 

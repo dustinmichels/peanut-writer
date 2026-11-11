@@ -15,13 +15,14 @@
 #let _math_source = sys.inputs.at("peanut-math", default: "") == "source"
 
 // _math is LaTeX math (display: on its own line), or its source in red when
-// it can't be read.
+// it can't be read. Empty math has no text (doc.json omits empty fields).
 #let _math(n, display: false, ..args) = {
+  let tex = n.at("text", default: "")
   if n.at("error", default: "") != "" or _math_source {
-    let src = text(fill: rgb("#b42318"), raw(n.text))
+    let src = text(fill: rgb("#b42318"), raw(tex))
     if display { block(width: 100%, align(center, src)) } else { src }
   } else {
-    mimath(n.text, block: display, ..args)
+    mimath(tex, block: display, ..args)
   }
 }
 

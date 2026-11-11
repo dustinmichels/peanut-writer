@@ -26,7 +26,15 @@ import {
   writeFrontMatter,
   writeTable,
 } from "./markdown";
-import { behindCopies, editor, errorText, scheduleRender, state, toast } from "./store";
+import {
+  behindCopies,
+  editor,
+  errorText,
+  refreshVersions,
+  scheduleRender,
+  state,
+  toast,
+} from "./store";
 
 export const docsUrl = "https://dustinmichels.github.io/peanut-writer/";
 export const repoUrl = "https://github.com/dustinmichels/peanut-writer";
@@ -198,10 +206,29 @@ function queueSave(): Promise<boolean> {
 async function saveNow(): Promise<boolean> {
   if (state.path && !state.dirty) return true;
   stampVersion();
-  const info = await run("Save", () => DocService.Save(state.content));
+  const content = state.content;
+  const info = await run("Save", () => DocService.Save(content));
   if (!info || info.canceled) return false;
+  takeFilled(content, info.content);
   saved(info);
   return true;
+}
+
+// takeFilled puts the properties a save filled in (see fillProperties in
+// service.go) into the editor, outside the undo history. Only the front
+// matter differs, so text typed meanwhile below it stays.
+function takeFilled(sent: string, written: string) {
+  const v = editor.value;
+  if (!v || written === sent) return;
+  const to = readFrontMatter(sent).to;
+  const body = sent.slice(to);
+  if (!written.endsWith(body) || v.state.doc.sliceString(0, to) !== sent.slice(0, to)) return;
+  v.dispatch({
+    changes: { from: 0, to, insert: written.slice(0, written.length - body.length) },
+    userEvent: "input",
+    filter: false, // past the guard that keeps typing out of the properties
+    annotations: Transaction.addToHistory.of(false),
+  });
 }
 
 // save is the user saving: with Auto Format on, the Markdown is tidied
@@ -275,8 +302,10 @@ function stampVersion() {
 export async function saveAs(): Promise<boolean> {
   await autoFormat();
   stampVersion();
-  const info = await run("Save As", () => DocService.SaveAs(state.content));
+  const content = state.content;
+  const info = await run("Save As", () => DocService.SaveAs(content));
   if (!info || info.canceled) return false;
+  takeFilled(content, info.content);
   saved(info);
   toast(`Saved as ${info.name}`, "success");
   if (state.syncOnSave && behindCopies.value) await syncCopies();
@@ -294,6 +323,7 @@ async function exported(kind: string, f: () => Promise<string>) {
 
 export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.content));
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
+export const exportHtml = () => exported("Web Page", () => DocService.ExportHTML(state.content));
 
 // syncFiles saves the document, then writes its PDF and Word copies beside it.
 export async function syncFiles() {
@@ -369,6 +399,8 @@ export function menu(action: string) {
       return exportPdf();
     case "exportDocx":
       return exportDocx();
+    case "exportHtml":
+      return exportHtml();
     case "syncFiles":
       return syncFiles();
     case "quit":
@@ -411,6 +443,8 @@ export function menu(action: string) {
       return toggleOutline();
     case "versions":
       return toggleVersions();
+    case "preview":
+      return togglePreview();
     case "markdown":
       return toggleMarkdown();
   }
@@ -781,6 +815,11 @@ export function toggleVersions() {
   localStorage.setItem("versions", state.versionsOpen ? "1" : "0");
 }
 
+export function togglePreview() {
+  state.previewOpen = !state.previewOpen;
+  localStorage.setItem("preview", state.previewOpen ? "1" : "0");
+}
+
 // --- Versions ---------------------------------------------------------------------------
 
 // saveVersion saves the document (asking where, if it's untitled), then keeps
@@ -789,6 +828,7 @@ export async function saveVersion(name: string): Promise<boolean> {
   if (!(await save())) return false;
   const v = await run("Save version", () => DocService.SaveVersion(name));
   if (!v) return false;
+  await refreshVersions();
   toast(`Saved the version “${v.name}”.`, "success", {
     label: "Show in Finder",
     run: () => DocService.Reveal(v.path),
@@ -799,10 +839,22 @@ export async function saveVersion(name: string): Promise<boolean> {
 // loadVersion saves the document, then asks and replaces it with a version.
 export async function loadVersion(name: string) {
   if (!(await ensureSaved())) return;
-  const info = await run("Load version", () => DocService.LoadVersion(name));
+  const info = await run("Open version", () => DocService.LoadVersion(name));
   if (!info || info.canceled) return;
   loadDoc(info);
-  toast(`Loaded the version “${name}”. The text it replaced is in backups.`, "success");
+  await refreshVersions();
+  toast(`Opened the version “${name}”. The text it replaced is in backups.`, "success");
+}
+
+// loadBackup saves the document, then asks and replaces its text with the
+// backup at path.
+export async function loadBackup(path: string) {
+  if (!(await ensureSaved())) return;
+  const info = await run("Open backup", () => DocService.LoadBackup(path));
+  if (!info || info.canceled) return;
+  loadDoc(info);
+  await refreshVersions();
+  toast("Opened the backup. The text it replaced is in backups.", "success");
 }
 
 // --- Text -----------------------------------------------------------------------------

@@ -30,6 +30,7 @@ import (
 	"peanut-writer/internal/backup"
 	"peanut-writer/internal/doc"
 	"peanut-writer/internal/docx"
+	"peanut-writer/internal/html"
 	"peanut-writer/internal/mdfmt"
 	"peanut-writer/internal/render"
 	"peanut-writer/internal/templates"
@@ -115,7 +116,7 @@ type StartupInfo struct {
 	Document   DocInfo              `json:"document"`
 	Templates  []templates.Template `json:"templates"`
 	TypstError string               `json:"typstError"`
-	Recent     []RecentFile         `json:"recent"`  // offered on opening; none on the first run
+	Recent     []RecentFile         `json:"recent"`  // offered on opening, unless Finder opened a document
 	Version    string               `json:"version"` // the app's, recorded in documents' front matter on saving
 }
 
@@ -132,8 +133,7 @@ const maxRecent = 10
 // appState is what the app remembers between runs (state.json in its config
 // folder).
 type appState struct {
-	Welcomed bool     `json:"welcomed"`
-	Recent   []string `json:"recent"` // newest first
+	Recent []string `json:"recent"` // newest first
 }
 
 // Settings are preferences, kept as JSON: the user's for every document
@@ -165,9 +165,8 @@ func newDocService() *DocService {
 
 // --- Documents ---------------------------------------------------------------
 
-// Startup opens the document Finder launched the app with, if any; else the
-// welcome guide on the first run, and a blank document (offering the recent
-// ones) after that.
+// Startup opens the document Finder launched the app with, if any; else a
+// blank document, with the recent ones for the editor to offer beside it.
 func (s *DocService) Startup() (StartupInfo, error) {
 	s.backupOnce.Do(func() { go s.backupPeriodically() })
 	info := StartupInfo{Templates: templates.List(), Version: appVersion}
@@ -175,7 +174,7 @@ func (s *DocService) Startup() (StartupInfo, error) {
 		info.TypstError = s.typstErr.Error()
 	}
 	s.mu.Lock()
-	welcomed, pending := s.state.Welcomed, s.pending
+	pending := s.pending
 	s.started, s.pending = true, ""
 	s.mu.Unlock()
 	if pending != "" {
@@ -188,17 +187,8 @@ func (s *DocService) Startup() (StartupInfo, error) {
 			SetMessage(err.Error()).AttachToWindow(s.window).Show()
 	}
 	var err error
-	if !welcomed {
-		if info.Document, err = s.OpenWelcome(); err == nil {
-			s.mu.Lock()
-			s.state.Welcomed = true
-			s.mu.Unlock()
-			s.saveState()
-		}
-	} else {
-		info.Document, err = s.newUntitled()
-		info.Recent = s.RecentFiles()
-	}
+	info.Document, err = s.newUntitled()
+	info.Recent = s.RecentFiles()
 	return info, err
 }
 
@@ -221,12 +211,7 @@ func (s *DocService) NewDocument() (DocInfo, error) {
 		return DocInfo{Canceled: true}, err
 	}
 	name := docName(p)
-	content := "---\ntitle: " + frontMatterValue(mdfmt.TitleCase(name))
-	if author := defaultAuthor(); author != "" {
-		content += "\nauthor: " + frontMatterValue(author)
-	}
-	content += "\ndate: " + time.Now().Format("January 2, 2006") +
-		"\npeanut-version: " + frontMatterValue(appVersion) + "\n---\n\n"
+	content := fillProperties("---\npeanut-version: "+frontMatterValue(appVersion)+"\n---\n\n", name)
 	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
@@ -247,6 +232,79 @@ func frontMatterValue(v string) string {
 }
 
 var frontMatterQuote = regexp.MustCompile("^[\\s\"'\\[{>|*&!%@`#-]|:\\s|\\s$|#")
+
+// fillProperties gives content the core properties it lacks, as a new
+// document starts with them: a title (name, in title case), the default
+// author and today's date. One already given, even hidden, is kept; a new
+// line goes where the editor's writeFrontMatter would put it.
+func fillProperties(content, name string) string {
+	var lines []string
+	var tail string // from the closing fence on
+	if rest, ok := strings.CutPrefix(content, "---\n"); ok {
+		all := strings.Split(rest, "\n")
+		for i, l := range all {
+			if t := strings.TrimSpace(l); t == "---" || t == "..." {
+				lines, tail = all[:i], strings.Join(all[i:], "\n")
+				break
+			}
+		}
+	}
+	if tail == "" {
+		tail = "---\n"
+		if content != "" && !strings.HasPrefix(content, "\n") {
+			tail += "\n"
+		}
+		tail += content
+	}
+	keyAt := func(key string) (int, bool) {
+		for i, l := range lines {
+			if k, v, ok := strings.Cut(l, ":"); ok && strings.EqualFold(strings.TrimSpace(k), key) {
+				v = strings.TrimSpace(v)
+				return i, v != "" && v != `""` && v != "''"
+			}
+		}
+		return -1, false
+	}
+	changed := false
+	before := []string{"title", "subtitle", "author", "topic"} // the editor's order
+	for _, f := range []struct {
+		key   string
+		value func() string
+	}{
+		{"title", func() string { return mdfmt.TitleCase(name) }},
+		{"author", defaultAuthor},
+		{"date", func() string { return time.Now().Format("January 2, 2006") }},
+	} {
+		i, set := keyAt(f.key)
+		if set {
+			continue
+		}
+		v := strings.TrimSpace(f.value())
+		if v == "" {
+			continue
+		}
+		line := f.key + ": " + frontMatterValue(v)
+		changed = true
+		if i >= 0 {
+			lines[i] = line
+			continue
+		}
+		at := 0
+		for _, k := range before {
+			if k == f.key {
+				break
+			}
+			if j, _ := keyAt(k); j >= at {
+				at = j + 1
+			}
+		}
+		lines = slices.Insert(lines, at, line)
+	}
+	if !changed {
+		return content
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n" + tail
+}
 
 // packageExt is the extension of a document's package: a folder, shown by
 // Finder as one file (build/darwin/Info.plist declares the type), holding
@@ -294,7 +352,7 @@ func docFile(p string) (string, error) {
 // means the user canceled, or chose not to replace an existing document.
 func (s *DocService) choosePackage(name, dir string) (string, error) {
 	d := s.app.Dialog.SaveFile().
-		SetMessage("The document is saved as a " + packageExt + " package holding it, its pictures and its backups.").
+		SetMessage("Saved as a " + packageExt + " package with pictures and backups.").
 		SetFilename(name).
 		CanCreateDirectories(true).
 		AttachToWindow(s.window)
@@ -417,6 +475,8 @@ func (s *DocService) openedWithFile(p string) {
 }
 
 // Save writes the document to its file, asking where first if it has none.
+// Core properties it lacks are filled in (see fillProperties); the returned
+// Content is what was written.
 func (s *DocService) Save(content string) (DocInfo, error) {
 	s.mu.Lock()
 	p := s.path
@@ -424,6 +484,7 @@ func (s *DocService) Save(content string) (DocInfo, error) {
 	if p == "" {
 		return s.SaveAs(content)
 	}
+	content = fillProperties(content, docName(p))
 	if err := atomicfile.Write(p, []byte(content), 0o644); err != nil {
 		return DocInfo{}, err
 	}
@@ -432,7 +493,8 @@ func (s *DocService) Save(content string) (DocInfo, error) {
 }
 
 // SaveAs asks for a name and a place and saves the document in a package of
-// that name there, bringing its images along.
+// that name there, bringing its images along and filling in core properties
+// it lacks.
 func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	s.mu.Lock()
 	oldDir, oldPath := s.dir, s.path
@@ -451,6 +513,7 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
+	content = fillProperties(content, docName(p))
 	if err := copyImages(content, oldDir, filepath.Dir(p)); err != nil {
 		return DocInfo{}, fmt.Errorf("copying images: %w", err)
 	}
@@ -893,6 +956,22 @@ func (s *DocService) ExportDOCX(content string) (string, error) {
 	return p, os.WriteFile(p, b, 0o644)
 }
 
+// ExportHTML asks where to save a web page of the document and writes it;
+// returns the path, or "" if the user canceled.
+func (s *DocService) ExportHTML(content string) (string, error) {
+	d, tpl, p, err := s.exportTarget(content, ".html", "Web Page", "*.html")
+	if err != nil || p == "" {
+		return "", err
+	}
+	opt := html.Options{Title: strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))}
+	if s.typst != nil {
+		opt.Equation = func(tex string, display bool, sizePt float64) ([]byte, error) {
+			return s.typst.Equation(context.Background(), tex, display, sizePt, "svg")
+		}
+	}
+	return p, os.WriteFile(p, html.Write(d, tpl.Docx, opt), 0o644)
+}
+
 // SyncFiles writes a PDF and a Word copy of the saved document beside it (its
 // package, if it's in one), under the same name, replacing earlier copies;
 // returns their paths. Neither is written unless both render.
@@ -936,7 +1015,7 @@ func (s *DocService) docxBytes(d *doc.Document, tpl templates.Template) ([]byte,
 			return s.typst.PNG(context.Background(), path, widthPt)
 		}
 		opt.Equation = func(tex string, display bool, sizePt float64) ([]byte, error) {
-			return s.typst.Equation(context.Background(), tex, display, sizePt)
+			return s.typst.Equation(context.Background(), tex, display, sizePt, "png")
 		}
 	}
 	return docx.Write(d, tpl.Docx, opt)
@@ -1045,6 +1124,16 @@ func (s *DocService) Versions() ([]versions.Version, error) {
 	return versions.List(p)
 }
 
+// Backups lists the open document's backups, newest first; none while it's
+// untitled.
+func (s *DocService) Backups() []backup.Backup {
+	p := s.openPath()
+	if p == "" {
+		return nil
+	}
+	return backup.List(p)
+}
+
 // LoadVersion asks, then replaces the saved document, its own template and
 // its settings with the version named name, after backing the document up.
 func (s *DocService) LoadVersion(name string) (DocInfo, error) {
@@ -1052,14 +1141,7 @@ func (s *DocService) LoadVersion(name string) (DocInfo, error) {
 	if p == "" {
 		return DocInfo{}, errors.New("save the document first")
 	}
-	choice := make(chan bool, 1)
-	d := s.app.Dialog.Question().
-		SetTitle(fmt.Sprintf("Load the version “%s”?", name)).
-		SetMessage("It replaces the document's text, template and settings. The current text is kept in backups.")
-	d.AddButton("Load").OnClick(func() { choice <- true })
-	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
-	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
-	if !<-choice {
+	if !s.confirmOpenVersion(fmt.Sprintf("“%s” replaces the document's text, template and settings. The current text is kept in backups.", name)) {
 		return DocInfo{Canceled: true}, nil
 	}
 	s.backup(p)
@@ -1069,6 +1151,54 @@ func (s *DocService) LoadVersion(name string) (DocInfo, error) {
 	}
 	s.SetDirty(false)
 	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
+}
+
+// LoadBackup asks, then replaces the saved document's text with that of its
+// backup at path (a Backup's Path), after backing the document up.
+func (s *DocService) LoadBackup(path string) (DocInfo, error) {
+	p := s.openPath()
+	if p == "" {
+		return DocInfo{}, errors.New("save the document first")
+	}
+	var found *backup.Backup
+	for _, b := range backup.List(p) {
+		if b.Path == path {
+			found = &b
+			break
+		}
+	}
+	if found == nil {
+		return DocInfo{}, errors.New("that backup no longer exists")
+	}
+	if filepath.Ext(found.Path) != ".md" {
+		return DocInfo{}, errors.New("that backup has only a Word copy, which can't be opened here")
+	}
+	at := time.UnixMilli(found.Saved).Format("Jan 2, 2006 at 3:04 PM")
+	if !s.confirmOpenVersion(fmt.Sprintf("The backup from %s replaces the document's text. The current text is kept in backups.", at)) {
+		return DocInfo{Canceled: true}, nil
+	}
+	// Read before backing up: the new backup may prune this one.
+	content, err := os.ReadFile(found.Path)
+	if err != nil {
+		return DocInfo{}, err
+	}
+	s.backup(p)
+	if err := atomicfile.Write(p, content, 0o644); err != nil {
+		return DocInfo{}, err
+	}
+	s.SetDirty(false)
+	return DocInfo{Path: p, Name: docName(p), Content: string(content)}, nil
+}
+
+// confirmOpenVersion asks whether to open an earlier version of the document,
+// described by message.
+func (s *DocService) confirmOpenVersion(message string) bool {
+	choice := make(chan bool, 1)
+	d := s.app.Dialog.Question().SetTitle("Open this version?").SetMessage(message)
+	d.AddButton("Open").OnClick(func() { choice <- true })
+	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
+	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
+	return <-choice
 }
 
 // --- Formatting --------------------------------------------------------------

@@ -38,7 +38,7 @@ func main() {
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// Documents opened from the file manager or the command line.
 		FileAssociations: []string{packageExt},
-		ShouldQuit:  docs.shouldClose,
+		ShouldQuit:       docs.shouldClose,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.dustinmichels.peanutwriter",
 			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
@@ -130,6 +130,7 @@ func menu(app *application.App, docs *DocService, updates *updates) *application
 	file.AddSeparator()
 	file.Add("Export as PDF…").SetAccelerator("CmdOrCtrl+E").OnClick(send("exportPdf"))
 	file.Add("Export as Word…").SetAccelerator("CmdOrCtrl+Shift+E").OnClick(send("exportDocx"))
+	file.Add("Export as Web Page…").SetAccelerator("CmdOrCtrl+Alt+E").OnClick(send("exportHtml"))
 	file.Add("Sync Files").SetAccelerator("CmdOrCtrl+Shift+Y").OnClick(send("syncFiles"))
 	file.AddSeparator()
 	file.Add("Settings…").SetAccelerator("CmdOrCtrl+,").OnClick(send("settings"))
@@ -152,6 +153,7 @@ func menu(app *application.App, docs *DocService, updates *updates) *application
 	view.AddSeparator()
 	view.Add("Show Markdown").SetAccelerator("CmdOrCtrl+/").OnClick(send("markdown"))
 	view.Add("Outline").OnClick(send("outline"))
+	view.Add("Preview").OnClick(send("preview"))
 	view.Add("Versions").OnClick(send("versions"))
 	view.AddSeparator()
 	view.Add("Command Palette…").SetAccelerator("CmdOrCtrl+Shift+P").OnClick(send("commands"))

@@ -1,17 +1,22 @@
-// Classic: a fresh Word document. Aptos (or Calibri, Helvetica), blue
-// headings, 1-inch margins on US Letter.
+// Classic: timeless and calm. Optima, a classical sans, on 1-inch margins, ragged right,
+// roman and italic headings in a pine green, the template's one accent, which
+// also marks rules, list markers, links and caption labels.
 
 #import "style.typ": custom-color, custom-font, custom-size
 
-#let body-font = custom-font("bodyFont", ("Aptos", "Calibri", "Helvetica Neue", "Helvetica", "Libertinus Serif"))
-#let heading-font = custom-font("headingFont", ("Aptos Display", "Aptos", "Calibri Light", "Helvetica Neue", "Helvetica"))
+#let font = custom-font("bodyFont", ("Optima", "Candara", "Gill Sans", "Helvetica Neue", "Libertinus Sans", "DejaVu Sans"))
+#let heading-font = custom-font("headingFont", font)
 #let mono-font = custom-font("monoFont", ("Menlo", "DejaVu Sans Mono"))
-#let ink = custom-color("textColor", black)
-#let blue = custom-color("headingColor", rgb("#0F4761"))
-#let title-color = custom-color("titleColor", black)
-#let caption-color = custom-color("captionColor", rgb("#0E2841"))
-#let rule = custom-color("accentColor", luma(110))
+#let ink = custom-color("textColor", rgb("#1C1C1C"))
+#let pine = custom-color("accentColor", rgb("#2E5E4E"))
+#let heading-color = custom-color("headingColor", rgb("#2E5E4E"))
+#let title-color = custom-color("titleColor", ink)
+#let caption-color = custom-color("captionColor", rgb("#555555"))
 #let header-fill = custom-color("tableHeaderFill", none)
+#let muted = luma(105)
+
+// Small, spaced capitals for labels and the byline.
+#let caps(size, fill, body) = text(size: size, tracking: 0.12em, fill: fill, upper(body))
 
 #let template(meta, body) = {
   let get(k) = meta.at(k, default: "")
@@ -22,50 +27,65 @@
   set page(
     paper: "us-letter",
     margin: 1in,
-    numbering: "1",
-    number-align: center,
-    header: if get("header") != "" { align(right, text(size: 9pt, fill: luma(110), get("header"))) },
+    header: if get("header") != "" { align(right, text(size: 9pt, style: "italic", fill: muted, get("header"))) },
+    footer: context align(center, text(size: 9pt, fill: muted, counter(page).display())),
   )
-  set text(font: body-font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en")
-  set par(leading: 0.72em, spacing: 1.15em)
+  set text(font: font, size: custom-size("fontSize", 11pt), fill: ink, lang: "en", number-type: "old-style")
+  set par(leading: 0.78em, spacing: 1.05em)
 
-  show heading: set text(font: heading-font, fill: blue, weight: "regular")
-  show heading: set block(above: 1.5em, below: 0.7em)
-  show heading.where(level: 1): set text(size: 20pt)
-  show heading.where(level: 2): set text(size: 16pt)
-  show heading.where(level: 3): set text(size: 14pt)
+  show heading: set text(font: heading-font, weight: "regular", fill: heading-color, number-type: "lining")
+  show heading: set par(leading: 0.5em)
+  show heading.where(level: 1): set text(size: 18pt)
+  show heading.where(level: 1): set block(above: 2.1em, below: 0.9em)
+  show heading.where(level: 2): set text(size: 14pt, style: "italic")
+  show heading.where(level: 2): set block(above: 1.7em, below: 0.7em)
+  show heading.where(level: 3): set text(size: 11pt, weight: "bold")
+  show heading.where(level: 3): set block(above: 1.4em, below: 0.6em)
 
-  set figure.caption(separator: [: ])
-  show figure.caption: set text(size: 9pt, style: "italic", fill: caption-color)
+  set figure.caption(separator: [#h(0.6em)])
+  show figure.caption: it => text(size: 9.5pt, fill: caption-color)[
+    #caps(8pt, pine)[#it.supplement #context it.counter.display(it.numbering)]#it.separator#emph(it.body)
+  ]
   show figure.where(kind: table): set figure.caption(position: top)
-  show figure: set block(above: 1.4em, below: 1.4em)
-  set table(stroke: 0.5pt + rule, fill: (x, y) => if y == 0 { header-fill }, inset: (x: 7pt, y: 5pt))
-
-  show link: set text(fill: rgb("#0563C1"))
-  show link: underline
-  show raw: set text(font: mono-font, size: 0.9em)
-  show raw.where(block: true): block.with(fill: luma(245), inset: 9pt, radius: 3pt, width: 100%)
-  show quote.where(block: true): it => block(
-    inset: (left: 14pt, y: 3pt),
-    stroke: (left: 2pt + luma(190)),
-    text(style: "italic", fill: luma(70), it.body),
+  show figure: set block(above: 1.7em, below: 1.7em)
+  set table(
+    stroke: (x, y) => if y == 0 { (bottom: 0.5pt + pine) } else { none },
+    fill: (x, y) => if y == 0 { header-fill },
+    inset: (x: 8pt, y: 5pt),
   )
-  set outline(title: [Contents])
+  show table.cell.where(y: 0): set text(weight: "bold")
+  show table: t => box(stroke: (top: 0.9pt + ink, bottom: 0.9pt + ink), t)
 
-  // Title block.
+  show link: set text(fill: pine)
+  show raw: set text(font: mono-font, size: 0.86em)
+  show raw.where(block: true): block.with(fill: rgb("#F5F4EF"), inset: (x: 11pt, y: 9pt), radius: 2pt, width: 100%)
+  show quote.where(block: true): it => block(
+    inset: (left: 1.1em, y: 2pt),
+    stroke: (left: 1pt + pine),
+    text(style: "italic", fill: luma(60), it.body),
+  )
+  set list(marker: text(fill: pine)[–], indent: 0.4em)
+  set enum(indent: 0.4em)
+  set outline(title: [Contents], indent: auto)
+
+  // Title block: left aligned, closed by a short pine rule.
+  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
   if get("title") != "" {
-    block(below: 1.1em, text(font: heading-font, size: 28pt, fill: title-color, get("title")))
+    block(below: 1em, text(font: heading-font, size: 26pt, fill: title-color, get("title")))
   }
   if get("subtitle") != "" {
-    block(below: 1.1em, text(font: heading-font, size: 14pt, fill: luma(90), get("subtitle")))
+    block(below: 0.6em, text(font: heading-font, size: 13.5pt, style: "italic", fill: muted, get("subtitle")))
   }
-  let byline = (get("author"), get("topic"), get("date")).filter(s => s != "")
+  if get("title") != "" or get("subtitle") != "" or byline.len() > 0 {
+    block(above: 1.4em, below: 1em, line(length: 0.6in, stroke: 1pt + pine))
+  }
   if byline.len() > 0 {
-    block(below: 1.6em, text(fill: luma(70), byline.join([ #h(0.4em)·#h(0.4em) ])))
+    block(below: 2.2em, caps(8.5pt, muted, byline.join([#h(0.5em)·#h(0.5em)])))
   }
   if get("abstract") != "" {
-    block(inset: (x: 0.4in), below: 1.6em)[
-      #text(weight: "bold")[Abstract.] #get("abstract")
+    block(inset: (x: 0.35in), below: 2em)[
+      #set text(size: 10pt)
+      #caps(8pt, pine)[Abstract] #h(0.6em) #get("abstract")
     ]
   }
   body

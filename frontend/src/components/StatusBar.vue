@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { AlertTriangle, Minus, Plus, TableOfContents } from "lucide-vue-next";
-import { menu, toggleOutline } from "../lib/actions";
+import { AlertTriangle, Minus, PanelRight, Plus, TableOfContents } from "lucide-vue-next";
+import { menu, toggleOutline, togglePreview } from "../lib/actions";
 import { docTemplates, state } from "../lib/store";
 
 const showWarnings = ref(false);
@@ -42,6 +42,13 @@ const pages = computed(() => state.pages.length);
         @click="toggleOutline"
       >
         <TableOfContents :size="12" />
+      </button>
+      <button
+        :class="{ on: state.previewOpen }"
+        :title="state.previewOpen ? 'Hide preview' : 'Show preview'"
+        @click="togglePreview"
+      >
+        <PanelRight :size="12" />
       </button>
       <button title="Zoom out (⌘−)" @click="menu('zoomOut')"><Minus :size="12" /></button>
       <button class="pct" title="Fit to width (⌘0)" @click="menu('zoomReset')">

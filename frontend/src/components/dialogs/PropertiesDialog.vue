@@ -7,7 +7,15 @@ import { readFrontMatter } from "../../lib/markdown";
 import { state } from "../../lib/store";
 
 // The properties the document can show; `hide` names those it doesn't.
-const showable: readonly string[] = ["title", "subtitle", "author", "topic", "date", "header", "abstract"];
+const showable: readonly string[] = [
+  "title",
+  "subtitle",
+  "author",
+  "topic",
+  "date",
+  "header",
+  "abstract",
+];
 
 const emit = defineEmits<{ close: [] }>();
 const meta = reactive(readFrontMatter(state.content).meta);
@@ -92,7 +100,9 @@ function submit() {
         <input v-model="meta.header" placeholder="e.g. HIST 101, Acme Corp., Project Atlas" />
         <EyeToggle :hidden="hidden.has('header')" @toggle="toggle('header')" />
       </span>
-      <span class="hint">A class, team, project or company. Templates show it in the page header or footer.</span>
+      <span class="hint"
+        >A class, team, project or company. Templates show it in the page header or footer.</span
+      >
     </label>
     <label class="field" :class="{ off: hidden.has('abstract') }">
       Abstract

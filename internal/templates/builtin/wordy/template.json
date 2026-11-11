@@ -1,0 +1,30 @@
+{
+  "name": "Wordy",
+  "description": "Familiar as a fresh Word document: Aptos, blue headings, 1-inch margins.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "Aptos",
+    "headingFont": "Aptos Display",
+    "monoFont": "Menlo",
+    "fontSize": 11,
+    "lineSpacing": 1.15,
+    "spaceAfter": 8,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "000000",
+    "headingColor": "0F4761",
+    "headingSizes": [20, 16, 14],
+    "headingBold": false,
+    "numberedHeadings": false,
+    "titleSize": 28,
+    "titleColor": "000000",
+    "titleAlign": "left",
+    "captionSize": 9,
+    "captionColor": "0E2841",
+    "captionItalic": true,
+    "accentColor": "0F4761",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

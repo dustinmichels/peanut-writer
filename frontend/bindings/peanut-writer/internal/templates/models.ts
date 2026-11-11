@@ -77,6 +77,11 @@ export interface DocxStyle {
     "titleAlign": string;
 
     /**
+     * a hairline under the title and byline
+     */
+    "titleRule": boolean;
+
+    /**
      * points
      */
     "captionSize": number;

@@ -26,12 +26,12 @@ proud of.
 Most of the cost is lumber and soil. The city's Green Spaces grant covers up to $5,000, which leaves a small amount for
 us to raise ourselves (@tbl:budget).
 
-| Item                   | Quantity | Cost ($) |
-| :--------------------- | :------: | -------: |
-| Raised beds, cedar     |    24    |    2,880 |
-| Soil and compost       | 18 yards |      990 |
-| Tool shed              |    1     |      750 |
-| Water line and spigots |    2     |      620 |
+| Item                   | Quantity |  Cost ($) |
+| :--------------------- | :------: | --------: |
+| Raised beds, cedar     |    24    |     2,880 |
+| Soil and compost       | 18 yards |       990 |
+| Tool shed              |    1     |       750 |
+| Water line and spigots |    2     |       620 |
 | **Total**              |          | **5,240** |
 
 Table: First-year costs {#tbl:budget}
