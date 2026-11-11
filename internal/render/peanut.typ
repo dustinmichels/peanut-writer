@@ -32,9 +32,13 @@
 #let _mark(line) = if _preview and line > 0 { place(link("peanut:" + str(line), box(width: 0.01pt, height: 0.01pt))) }
 #let _placed(n) = if n.type in ("paragraph", "codeblock", "equation", "figure", "table") { _mark(n.at("line", default: 0)) }
 // _unmarked drops the marks from content shown twice (the outline's copy of
-// headings) or out of source order (footnotes, at the page's foot).
+// headings) or out of source order (footnotes, at the page's foot). The
+// place a block's mark sits in goes too: left empty, it would split a
+// footnote's number from its text.
+#let _peanut-link(l) = type(l.dest) == str and l.dest.starts-with("peanut:")
 #let _unmarked(body) = {
-  show link: l => if type(l.dest) == str and l.dest.starts-with("peanut:") { none } else { l }
+  show place: p => if p.body.func() == link and _peanut-link(p.body) { none } else { p }
+  show link: l => if _peanut-link(l) { none } else { l }
   body
 }
 
@@ -158,8 +162,10 @@
 // render renders the whole document body.
 #let render(doc) = {
   // Footnote numbers are drawn smaller and raised rather than with the
-  // font's superscript glyphs: many fonts have ¹ ² ³ but not 4 and up.
-  set super(typographic: false)
+  // font's superscript glyphs: many fonts have ¹ ² ³ but not 4 and up. The
+  // size and rise are set, not read from the font (Typst's default): some
+  // fonts' metrics (Optima, Helvetica Neue) make them specks.
+  set super(typographic: false, size: 0.6em, baseline: -0.5em)
   // Braille (the editor's ⠿ grip, written in prose) is in few text fonts, and
   // Typst's own fallback can pick macOS's LastResort, which draws a box.
   // Name fonts that have it: macOS, Linux, Windows.

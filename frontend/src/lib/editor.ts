@@ -76,6 +76,8 @@ export interface Handlers {
   editTable(item: Item): void;
   editProperties(): void;
   editRef(at: RefAt): void;
+  // A mark with no note was clicked: ask for its note's text.
+  writeNote(label: string): void;
   // Dropped files arrive through Wails (see EditorPane), not DOM drop events.
   pasteImages(files: File[], pos: number): void;
   imageURL(src: string): Promise<string>;
@@ -677,12 +679,13 @@ function noteTip(text: string): string {
 
 // FootnoteMarkWidget stands in for a footnote mark: its number, raised, which
 // shows the note's text on hover and goes to the note on a click. A mark with
-// no note reads "?", and a click adds the note.
+// no note reads "?", and a click asks for the note.
 class FootnoteMarkWidget extends WidgetType {
   constructor(
     readonly label: string,
     readonly number: number,
     readonly note: string | null,
+    readonly handlers: Handlers,
   ) {
     super();
   }
@@ -704,7 +707,7 @@ class FootnoteMarkWidget extends WidgetType {
     el.onclick = () => {
       const note = view.state.field(footnotesField).notes.find((n) => n.label === this.label);
       if (note) goTo(view, note.textFrom);
-      else addNote(view, this.label, view.posAtDOM(el), false);
+      else this.handlers.writeNote(this.label);
     };
     return el;
   }
@@ -928,21 +931,27 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       from: m.from,
       to: m.to,
       deco: Decoration.replace({
-        widget: new FootnoteMarkWidget(m.label, m.number, noteText.get(m.label) ?? null),
+        widget: new FootnoteMarkWidget(m.label, m.number, noteText.get(m.label) ?? null, handlers),
       }),
       atomic: true,
     });
   }
-  // Notes: smaller text, the `[^label]: ` shown as the note's number.
+  // Notes: smaller text, the `[^label]: ` shown as the note's number, and a
+  // rule above each run of notes (with only blank lines between them).
   const first = new Map<string, FootnoteMark>();
   for (const m of marks)
     if (!first.has(m.label) || (first.get(m.label)!.inNote && !m.inNote)) first.set(m.label, m);
+  let prevLast = -1; // last line of the note before
   for (const n of notes) {
     if (out(n.from)) continue;
     const last = doc.lineAt(Math.max(n.to, n.textFrom)).number;
+    let starts = prevLast < 0;
+    for (let l = prevLast + 1; !starts && l < n.line; l++) starts = doc.line(l).text.trim() !== "";
+    prevLast = last;
     for (let l = n.line; l <= last; l++) {
       const at = doc.line(l).from;
-      ranges.push({ from: at, to: at, deco: Decoration.line({ class: "pw-note-line" }) });
+      const cls = l === n.line && starts ? "pw-note-line pw-notes-start" : "pw-note-line";
+      ranges.push({ from: at, to: at, deco: Decoration.line({ class: cls }) });
     }
     const mark = first.get(n.label);
     ranges.push({
@@ -1932,23 +1941,36 @@ export function insertText(view: EditorView, text: string, select = false) {
   view.focus();
 }
 
-// insertFootnote adds a numbered mark at the cursor and its note with the
-// others, in order, renumbering the notes after it, and moves the cursor
-// there to type it (a click on its number goes back).
-export function insertFootnote(view: EditorView) {
+// insertFootnote adds a footnote reading text: a numbered mark at the
+// cursor, and its note with the others, in order, renumbering the notes
+// after it. The cursor stays after the mark.
+export function insertFootnote(view: EditorView, text: string) {
   const fn = view.state.field(footnotesField);
   const used = [...fn.marks, ...fn.notes].map((x) => x.label).filter((l) => /^\d+$/.test(l));
   const label = String(Math.max(0, ...used.map(Number)) + 1);
-  addNote(view, label, view.state.selection.main.head, true);
+  addNote(view, label, view.state.selection.main.head, true, text);
 }
 
-// addNote adds an empty note for label (and its mark at pos, if mark): after
-// the note of the nearest mark before pos, or before the first note, or at
-// the end, then renumbers, and puts the cursor in the note.
-function addNote(view: EditorView, label: string, pos: number, mark: boolean) {
+// writeNote adds the note reading text for label's mark, which has none.
+export function writeNote(view: EditorView, label: string, text: string) {
+  const marks = view.state.field(footnotesField).marks.filter((m) => m.label === label);
+  const mark = marks.find((m) => !m.inNote) ?? marks[0];
+  if (mark) addNote(view, label, mark.to, false, text);
+}
+
+// addNote adds a note for label reading text (and its mark at pos, if
+// mark): after the note of the nearest mark before pos, or before the first
+// note, or at the end, then renumbers. Lines after the first are indented,
+// to stay in the note. The cursor stays where it is, or after the new mark.
+function addNote(view: EditorView, label: string, pos: number, mark: boolean, text: string) {
   const state = view.state;
   const { marks, notes } = state.field(footnotesField);
-  const head = `[^${label}]: `;
+  const body = text
+    .trim()
+    .split("\n")
+    .map((l, i) => (i === 0 || !l.trim() ? l.trimEnd() : `    ${l.trimEnd()}`))
+    .join("\n");
+  const head = `[^${label}]: ${body}`;
   const prev = marks.filter(
     (m) => !m.inNote && m.to <= pos && m.label !== label && notes.some((n) => n.label === m.label),
   );
@@ -1957,20 +1979,16 @@ function addNote(view: EditorView, label: string, pos: number, mark: boolean) {
     : undefined;
   let at: number;
   let note: string;
-  let cursor: number; // in note
   if (after) {
     at = after.to;
     note = `\n\n${head}`;
-    cursor = note.length;
   } else if (notes.length) {
     at = notes[0].from;
     note = `${head}\n\n`;
-    cursor = head.length;
   } else {
     const doc = state.doc.toString();
     at = doc.length;
     note = `${doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n"}${head}`;
-    cursor = note.length;
   }
   const added = state.changes([
     ...(mark ? [{ from: pos, insert: `[^${label}]` }] : []),
@@ -1978,11 +1996,11 @@ function addNote(view: EditorView, label: string, pos: number, mark: boolean) {
   ]);
   const doc = added.apply(state.doc);
   const renumbered = ChangeSet.of(renumberFootnotes(doc.toString()), doc.length);
-  const anchor = renumbered.mapPos(added.mapPos(at, 1) - note.length + cursor, 1);
+  // After the mark, which may share pos with the note (at the end).
+  const markEnd = mark ? renumbered.mapPos(added.mapPos(pos, -1) + `[^${label}]`.length, 1) : 0;
   view.dispatch({
     changes: added.compose(renumbered),
-    selection: { anchor },
-    effects: EditorView.scrollIntoView(anchor, { y: "center" }),
+    selection: mark ? { anchor: markEnd } : state.selection.map(added.compose(renumbered)),
     userEvent: "input",
   });
   view.focus();

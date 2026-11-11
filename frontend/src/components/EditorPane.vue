@@ -46,6 +46,7 @@ onMounted(() => {
       editTable: (item) => (state.dialog = { kind: "table", item }),
       editProperties: () => (state.dialog = { kind: "properties" }),
       editRef: (at) => (state.dialog = { kind: "crossref", at }),
+      writeNote: (label) => (state.dialog = { kind: "footnote", label }),
       pasteImages: insertImages,
       imageURL: (src) => DocService.ImageURL(src),
       changed(s, docChanged) {

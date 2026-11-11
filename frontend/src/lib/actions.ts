@@ -885,3 +885,8 @@ export function editLink() {
   const { from, to } = v.state.selection.main;
   state.dialog = { kind: "link", text: v.state.sliceDoc(from, to) };
 }
+
+// newFootnote asks for the text of a footnote to add at the cursor.
+export function newFootnote() {
+  if (editor.value) state.dialog = { kind: "footnote" };
+}

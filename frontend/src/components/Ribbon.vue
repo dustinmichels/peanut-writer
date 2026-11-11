@@ -63,6 +63,7 @@ import {
   loadVersion,
   menu,
   newDoc,
+  newFootnote,
   openDoc,
   openWelcome,
   showRecent,
@@ -81,7 +82,6 @@ import {
   insertBlock,
   insertDivider,
   insertEquation,
-  insertFootnote,
   type Mark,
   setBlockStyle,
   toggleCodeBlock,
@@ -431,12 +431,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         <div class="group">
           <div class="row">
             <RibbonButton big :icon="Link" label="Link" @click="editLink" />
-            <RibbonButton
-              big
-              :icon="Footprints"
-              label="Footnote"
-              @click="withView(insertFootnote)"
-            />
+            <RibbonButton big :icon="Footprints" label="Footnote" @click="newFootnote" />
             <RibbonButton
               big
               :icon="Sigma"
@@ -477,12 +472,7 @@ const PeanutBuddy = defineAsyncComponent(() => import("./PeanutBuddy.vue"));
         </div>
         <div class="group">
           <div class="row">
-            <RibbonButton
-              big
-              :icon="Footprints"
-              label="Footnote"
-              @click="withView(insertFootnote)"
-            />
+            <RibbonButton big :icon="Footprints" label="Footnote" @click="newFootnote" />
             <RibbonButton
               big
               :icon="ListTree"

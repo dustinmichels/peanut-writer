@@ -4,6 +4,7 @@ import TableDialog from "./dialogs/TableDialog.vue";
 import PasteTableDialog from "./dialogs/PasteTableDialog.vue";
 import CrossRefDialog from "./dialogs/CrossRefDialog.vue";
 import LinkDialog from "./dialogs/LinkDialog.vue";
+import FootnoteDialog from "./dialogs/FootnoteDialog.vue";
 import PropertiesDialog from "./dialogs/PropertiesDialog.vue";
 import SettingsDialog from "./dialogs/SettingsDialog.vue";
 import CheatSheet from "./dialogs/CheatSheet.vue";
@@ -53,6 +54,11 @@ function closeCheatSheet() {
       @close="close"
     />
     <LinkDialog v-else-if="state.dialog.kind === 'link'" :text="state.dialog.text" @close="close" />
+    <FootnoteDialog
+      v-else-if="state.dialog.kind === 'footnote'"
+      :label="state.dialog.label"
+      @close="close"
+    />
     <PropertiesDialog v-else-if="state.dialog.kind === 'properties'" @close="close" />
     <SettingsDialog v-else-if="state.dialog.kind === 'settings'" @close="close" />
     <AboutDialog v-else-if="state.dialog.kind === 'about'" @close="close" />

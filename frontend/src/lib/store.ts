@@ -18,6 +18,8 @@ type Dialog =
   | { kind: "pasteTable" }
   | { kind: "crossref"; at?: RefAt }
   | { kind: "link"; text: string }
+  // A new footnote, or (label) the note of a mark that has none.
+  | { kind: "footnote"; label?: string }
   | { kind: "properties" }
   | { kind: "settings" }
   | { kind: "about" }
