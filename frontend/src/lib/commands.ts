@@ -1,7 +1,6 @@
 // What the command palette (⇧⌘P) offers: everything the menus and the ribbon
 // can do, by name.
 
-import { indentLess, indentMore } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
 import {
   choosePicture,
@@ -24,6 +23,8 @@ import {
 import {
   type BlockStyle,
   clearFormatting,
+  indentListLess,
+  indentListMore,
   insertBlock,
   insertDivider,
   setBlockStyle,
@@ -157,6 +158,13 @@ const fixed: Command[] = [
     run: inEditor((v) => toggleMark(v, "strike")),
   },
   {
+    id: "highlight",
+    group: "Format",
+    label: "Highlight",
+    shortcut: "⇧⌘H",
+    run: inEditor((v) => toggleMark(v, "highlight")),
+  },
+  {
     id: "code",
     group: "Format",
     label: "Code",
@@ -192,14 +200,14 @@ const fixed: Command[] = [
     group: "Format",
     label: "Increase Indent",
     shortcut: "⇥",
-    run: inEditor(indentMore),
+    run: inEditor(indentListMore),
   },
   {
     id: "outdent",
     group: "Format",
     label: "Decrease Indent",
     shortcut: "⇧⇥",
-    run: inEditor(indentLess),
+    run: inEditor(indentListLess),
   },
 
   { id: "picture", group: "Insert", label: "Picture…", run: choosePicture },
@@ -311,12 +319,18 @@ export function commands(): Command[] {
 }
 
 // matches reports whether every word of the query begins a word of the
-// command's group or label ("ex wo" finds "Export as Word…").
+// command's group or label ("ex wo" finds "Export as Word…"). Words are runs
+// of letters and digits, in any script (template names are the user's). A
+// query of only punctuation matches nothing; a blank one, everything.
 export function matches(c: Command, query: string): boolean {
-  const words = `${c.group} ${c.label}`.toLowerCase().split(/[^a-z0-9]+/);
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((q) => words.some((w) => w.startsWith(q)));
+  const split = (s: string) =>
+    s
+      .normalize("NFC")
+      .toLowerCase()
+      .split(/[^\p{L}\p{M}\p{N}]+/u)
+      .filter(Boolean);
+  const qs = split(query);
+  if (qs.length === 0) return query.trim() === "";
+  const words = split(`${c.group} ${c.label}`);
+  return qs.every((q) => words.some((w) => w.startsWith(q)));
 }

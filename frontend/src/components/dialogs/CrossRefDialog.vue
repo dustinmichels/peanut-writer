@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { Check, Image, Sigma, Table, Unlink } from "lucide-vue-next";
 import Modal from "@/components/ui/Modal.vue";
 import { insertCrossRef, unlinkCrossRef } from "@/lib/actions";
@@ -43,6 +43,17 @@ function key(e: KeyboardEvent) {
   else if (e.key === "Enter") insert(list.value[picked.value]);
   else return;
   e.preventDefault();
+  if (e.key !== "Enter")
+    nextTick(() => listEl.value?.children[picked.value]?.scrollIntoView({ block: "nearest" }));
+}
+
+// WebKit sends a resting pointer a mouse move when the list scrolls under it:
+// only a real move picks the row there.
+let pointer = "";
+function hover(e: MouseEvent, i: number) {
+  const at = `${e.screenX},${e.screenY}`;
+  if (at !== pointer) picked.value = i;
+  pointer = at;
 }
 onMounted(() => {
   window.addEventListener("keydown", key);
@@ -76,7 +87,7 @@ onUnmounted(() => window.removeEventListener("keydown", key));
         class="row"
         :class="{ on: i === picked, current: isCurrent(it) }"
         :aria-current="isCurrent(it) || undefined"
-        @mouseenter="picked = i"
+        @mousemove="hover($event, i)"
         @click="insert(it)"
       >
         <component :is="icons[it.kind]" :size="16" />

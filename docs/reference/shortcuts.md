@@ -19,6 +19,8 @@
 | ⌘= / ⌘- / ⌘0 | Zoom in / out / actual size |
 | ⌘B           | Bold                        |
 | ⌘I           | Italic                      |
+| ⇧⌘X          | Strikethrough               |
+| ⇧⌘H          | Highlight                   |
 | ⌥⌘1 – ⌥⌘4    | Heading 1 – 4               |
 | `@`          | Suggest a cross-reference   |
 | Tab          | Nest a list item            |

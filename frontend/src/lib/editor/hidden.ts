@@ -20,24 +20,35 @@ import {
 } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { fenceRe, frontMatterEnd, itemsField, showMarkdown, shownEquations } from "./fields";
-import { BulletWidget, FenceWidget, HeadingMarkWidget, RuleWidget } from "./widgets/marks";
+import {
+  BulletWidget,
+  FenceWidget,
+  HeadingMarkWidget,
+  QuoteMarkWidget,
+  RuleWidget,
+} from "./widgets/marks";
 import { tocRe } from "./widgets/toc";
 
 // Unless the Markdown is shown, its marks are replaced by nothing (or a
-// heading's #s, a bullet, a rule). Each hidden range has a kind: "mark"
-// around inline text, "prefix" before a line's text (heading, quote,
+// heading's #s, a quote's >, a bullet, a rule). Each hidden range has a kind:
+// "mark" around inline text, "prefix" before a line's text (heading, quote,
 // bullet), "line" for a whole line (a rule, a code fence).
 type HiddenKind = "mark" | "prefix" | "line";
+
+interface PrefixMark {
+  from: number;
+  to: number;
+  bullet: boolean;
+  quote: boolean;
+  level: number;
+}
 
 // linePrefix is the marks before a line's text that are hidden: an ATX
 // heading's #s (level is its count), quote marks and bullets, each with the
 // space after it. Indentation and numbers stay visible.
-function linePrefix(
-  state: EditorState,
-  line: Line,
-): { from: number; to: number; bullet: boolean; level: number }[] {
+function linePrefix(state: EditorState, line: Line): PrefixMark[] {
   const tree = syntaxTree(state);
-  const out: { from: number; to: number; bullet: boolean; level: number }[] = [];
+  const out: PrefixMark[] = [];
   let pos = line.from;
   for (;;) {
     while (pos < line.to && /[ \t]/.test(line.text[pos - line.from])) pos++;
@@ -46,11 +57,12 @@ function linePrefix(
     if (n.from !== pos) break;
     const heading = n.name === "HeaderMark" && /^ATXHeading/.test(n.parent?.name ?? "");
     const bullet = n.name === "ListMark" && n.parent?.parent?.name === "BulletList";
-    if (!heading && !bullet && n.name !== "QuoteMark") break;
+    const quote = n.name === "QuoteMark";
+    if (!heading && !bullet && !quote) break;
     let to = n.to;
     if (heading) while (to < line.to && line.text[to - line.from] === " ") to++;
     else if (line.text[to - line.from] === " ") to++;
-    out.push({ from: n.from, to, bullet, level: heading ? n.to - n.from : 0 });
+    out.push({ from: n.from, to, bullet, quote, level: heading ? n.to - n.from : 0 });
     pos = to;
   }
   return out;
@@ -86,21 +98,31 @@ function deadLine(state: EditorState, line: Line): "block" | "fence" | null {
   return null;
 }
 
-// covered tells whether pos is in the front matter or a figure, table or
-// display equation shown as a widget, which stands in for its Markdown whole.
-function covered(state: EditorState, pos: number): boolean {
-  return (
-    pos < state.field(frontMatterEnd) ||
-    state
-      .field(itemsField)
-      .some(
-        (x) => x.kind !== "equation" && x.prefix === undefined && pos >= x.from && pos <= x.to,
-      ) ||
-    shownEquations(state).some((x) => pos >= x.from && pos <= x.to)
-  );
+// coverage tells whether a position is in the front matter or a figure, table
+// or display equation shown as a widget, which stands in for its Markdown
+// whole.
+export function coverage(state: EditorState): (pos: number) => boolean {
+  const fmEnd = state.field(frontMatterEnd);
+  const spans: { from: number; to: number }[] = state
+    .field(itemsField)
+    .filter((x) => x.kind !== "equation" && x.prefix === undefined);
+  spans.push(...shownEquations(state));
+  spans.sort((a, b) => a.from - b.from);
+  // They don't overlap: pos is in the last one starting at or before it, if any.
+  return (pos) => {
+    if (pos < fmEnd) return true;
+    let lo = 0;
+    let hi = spans.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (spans[mid].from <= pos) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo > 0 && pos <= spans[lo - 1].to;
+  };
 }
 
-const emptyPairs = ["**", "~~", "*", "`"];
+const emptyPairs = ["**", "~~", "==", "*", "`"];
 
 // emptyPairAt is the empty pair of marks the cursor is in (as a style
 // button leaves them), or null.
@@ -136,17 +158,26 @@ function buildHidden(view: EditorView): Hidden {
     hide(line.from, line.to, "line", new FenceWidget(lang));
     deco.push(Decoration.line({ class: "pw-code-fence" }).range(line.from));
   };
+  const covered = coverage(state);
+  const sel = state.selection.main;
+  const pair = sel.empty ? emptyPairAt(state, sel.head) : null;
 
   for (const { from, to } of view.visibleRanges) {
     for (let p = from; p <= to;) {
       const line = doc.lineAt(p);
-      if (!covered(state, line.from)) {
+      if (!covered(line.from)) {
         for (const m of linePrefix(state, line))
           hide(
             m.from,
             m.to,
             "prefix",
-            m.level ? new HeadingMarkWidget(m.level) : m.bullet ? new BulletWidget() : undefined,
+            m.level
+              ? new HeadingMarkWidget(m.level)
+              : m.bullet
+                ? new BulletWidget()
+                : m.quote
+                  ? new QuoteMarkWidget()
+                  : undefined,
           );
       }
       p = line.to + 1;
@@ -156,7 +187,16 @@ function buildHidden(view: EditorView): Hidden {
       to,
       enter: (n) => {
         if (n.name === "Document") return;
-        if (covered(state, n.from)) return false;
+        if (covered(n.from)) return false;
+        // The empty pair a style button left on a line of its own (`****`,
+        // `~~~~`) reads as a rule or a fence until something is typed in it.
+        if (
+          pair &&
+          (n.name === "HorizontalRule" || n.name === "FencedCode") &&
+          doc.lineAt(n.from).to >= pair.to &&
+          n.from <= pair.from
+        )
+          return false;
         switch (n.name) {
           case "HeaderMark": {
             // A closing run of #s; the opening one is part of the prefix.
@@ -170,6 +210,7 @@ function buildHidden(view: EditorView): Hidden {
           }
           case "EmphasisMark":
           case "StrikethroughMark":
+          case "HighlightMark":
             hide(n.from, n.to, "mark");
             break;
           case "CodeMark":
@@ -184,7 +225,9 @@ function buildHidden(view: EditorView): Hidden {
           case "Link": {
             const url = n.node.getChild("URL");
             const marks = n.node.getChildren("LinkMark");
-            if (!url || marks.length < 2) break;
+            // `](url)` broken across lines can't be hidden by a plugin: such a
+            // link stays as written.
+            if (!url || marks.length < 2 || doc.lineAt(marks[1].from).to < n.to) break;
             hide(marks[0].from, marks[0].to, "mark");
             hide(marks[1].from, n.to, "mark");
             if (marks[1].from > marks[0].to) {
@@ -212,8 +255,6 @@ function buildHidden(view: EditorView): Hidden {
   }
 
   // A style button with nothing selected leaves an empty pair to type into.
-  const sel = state.selection.main;
-  const pair = sel.empty ? emptyPairAt(state, sel.head) : null;
   if (pair) {
     const half = (pair.to - pair.from) / 2;
     deco.push(Decoration.replace({}).range(pair.from, pair.from + half));
@@ -273,9 +314,13 @@ function settle(state: EditorState, pos: number, forward: boolean): number {
   // The properties are edited in their dialog, never in place.
   const fmEnd = state.field(frontMatterEnd);
   if (pos < fmEnd) return fmEnd;
+  // An empty pair a style button left stays to be typed into, even where it
+  // reads as a rule or a fence.
+  if (emptyPairAt(state, pos)) return pos;
+  const covered = coverage(state);
   for (let i = 0; i < 8; i++) {
     const line = state.doc.lineAt(pos);
-    if (covered(state, line.from)) return pos;
+    if (covered(line.from)) return pos;
     if (deadLine(state, line)) {
       const next = forward ? line.to + 1 : line.from - 1;
       if (next < 0 || next > state.doc.length) forward = !forward;
@@ -321,6 +366,12 @@ function moveChar(view: EditorView, forward: boolean, extend: boolean): boolean 
     const at = state.doc.lineAt(p);
     if (p < prefixEnd(state, at) && at.from > 0) p = at.from - 1;
   }
+  // Not into a widget standing in for text (a reference, a figure): past it.
+  for (const atomic of state.facet(EditorView.atomicRanges)) {
+    atomic(view).between(p, p, (a, b) => {
+      if (a < p && p < b) p = forward ? b : a;
+    });
+  }
   if (p === sel.head) return false;
   view.dispatch({
     selection: EditorSelection.single(extend ? sel.anchor : p, p),
@@ -334,6 +385,7 @@ const wrapperMark: Record<string, string> = {
   Emphasis: "EmphasisMark",
   StrongEmphasis: "EmphasisMark",
   Strikethrough: "StrikethroughMark",
+  Highlight: "HighlightMark",
   InlineCode: "CodeMark",
   Link: "LinkMark",
 };
@@ -389,7 +441,7 @@ function deleteChar(view: EditorView, forward: boolean): boolean {
   if (forward ? p === line.to : p === line.from) {
     if (forward ? p >= doc.length : p <= 0) return p !== head;
     const other = doc.lineAt(forward ? p + 1 : p - 1);
-    const dead = covered(state, other.from) ? null : deadLine(state, other);
+    const dead = coverage(state)(other.from) ? null : deadLine(state, other);
     if (dead === "block") return del(forward ? p : other.from, forward ? other.to : p);
     if (dead === "fence") {
       const into = forward ? Math.min(other.to + 1, doc.length) : Math.max(other.from - 1, 0);

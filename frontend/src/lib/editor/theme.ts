@@ -6,6 +6,7 @@ import { Compartment, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { showMarkdown } from "./fields";
+import { highlightTag } from "./highlight";
 import { mathTag } from "./math";
 
 export const showSlot = new Compartment();
@@ -30,6 +31,7 @@ const highlightCommon = [
   { tag: [t.heading3, t.heading4, t.heading5, t.heading6], fontWeight: "650" },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
+  { tag: highlightTag, backgroundColor: "var(--highlight)", borderRadius: "2px" },
   { tag: t.link, color: "var(--accent-ink)", textDecoration: "underline" },
   { tag: t.url, color: "var(--muted)" },
   { tag: [t.processingInstruction, t.meta], color: "var(--marks)" },

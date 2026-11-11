@@ -3,6 +3,7 @@ package versions
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -87,6 +88,37 @@ func TestBadNames(t *testing.T) {
 	for _, name := range []string{"", " ", ".hidden", "..", "a/b"} {
 		if _, err := Save(doc, name, nil, nil, nil); err == nil {
 			t.Errorf("Save(%q) succeeded", name)
+		}
+	}
+}
+
+// A document that can't be replaced (locked in Finder) leaves its template
+// and settings as they were, not restored around the old text.
+func TestRestoreFailureChangesNothing(t *testing.T) {
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "notes.md")
+	tpl := filepath.Join(dir, "notes.template.json")
+	set := filepath.Join(dir, "notes.settings.json")
+	sidecars := []string{tpl, set}
+	write(t, doc, "first")
+	write(t, tpl, "version's")
+	if _, err := Save(doc, "Draft", sidecars, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	write(t, doc, "second")
+	write(t, tpl, "current")
+	write(t, set, "current")
+	if err := exec.Command("chflags", "uchg", doc).Run(); err != nil {
+		t.Skip("can't lock a file:", err)
+	}
+	defer exec.Command("chflags", "nouchg", doc).Run()
+
+	if _, err := Restore(doc, "Draft", sidecars); err == nil {
+		t.Fatal("Restore replaced a locked document")
+	}
+	for _, p := range []string{doc, tpl, set} {
+		if b, _ := os.ReadFile(p); string(b) != "current" && string(b) != "second" {
+			t.Errorf("%s holds %q after a failed restore", filepath.Base(p), b)
 		}
 	}
 }

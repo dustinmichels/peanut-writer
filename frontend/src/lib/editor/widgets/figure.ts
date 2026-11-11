@@ -74,6 +74,7 @@ function loadPicture(img: HTMLImageElement, src: string, handlers: Handlers) {
       img.parentElement?.classList.add("missing");
       const msg = document.createElement("span");
       msg.textContent = `Missing picture: ${src}`;
+      msg.ondblclick = img.ondblclick; // opens the figure, as the picture did
       img.replaceWith(msg);
     }
   });

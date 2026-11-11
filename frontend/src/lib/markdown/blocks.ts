@@ -180,18 +180,27 @@ function addEquation(eq: Equation, s: string, end: number) {
 }
 
 // readBlocks reads the block structure of text from offset from (after the
-// front matter).
-export function readBlocks(text: string, from: number): Container {
+// front matter, or a restart point), the start of 0-based line first. At
+// each line nothing is open before (see restart.ts) it calls point, and
+// stops when point returns true.
+export function readBlocks(
+  text: string,
+  from: number,
+  first = 0,
+  point?: (at: number, line: number) => boolean,
+): Container {
   const root: Container = { type: "root", indent: 0, children: [], empty: false, line: 0 };
   const open: Container[] = [root];
   let leaf: Leaf | null = null;
   // A blank line came after a list item with nothing in it: goldmark ends
   // every list at the next line, unless it starts an item.
   let afterEmpty = false;
-  const lines = text.split("\n");
-  for (let i = 0, start = 0; i < lines.length; start += lines[i].length + 1, i++) {
-    if (start < from) continue;
-    const line = lines[i].replace(/\r$/, "");
+  for (let i = first, start = from, next = 0; start <= text.length; i++, start = next) {
+    let nl = text.indexOf("\n", start);
+    if (nl < 0) nl = text.length;
+    next = nl + 1;
+    if (point && open.length === 1 && !leaf && restartable(root) && point(start, i)) break;
+    const line = text.slice(start, nl > start && text[nl - 1] === "\r" ? nl - 1 : nl);
     const end = start + line.length;
     const cur = new Cursor(line);
 
@@ -457,6 +466,13 @@ function splitParagraph(lines: ParaLine[]): { text: ParaLine[]; table: ParaLine[
   let k = 0;
   while (k < lines.length && linkDefinition.test(lines[k].text)) k++;
   return { text: lines.slice(k), table };
+}
+
+// restartable tells whether reading can restart after root's blocks (with
+// nothing open): not after a table, whose caption is the block after it.
+function restartable(root: Container): boolean {
+  const last = root.children[root.children.length - 1];
+  return last?.type !== "paragraph" || !!last.heading || !splitParagraph(last.lines).table;
 }
 
 // paragraphs splits paragraphs into text and tables. An underlined one is a

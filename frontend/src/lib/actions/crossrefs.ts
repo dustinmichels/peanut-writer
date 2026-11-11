@@ -14,6 +14,22 @@ import { view } from "./run";
 
 const labelPrefix = { figure: "fig", table: "tbl", equation: "eq" } as const;
 
+// refLabel is a name typed in a dialog as a cross-reference can use it, after
+// its kind's prefix ("cat" names a figure `fig:cat`): accents dropped, and
+// anything else a reference can't hold (spaces, `'`, `.`) as a dash. "" when
+// nothing is left.
+export function refLabel(prefix: "fig" | "tbl" | "eq", typed: string): string {
+  let l = typed.trim();
+  if (l.startsWith(`${prefix}:`)) l = l.slice(prefix.length + 1);
+  l = l
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-|-$/g, "");
+  return l ? `${prefix}:${l}` : "";
+}
+
 // insertCrossRef inserts a reference to item at the cursor, or in place of the
 // reference at `at`, first giving the item a label if it has none.
 export function insertCrossRef(item: Item, at?: RefAt) {

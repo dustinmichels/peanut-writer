@@ -52,13 +52,18 @@ DocService.Fonts()
   .catch((e) => toast(`Fonts: ${errorText(e)}`, "error"));
 
 let timer: ReturnType<typeof setTimeout> | undefined;
+// The document the waiting change was made in.
+let changedIn = "";
 function save() {
   clearTimeout(timer);
   timer = undefined;
-  setTemplateStyle({ ...style });
+  // Not if another document has opened since (which closes this pane):
+  // the change would go to its template.
+  if (state.path === changedIn) setTemplateStyle({ ...style });
 }
 function changed() {
   clearTimeout(timer);
+  changedIn = state.path;
   timer = setTimeout(save, 150);
 }
 function flush() {

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { gatherFootnotes, scan, sentenceAround } from ".";
+import { figureMarkdown, figureSpec, gatherFootnotes, scan, sentenceAround } from ".";
 
 // scan must number figures, tables and equations as internal/doc does: each
 // sample's .want is what doc.Parse numbers (internal/doc/numbering_test.go).
@@ -23,6 +23,35 @@ for (const name of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
     expect(got.join("")).toBe(readFileSync(join(dir, name.replace(/\.md$/, ".want")), "utf8"));
   });
 }
+
+// A picture's file is read as internal/doc reads it (TestDestinationsUnescaped):
+// escapes undone, then numeric and named character references.
+test("image sources", () => {
+  const src = (md: string) => scan(md)[0].pictures![0].src;
+  expect(src("![x](R&amp;D\\_1.png)")).toBe("R&D_1.png");
+  expect(src("![x](<a&#38;b&#x26;c &#38;amp; &#0065; &foo;.png>)")).toBe("a&b&c & 5 &foo;.png");
+});
+
+// The figure dialog writes a caption and reads it back as typed: brackets
+// and backslashes escaped, but not in code or math, which goldmark reads
+// first (`$\alpha$` written `$\\alpha$` would draw a line break).
+test("figure captions", () => {
+  for (const [caption, md] of [
+    ["Growth of $\\alpha$ in [0, 1]", "![Growth of $\\alpha$ in \\[0, 1\\]](a.png)"],
+    ["Code `a]b` and $x]$ and a\\b", "![Code `a]b` and $x]$ and a\\\\b](a.png)"],
+  ]) {
+    const spec = {
+      pictures: [{ src: "a.png", alt: "" }],
+      caption,
+      label: "",
+      width: 0,
+      position: "" as const,
+      columns: 1,
+    };
+    expect(figureMarkdown(spec)).toBe(md);
+    expect(figureSpec(scan(md)[0]).caption).toBe(caption);
+  }
+});
 
 // The figure dialog and footnote list show the sentence around a mention (@x
 // or [^x]): within its paragraph, list item, heading or table cell, cut at

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { AlertTriangle, PanelRightClose } from "lucide-vue-next";
 import { togglePreview } from "@/lib/actions";
 import { state } from "@/lib/store";
 
+// A page as shown: its SVG, drawn as an image, and the marks on it (see
+// pageMarks).
 interface Page {
+  svg: string;
   url: string;
   width: number; // points
   height: number;
+  marks: [line: number, x: number, y: number][];
 }
 
 const emit = defineEmits<{
@@ -17,7 +21,7 @@ const emit = defineEmits<{
 }>();
 
 const scroller = useTemplateRef("scroller");
-const pages = ref<Page[]>([]);
+const pages = shallowRef<Page[]>([]);
 const paneWidth = ref(600);
 
 // Where each marked block is in the preview, by source line: its page, and
@@ -30,24 +34,35 @@ interface Mark {
 let marks = new Map<number, Mark>();
 
 // Pages are shown as images: each page's SVG keeps its ids to itself, and
-// swapping a whole set at once doesn't flicker.
+// swapping a whole set at once doesn't flicker. A page whose SVG hasn't
+// changed (typing mostly changes one) keeps its image and marks.
 watch(
   () => state.pages,
   (svgs) => {
-    const old = pages.value;
-    pages.value = svgs.map((svg) => {
-      const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg.slice(0, 300));
-      return {
-        url: URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })),
-        width: m ? parseFloat(m[1]) : 612,
-        height: m ? parseFloat(m[2]) : 792,
-      };
+    const prev = pages.value;
+    const old = new Map(prev.map((p) => [p.svg, p]));
+    pages.value = svgs.map((svg) => old.get(svg) ?? drawPage(svg));
+    marks = new Map();
+    pages.value.forEach((p, page) => {
+      for (const [line, x, y] of p.marks) if (!marks.has(line)) marks.set(line, { page, x, y });
     });
-    marks = findMarks(svgs);
     // Let the new images load before dropping the old ones.
-    setTimeout(() => old.forEach((p) => URL.revokeObjectURL(p.url)), 1000);
+    const kept = new Set(pages.value.map((p) => p.url));
+    const gone = prev.filter((p) => !kept.has(p.url));
+    if (gone.length) setTimeout(() => gone.forEach((p) => URL.revokeObjectURL(p.url)), 1000);
   },
 );
+
+function drawPage(svg: string): Page {
+  const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg.slice(0, 300));
+  return {
+    svg,
+    url: URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })),
+    width: m ? parseFloat(m[1]) : 612,
+    height: m ? parseFloat(m[2]) : 792,
+    marks: pageMarks(svg),
+  };
+}
 
 const PX = 96 / 72;
 const fit = computed(() => {
@@ -86,24 +101,21 @@ function applyTransform(t: string, x: number, y: number): [number, number] {
   return [x, y];
 }
 
-// findMarks locates the marked blocks in the pages: the preview marks each
-// with an invisible `peanut:<line>` link (see peanut.typ).
-function findMarks(svgs: string[]): Map<number, Mark> {
-  const found = new Map<number, Mark>();
-  svgs.forEach((src, page) => {
-    if (!src.includes('href="peanut:')) return;
-    const svg = new DOMParser().parseFromString(src, "image/svg+xml");
-    for (const a of svg.querySelectorAll('a[href^="peanut:"]')) {
-      const line = Number(a.getAttribute("href")!.slice("peanut:".length));
-      if (found.has(line)) continue;
-      let x = 0;
-      let y = 0;
-      for (let el: Element | null = a; el; el = el.parentElement) {
-        [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
-      }
-      found.set(line, { page, x, y });
+// pageMarks locates the marked blocks on a page, in its order: the preview
+// marks each with an invisible `peanut:<line>` link (see peanut.typ).
+function pageMarks(src: string): Page["marks"] {
+  const found: Page["marks"] = [];
+  if (!src.includes('href="peanut:')) return found;
+  const svg = new DOMParser().parseFromString(src, "image/svg+xml");
+  for (const a of svg.querySelectorAll('a[href^="peanut:"]')) {
+    const line = Number(a.getAttribute("href")!.slice("peanut:".length));
+    let x = 0;
+    let y = 0;
+    for (let el: Element | null = a; el; el = el.parentElement) {
+      [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
     }
-  });
+    found.push([line, x, y]);
+  }
   return found;
 }
 

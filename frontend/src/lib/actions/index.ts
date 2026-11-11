@@ -1,6 +1,6 @@
 // The actions: what the menus, the ribbon and the dialogs do to the document.
 
-export { insertCrossRef, unlinkCrossRef } from "./crossrefs";
+export { insertCrossRef, refLabel, unlinkCrossRef } from "./crossrefs";
 export {
   contentChanged,
   forgetRecent,

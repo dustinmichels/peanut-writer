@@ -2,6 +2,7 @@
 
 import { type Fence, displayMathClose, displayMathStart, fenceCloses, fenceOpen } from "./fences";
 import { readFrontMatter } from "./frontMatter";
+import { type Restarts, reread, splice } from "./restart";
 
 // A footnote mark in the text: `[^label]`.
 export interface FootnoteMark {
@@ -31,6 +32,12 @@ export interface Footnotes {
   notes: FootnoteNote[];
 }
 
+// A reading of the footnotes, and where it can be read again from after an
+// edit.
+export interface FootnoteScan extends Footnotes {
+  restarts: Restarts;
+}
+
 const noteHead = /^( {0,3})\[\^([^\]\s]+)\]:[ \t]?/;
 const footMark = /\[\^([^\]\s]+)\]/g;
 // Code spans and inline math, which hold no marks.
@@ -41,18 +48,86 @@ export const blockStart = /^\s{0,3}(?:[#>|]|[-*+]\s|\d+[.)]\s|```|~~~|\$\$|(?:[-
 // scanFootnotes finds the footnote marks and notes outside code and math, as
 // goldmark reads them: a note runs on through blank and indented lines (and
 // lines straight after its text), to a line that isn't.
-export function scanFootnotes(text: string): Footnotes {
-  const lines = text.split("\n");
+export function scanFootnotes(text: string): FootnoteScan {
+  const fm = readFrontMatter(text).to;
+  const restarts: Restarts = { at: [], line: [] };
+  let line = 0;
+  for (let i = text.indexOf("\n"); i >= 0 && i < fm; i = text.indexOf("\n", i + 1)) line++;
+  const read = readFootnotes(text, fm, line, (at, l) => {
+    restarts.at.push(at);
+    restarts.line.push(l);
+    return false;
+  });
+  return { ...numbered(read), restarts };
+}
+
+// rescanFootnotes reads text again after the edit that made it from the
+// text prev read: fromA–toA of that text became fromA–toB.
+export function rescanFootnotes(
+  prev: FootnoteScan,
+  text: string,
+  fromA: number,
+  toA: number,
+  toB: number,
+): FootnoteScan {
+  // The front matter is where reading starts, the first restart point.
+  if (readFrontMatter(text).to !== prev.restarts.at[0]) return scanFootnotes(text);
+  let fresh: Footnotes = { marks: [], notes: [] };
+  const r = reread(prev.restarts, fromA, toA, toB, (from, line, point) => {
+    fresh = readFootnotes(text, from, line, point);
+  });
+  if (!r) return scanFootnotes(text);
+  const { shift, lines } = r;
+  const marks = splice(prev.marks, fresh.marks, r, (m) => ({
+    ...m,
+    from: m.from + shift,
+    to: m.to + shift,
+  }));
+  const notes = splice(prev.notes, fresh.notes, r, (n) => ({
+    ...n,
+    from: n.from + shift,
+    labelFrom: n.labelFrom + shift,
+    textFrom: n.textFrom + shift,
+    to: n.to + shift,
+    line: n.line + lines,
+  }));
+  return { ...numbered({ marks, notes }), restarts: r.restarts };
+}
+
+// numbered numbers the marks outside notes that have a note.
+function numbered({ marks, notes }: Footnotes): Footnotes {
+  const noted = new Set(notes.map((n) => n.label));
+  let n = 0;
+  return {
+    marks: marks.map((m) => {
+      const number = !m.inNote && noted.has(m.label) ? ++n : 0;
+      return m.number === number ? m : { ...m, number };
+    }),
+    notes,
+  };
+}
+
+// readFootnotes reads the marks and notes from offset from, the start of
+// 0-based line first, unnumbered. At each line with no note, code or math
+// open before it it calls point, and stops when point returns true.
+function readFootnotes(
+  text: string,
+  from: number,
+  first: number,
+  point: (at: number, line: number) => boolean,
+): Footnotes {
   const marks: FootnoteMark[] = [];
   const notes: FootnoteNote[] = [];
-  const fm = readFrontMatter(text).to;
   let note: FootnoteNote | null = null;
   let afterBlank = false;
   let inFence: Fence | null = null;
   let inMath = false;
-  for (let i = 0, start = 0; i < lines.length; start += lines[i].length + 1, i++) {
-    const line = lines[i];
-    if (start < fm) continue;
+  for (let i = first, start = from, next = 0; start <= text.length; i++, start = next) {
+    let nl = text.indexOf("\n", start);
+    if (nl < 0) nl = text.length;
+    next = nl + 1;
+    if (!note && !inFence && !inMath && point(start, i)) break;
+    const line = text.slice(start, nl);
     const blank = line.trim() === "";
     const indented = /^( {4}|\t)/.test(line);
     const head = inFence || inMath ? null : noteHead.exec(line);
@@ -109,9 +184,6 @@ export function scanFootnotes(text: string): Footnotes {
       });
     }
   }
-  const noted = new Set(notes.map((n) => n.label));
-  let n = 0;
-  for (const m of marks) if (!m.inNote && noted.has(m.label)) m.number = ++n;
   for (const x of notes) x.text = text.slice(x.textFrom, Math.max(x.to, x.textFrom));
   return { marks, notes };
 }

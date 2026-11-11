@@ -7,6 +7,19 @@ import { errorText } from "./toasts";
 let renderTimer: ReturnType<typeof setTimeout> | undefined;
 let inFlight = false;
 let pending = false;
+// Bumped for each document opened: a render of one opened before is dropped.
+let generation = 0;
+
+// clearPreview empties the preview, and what it shows in the outline, for a
+// newly opened document.
+export function clearPreview() {
+  generation++;
+  state.pages = [];
+  state.outline = [];
+  state.currentHeading = 0;
+  state.renderError = "";
+  state.warnings = [];
+}
 
 // scheduleRender renders the preview shortly after typing stops, one render
 // at a time, always ending with the latest text.
@@ -22,9 +35,10 @@ async function renderNow() {
   }
   inFlight = true;
   state.rendering = true;
+  const gen = generation;
   try {
     const res = await DocService.Render(state.content);
-    if (res.error === "canceled") return;
+    if (res.error === "canceled" || gen !== generation) return;
     state.outline = res.outline ?? [];
     if (res.error) state.renderError = res.error;
     else {
@@ -34,7 +48,7 @@ async function renderNow() {
     state.warnings = res.warnings ?? [];
     state.template = res.template || state.template;
   } catch (e) {
-    state.renderError = errorText(e);
+    if (gen === generation) state.renderError = errorText(e);
   } finally {
     inFlight = false;
     state.rendering = pending;

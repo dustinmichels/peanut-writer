@@ -7,10 +7,11 @@ import { run } from "./run";
 import { save } from "./saving";
 
 // saveVersion saves the document (asking where, if it's untitled), then keeps
-// it as a named version with Word and PDF copies; reports whether it did.
+// it as a named version with Word and PDF copies; reports whether it did. The
+// name is trimmed, as a template's is: " Draft" would be a folder of its own.
 export async function saveVersion(name: string): Promise<boolean> {
   if (!(await save())) return false;
-  const v = await run("Save version", () => DocService.SaveVersion(name));
+  const v = await run("Save version", () => DocService.SaveVersion(name.trim()));
   if (!v) return false;
   await refreshVersions();
   toast(`Saved the version “${v.name}”.`, "success", {

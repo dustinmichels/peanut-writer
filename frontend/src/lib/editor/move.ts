@@ -169,7 +169,8 @@ export function startMove(
     if (grip.hasPointerCapture(e.pointerId)) grip.releasePointerCapture(e.pointerId);
     line.remove();
     el.classList.remove("moving");
-    if (drop && target >= 0 && view.state === state) moveItem(view, item, target);
+    // Positions hold while the text does (the parser may update the state).
+    if (drop && target >= 0 && view.state.doc === state.doc) moveItem(view, item, target);
   };
   const up = () => finish(true);
   const cancel = () => finish(false);

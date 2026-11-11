@@ -4,6 +4,7 @@ import Modal from "@/components/ui/Modal.vue";
 const emit = defineEmits<{ close: [] }>();
 const rows: [string, string][] = [
   ["**bold**  *italic*  ~~strike~~", "Bold (⌘B), italic (⌘I), strikethrough"],
+  ["==highlight==", "Highlighted text (⇧⌘H)"],
   ["`code`", "Code in a sentence"],
   ["# Heading 1   ## Heading 2", "Headings (⌥⌘1 – ⌥⌘4)"],
   ["- item   1. item", "Bulleted and numbered lists; Tab nests"],

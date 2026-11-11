@@ -46,6 +46,8 @@ import { dismiss, state } from "@/lib/store";
 }
 .text {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere; /* a long file or template name */
 }
 .act {
   border: 0;

@@ -3,28 +3,62 @@
 // the Markdown is shown.
 
 import { syntaxTree } from "@codemirror/language";
-import { EditorState, Facet, StateField } from "@codemirror/state";
+import { type ChangeSet, EditorState, Facet, StateField, type Text } from "@codemirror/state";
 import { Decoration, EditorView, WidgetType } from "@codemirror/view";
 import type { SyntaxNode, Tree } from "@lezer/common";
 import {
   type DisplayEquation,
-  displayEquations,
-  type Footnotes,
+  type FootnoteScan,
   type Item,
+  type ItemScan,
   readFrontMatter,
-  scan,
+  rescanFootnotes,
+  rescanItems,
   scanFootnotes,
+  scanItems,
 } from "@/lib/markdown";
 
+// textOf is doc as a string, made once for all the fields.
+const texts = new WeakMap<Text, string>();
+function textOf(doc: Text): string {
+  let s = texts.get(doc);
+  if (s === undefined) texts.set(doc, (s = doc.toString()));
+  return s;
+}
+
+// edited is what changes did as one edit: fromA–toA of the old text became
+// fromA–toB.
+function edited(changes: ChangeSet): [number, number, number] {
+  let fromA = -1;
+  let toA = 0;
+  let toB = 0;
+  changes.iterChangedRanges((fa, ta, _fb, tb) => {
+    if (fromA < 0) fromA = fa;
+    toA = ta;
+    toB = tb;
+  });
+  return [fromA, toA, toB];
+}
+
+// The items and display equations, read again after an edit only from
+// around it.
+const itemScan = StateField.define<ItemScan>({
+  create: (s) => scanItems(textOf(s.doc)),
+  update: (scan, tr) =>
+    tr.docChanged ? rescanItems(scan, textOf(tr.state.doc), ...edited(tr.changes)) : scan,
+});
+
 export const itemsField = StateField.define<Item[]>({
-  create: (s) => scan(s.doc.toString()),
-  update: (items, tr) => (tr.docChanged ? scan(tr.state.doc.toString()) : items),
+  create: (s) => s.field(itemScan).items,
+  update: (_, tr) => tr.state.field(itemScan).items,
+  provide: () => itemScan,
 });
 
 // The display equations at the top level.
 export const equationsField = StateField.define<DisplayEquation[]>({
-  create: (s) => displayEquations(s.doc.toString()),
-  update: (eqs, tr) => (tr.docChanged ? displayEquations(tr.state.doc.toString()) : eqs),
+  create: (s) => s.field(itemScan).equations,
+  update: (_, tr) => tr.state.field(itemScan).equations,
+  provide: () => itemScan,
 });
 
 // The start of the display equation being typed, -1 for none. Typing its
@@ -50,14 +84,16 @@ export function shownEquations(state: EditorState): DisplayEquation[] {
 
 // Where the front matter ends (0 without one).
 export const frontMatterEnd = StateField.define<number>({
-  create: (s) => readFrontMatter(s.doc.toString()).to,
-  update: (end, tr) => (tr.docChanged ? readFrontMatter(tr.state.doc.toString()).to : end),
+  create: (s) => readFrontMatter(textOf(s.doc)).to,
+  update: (end, tr) => (tr.docChanged ? readFrontMatter(textOf(tr.state.doc)).to : end),
 });
 
-// The footnote marks and notes.
-export const footnotesField = StateField.define<Footnotes>({
-  create: (s) => scanFootnotes(s.doc.toString()),
-  update: (fn, tr) => (tr.docChanged ? scanFootnotes(tr.state.doc.toString()) : fn),
+// The footnote marks and notes, read again after an edit only from around
+// it.
+export const footnotesField = StateField.define<FootnoteScan>({
+  create: (s) => scanFootnotes(textOf(s.doc)),
+  update: (fn, tr) =>
+    tr.docChanged ? rescanFootnotes(fn, textOf(tr.state.doc), ...edited(tr.changes)) : fn,
 });
 
 // bodyHint shows "Begin typing…" where the text goes while there's none, under
@@ -92,6 +128,7 @@ export function startSelection(doc: string): { anchor: number } | undefined {
 }
 
 const refRe = /(^|[^\w])@((?:fig|tbl|eq):[A-Za-z0-9_-]*[A-Za-z0-9_])/g;
+const codeNodes = new Set(["InlineCode", "FencedCode", "CodeBlock", "InlineMath", "BlockMath"]);
 
 interface RefSpan {
   from: number;
@@ -103,11 +140,11 @@ interface RefSpan {
 // front matter, code and math. Code is told by tree, which by default is as
 // far as the editor has parsed: what it shows.
 export function crossRefs(state: EditorState, tree: Tree = syntaxTree(state)): RefSpan[] {
-  const text = state.doc.toString();
+  const text = textOf(state.doc);
   const fm = readFrontMatter(text).to;
   const inCode = (pos: number) => {
     for (let n: SyntaxNode | null = tree.resolve(pos, 1); n; n = n.parent) {
-      if (/^(InlineCode|FencedCode|CodeBlock|InlineMath|BlockMath)$/.test(n.name)) return true;
+      if (codeNodes.has(n.name)) return true;
     }
     return false;
   };

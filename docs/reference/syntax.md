@@ -8,6 +8,7 @@ it's what you'll see in **View → Markdown** (⌘/). This is the same list as H
 | Type this                          | To get                                 |
 | ---------------------------------- | -------------------------------------- |
 | `**bold**` `*italic*` `~~strike~~` | Bold (⌘B), italic (⌘I), strikethrough  |
+| `==highlight==`                    | Highlighted text (⇧⌘H)                 |
 | `` `code` ``                       | Code in a sentence                     |
 | `# Heading 1` `## Heading 2`       | Headings (⌥⌘1 – ⌥⌘4)                   |
 | `- item` `1. item`                 | Bulleted and numbered lists; Tab nests |
@@ -108,13 +109,15 @@ title: My Report
 subtitle: Third quarter
 author: Ann
 topic: Essay 2
-date: today # or any text
+date: today
 header: HIST 101
 abstract: One paragraph.
 template: report
 hide: subtitle, date
 ---
 ```
+
+`date` is `today` or any fixed text. There are no comments: everything after `key:` is the value.
 
 `template` is one of `classic` (the default), `wordy`, `academic`, `report`, `technical`, `memo`, `minimal`,
 `manuscript`, `book`, `elegant`, `editorial`, `journal`, `peanut`,
@@ -127,4 +130,5 @@ the document keeps but doesn't show.
 ## The rest
 
 Everything else is standard Markdown ([CommonMark](https://commonmark.org)) with GitHub-style tables and
-strikethrough, and footnotes, so the file reads well in any other Markdown app.
+strikethrough, and footnotes, so the file reads well in any other Markdown app. `==highlight==` is Pandoc's and
+Obsidian's.

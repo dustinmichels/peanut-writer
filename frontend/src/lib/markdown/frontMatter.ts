@@ -55,24 +55,29 @@ export function readFrontMatter(text: string): FrontMatter {
   const meta = emptyMeta();
   const none = { meta, from: 0, to: 0, extra: [] };
   if (!text.startsWith("---\n") && !text.startsWith("---\r\n")) return none;
-  const lines = text.split("\n");
-  let end = -1;
-  for (let i = 1; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (t === "---" || t === "...") {
-      end = i;
-      break;
+  // Its lines, up to the closing `---` or `...` (the rest isn't split: it can
+  // be long).
+  const lines: string[] = [];
+  let to = -1;
+  for (let start = text.indexOf("\n") + 1; to < 0;) {
+    const nl = text.indexOf("\n", start);
+    const line = text.slice(start, nl < 0 ? text.length : nl);
+    const t = line.trim();
+    if (t === "---" || t === "...") to = nl < 0 ? text.length : nl + 1;
+    else if (nl < 0) return none;
+    else {
+      lines.push(line);
+      start = nl + 1;
     }
   }
-  if (end < 0) return none;
   const extra: string[] = [];
-  for (const line of lines.slice(1, end)) {
-    const m = /^\s*([A-Za-z_-]+)\s*:\s*(.*)$/.exec(line.replace(/\r$/, ""));
+  for (const line of lines) {
+    // `s`: a value may hold U+2028 or U+2029, which `.` doesn't match.
+    const m = /^\s*([A-Za-z_-]+)\s*:\s*(.*)$/s.exec(line.replace(/\r$/, ""));
     const key = m?.[1].toLowerCase() as keyof Meta | undefined;
     if (m && key && metaKeys.includes(key)) meta[key] = unquote(m[2].trim());
     else if (line.trim()) extra.push(line);
   }
-  const to = lines.slice(0, end + 1).join("\n").length + (end + 1 < lines.length ? 1 : 0);
   return { meta, from: 0, to, extra };
 }
 

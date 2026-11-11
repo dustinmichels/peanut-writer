@@ -175,6 +175,7 @@ const (
 	InlineStrong    = "strong"
 	InlineEmph      = "emph"
 	InlineStrike    = "strike"
+	InlineHighlight = "highlight"
 	InlineCode      = "code"
 	InlineLink      = "link"
 	InlineImage     = "image"
@@ -196,7 +197,7 @@ type Inline struct {
 	Display bool   `json:"display,omitempty"`
 	Error   string `json:"error,omitempty"`
 
-	// strong, emph, strike, link: the content.
+	// strong, emph, strike, highlight, link: the content.
 	Children []Inline `json:"children,omitempty"`
 
 	// link: the target. image: the absolute path ("" when missing).

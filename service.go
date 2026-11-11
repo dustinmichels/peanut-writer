@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
@@ -74,8 +75,8 @@ type DocService struct {
 	unsynced  bool // Sync on quit is on and the PDF and Word copies are behind the document
 	quitting  bool // the user chose to quit, so closing mustn't ask again
 	cancel    context.CancelFunc
-	previews  map[string]string // template previews by id and source hash
-	fonts     []string          // the fonts Typst can use, listed on first use
+	previews  map[string]preview // each template's latest preview, by id
+	fonts     []string           // the fonts Typst can use, listed on first use
 	typst     *render.Typst
 	typstErr  error
 	oxfmt     *mdfmt.Oxfmt // found on first use
@@ -87,6 +88,7 @@ type DocService struct {
 	pending   string            // a document Finder asked to open before then
 
 	backupMu   sync.Mutex     // one backup at a time
+	stateMu    sync.Mutex     // one state.json write at a time
 	backupOnce sync.Once      // starts the periodic backups
 	backups    sync.WaitGroup // backups started in the background, which quitting waits for
 
@@ -158,7 +160,7 @@ type SettingsInfo struct {
 }
 
 func newDocService() *DocService {
-	s := &DocService{previews: map[string]string{}}
+	s := &DocService{previews: map[string]preview{}}
 	s.typst, s.typstErr = render.Find()
 	s.loadState()
 	return s
@@ -207,7 +209,7 @@ func (s *DocService) newUntitled() (DocInfo, error) {
 // of that name there, its properties titled with the name (in title case),
 // authored by the default author, dated today and marked with the app's version.
 func (s *DocService) NewDocument() (DocInfo, error) {
-	p, err := s.choosePackage("Untitled", "")
+	p, err := s.choosePackage("Untitled", "", "")
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
@@ -321,21 +323,36 @@ func shownPath(p string) string {
 	return p
 }
 
-// docFile is the Markdown file of the document at p: p itself, or for a
-// package, the Markdown file inside it (Name.md, or its only one if the
+// docFile is the Markdown file of the document at p: p itself (or the file it
+// links to, so saving writes that file rather than replacing the link), or
+// for a package, the Markdown file inside it (Name.md, or its only one if the
 // package was renamed). A package's Markdown file mustn't be a symlink: one
 // from elsewhere could otherwise show (and save over) any file.
 func docFile(p string) (string, error) {
+	if fi, err := os.Lstat(p); err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+	}
 	if fi, err := os.Stat(p); err != nil || !fi.IsDir() {
 		return p, err
 	}
 	md := filepath.Join(p, docName(p)+".md")
 	if _, err := os.Lstat(md); err != nil {
-		found, _ := filepath.Glob(filepath.Join(p, "*.md"))
+		// Not filepath.Glob: p may hold pattern characters, like "[".
+		entries, _ := os.ReadDir(p)
+		var found []string
+		for _, e := range entries {
+			// Not hidden files, like the "._Name.md" macOS writes beside
+			// each file on USB drives and network shares.
+			if !strings.HasPrefix(e.Name(), ".") && strings.HasSuffix(e.Name(), ".md") {
+				found = append(found, e.Name())
+			}
+		}
 		if len(found) != 1 {
 			return "", fmt.Errorf("%s holds no document", filepath.Base(p))
 		}
-		md = found[0]
+		md = filepath.Join(p, found[0])
 	}
 	fi, err := os.Lstat(md)
 	if err != nil {
@@ -350,8 +367,9 @@ func docFile(p string) (string, error) {
 // choosePackage asks for a document's name and where to put it, makes a
 // package of that name there (Name.peanut: it holds the document, its images
 // and its backups) and returns the path of the document's file inside it. ""
-// means the user canceled, or chose not to replace an existing document.
-func (s *DocService) choosePackage(name, dir string) (string, error) {
+// means the user canceled, or chose not to replace an existing document; only
+// self (the document being saved as, if any) is replaced without asking.
+func (s *DocService) choosePackage(name, dir, self string) (string, error) {
 	d := s.app.Dialog.SaveFile().
 		SetMessage("Saved as a " + packageExt + " package with pictures and backups.").
 		SetFilename(name).
@@ -375,21 +393,36 @@ func (s *DocService) choosePackage(name, dir string) (string, error) {
 		return "", err
 	}
 	p = filepath.Join(pkg, name+".md")
-	s.mu.Lock()
-	cur := s.path
-	s.mu.Unlock()
-	if _, err := os.Stat(p); err == nil && p != cur && !s.confirmReplace(name) {
+	if self != "" && sameFile(p, self) {
+		// Its own name in another case or Unicode form, or through a link:
+		// saved as itself, not replaced (which would delete its settings
+		// and template as a replaced document's).
+		return self, nil
+	}
+	if _, err := os.Stat(p); err == nil && !s.confirmReplace(name, "Its package already holds a document of that name; replacing it overwrites that document.") {
 		return "", nil
 	}
 	return p, nil
 }
 
-// confirmReplace asks whether to replace the existing document name.
-func (s *DocService) confirmReplace(name string) bool {
+// sameFile reports whether the paths a and b name the same file: macOS
+// ignores case and Unicode form in names.
+func sameFile(a, b string) bool {
+	fa, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	fb, err := os.Stat(b)
+	return err == nil && os.SameFile(fa, fb)
+}
+
+// confirmReplace asks whether to replace the existing file name, as detail
+// explains.
+func (s *DocService) confirmReplace(name, detail string) bool {
 	choice := make(chan bool, 1)
 	d := s.app.Dialog.Question().
 		SetTitle(fmt.Sprintf("“%s” already exists. Do you want to replace it?", name)).
-		SetMessage("Its package already holds a document of that name; replacing it overwrites that document.")
+		SetMessage(detail)
 	d.AddButton("Replace").OnClick(func() { choice <- true })
 	cancel := d.AddButton("Cancel").OnClick(func() { choice <- false })
 	d.SetDefaultButton(cancel).SetCancelButton(cancel).AttachToWindow(s.window).Show()
@@ -454,10 +487,21 @@ func (s *DocService) OpenPath(p string) (DocInfo, error) {
 	if err != nil {
 		return DocInfo{}, err
 	}
+	if !utf8.Valid(b) {
+		// The editor would show its other characters as �, and save them so.
+		return DocInfo{}, fmt.Errorf("%s isn't UTF-8 text: save it as UTF-8 in another editor (TextEdit, say) first", filepath.Base(md))
+	}
 	s.setOpen(md, filepath.Dir(md))
 	s.remember(md)
 	s.backupLater(md)
-	return DocInfo{Path: md, Name: docName(md), Content: string(b)}, nil
+	return DocInfo{Path: md, Name: docName(md), Content: withoutBOM(string(b))}, nil
+}
+
+// withoutBOM is a document's text without a leading byte order mark, which
+// some editors (Notepad, say) write and which would hide its front matter
+// and first heading. Saving writes the text without it.
+func withoutBOM(text string) string {
+	return strings.TrimPrefix(text, "\ufeff")
 }
 
 // openedWithFile opens the document at p, which Finder asked the app to open:
@@ -510,7 +554,7 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	} else if t := doc.Parse(content, "").Meta.Title; t != "" {
 		name = safeFileName(t)
 	}
-	p, err := s.choosePackage(name, dir)
+	p, err := s.choosePackage(name, dir, oldPath)
 	if err != nil || p == "" {
 		return DocInfo{Canceled: true}, err
 	}
@@ -617,39 +661,37 @@ func (s *DocService) backupPeriodically() {
 		s.mu.Lock()
 		p := s.path
 		s.mu.Unlock()
-		s.backup(p)
+		s.backupFailed(s.backup(p))
 	}
 }
 
 // backupLater backs up p in the background; quitting waits for it.
 func (s *DocService) backupLater(p string) {
-	s.backups.Go(func() { s.backup(p) })
+	s.backups.Go(func() { s.backupFailed(s.backup(p)) })
 }
 
 // backup copies the saved file at p into a timestamped backups folder beside
 // it, unless it hasn't changed since its last backup.
-func (s *DocService) backup(p string) {
+func (s *DocService) backup(p string) error {
 	if p == "" {
-		return
+		return nil
 	}
 	s.backupMu.Lock()
 	defer s.backupMu.Unlock()
 	b, err := os.ReadFile(p)
 	if err != nil {
-		s.backupFailed(err)
-		return
+		return err
 	}
 	content := string(b)
 	if !backup.Changed(p, content) {
-		return
+		return nil
 	}
-	if err := backup.Write(p, content, time.Now()); err != nil {
-		s.backupFailed(err)
-	}
+	return backup.Write(p, content, time.Now())
 }
 
+// backupFailed tells the editor about a failed backup, if err is one.
 func (s *DocService) backupFailed(err error) {
-	if s.app != nil {
+	if err != nil && s.app != nil {
 		s.app.Event.Emit("backupFailed", err.Error())
 	}
 }
@@ -673,7 +715,7 @@ func (s *DocService) ServiceShutdown() error {
 	s.mu.Lock()
 	p := s.path
 	s.mu.Unlock()
-	s.backup(p)
+	s.backupFailed(s.backup(p))
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, d := range s.scratches {
@@ -691,9 +733,18 @@ var unsafeName = regexp.MustCompile(`[/\\:*?"<>|]+`)
 
 func safeFileName(s string) string {
 	s = strings.TrimSpace(unsafeName.ReplaceAllString(s, "-"))
-	if r := []rune(s); len(r) > 80 {
-		s = strings.TrimSpace(string(r[:80]))
+	// At most 80 characters and 200 bytes, so the files named after it (and
+	// atomicfile's temporary copies of them, ".Name.template.json.123456789")
+	// fit the 255-byte limit on file names.
+	end := 0
+	for n := 0; end < len(s) && n < 80; n++ {
+		_, size := utf8.DecodeRuneInString(s[end:])
+		if end+size > 200 {
+			break
+		}
+		end += size
 	}
+	s = strings.TrimSpace(s[:end])
 	if s == "" {
 		return "Untitled"
 	}
@@ -964,7 +1015,7 @@ func (s *DocService) ExportPDF(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return p, os.WriteFile(p, b, 0o644)
+	return p, atomicfile.Write(p, b, 0o644)
 }
 
 // ExportDOCX asks where to save a Word document and writes it; returns the
@@ -978,7 +1029,7 @@ func (s *DocService) ExportDOCX(content string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return p, os.WriteFile(p, b, 0o644)
+	return p, atomicfile.Write(p, b, 0o644)
 }
 
 // ExportHTML asks where to save a web page of the document and writes it;
@@ -995,7 +1046,7 @@ func (s *DocService) ExportHTML(content string) (string, error) {
 			return pics
 		}
 	}
-	return p, os.WriteFile(p, html.Write(d, tpl.Docx, opt), 0o644)
+	return p, atomicfile.Write(p, html.Write(d, tpl.Docx, opt), 0o644)
 }
 
 // SyncFiles writes a PDF and a Word copy of the saved document beside it (its
@@ -1076,7 +1127,12 @@ func (s *DocService) exportTarget(content, ext, kind, pattern string) (*doc.Docu
 		return nil, tpl, "", err
 	}
 	if !strings.EqualFold(filepath.Ext(p), ext) {
+		// The dialog (whose filter macOS doesn't apply) asked about replacing
+		// the name without the extension, if anything; this one's asked here.
 		p += ext
+		if _, err := os.Stat(p); err == nil && !s.confirmReplace(filepath.Base(p), "Replacing it overwrites its contents.") {
+			return nil, tpl, "", nil
+		}
 	}
 	return d, tpl, p, nil
 }
@@ -1125,7 +1181,7 @@ func (s *DocService) SaveVersion(name string) (versions.Version, error) {
 	if err != nil {
 		return versions.Version{}, err
 	}
-	d := doc.Parse(string(b), filepath.Dir(p))
+	d := doc.Parse(withoutBOM(string(b)), filepath.Dir(p))
 	tpl, err := s.templateFor(p, d.Meta.Template)
 	if err != nil {
 		return versions.Version{}, err
@@ -1171,13 +1227,15 @@ func (s *DocService) LoadVersion(name string) (DocInfo, error) {
 	if !s.confirmOpenVersion(fmt.Sprintf("“%s” replaces the document's text, template and settings. The current text is kept in backups.", name)) {
 		return DocInfo{Canceled: true}, nil
 	}
-	s.backup(p)
+	if err := s.backupFirst(p); err != nil {
+		return DocInfo{}, err
+	}
 	content, err := versions.Restore(p, name, docSidecars(p))
 	if err != nil {
 		return DocInfo{}, err
 	}
 	s.SetDirty(false)
-	return DocInfo{Path: p, Name: docName(p), Content: content}, nil
+	return DocInfo{Path: p, Name: docName(p), Content: withoutBOM(content)}, nil
 }
 
 // LoadBackup asks, then replaces the saved document's text with that of its
@@ -1197,9 +1255,6 @@ func (s *DocService) LoadBackup(path string) (DocInfo, error) {
 	if found == nil {
 		return DocInfo{}, errors.New("that backup no longer exists")
 	}
-	if filepath.Ext(found.Path) != ".md" {
-		return DocInfo{}, errors.New("that backup has only a Word copy, which can't be opened here")
-	}
 	at := time.UnixMilli(found.Saved).Format("Jan 2, 2006 at 3:04 PM")
 	if !s.confirmOpenVersion(fmt.Sprintf("The backup from %s replaces the document's text. The current text is kept in backups.", at)) {
 		return DocInfo{Canceled: true}, nil
@@ -1209,12 +1264,24 @@ func (s *DocService) LoadBackup(path string) (DocInfo, error) {
 	if err != nil {
 		return DocInfo{}, err
 	}
-	s.backup(p)
+	if err := s.backupFirst(p); err != nil {
+		return DocInfo{}, err
+	}
 	if err := atomicfile.Write(p, content, 0o644); err != nil {
 		return DocInfo{}, err
 	}
 	s.SetDirty(false)
-	return DocInfo{Path: p, Name: docName(p), Content: string(content)}, nil
+	return DocInfo{Path: p, Name: docName(p), Content: withoutBOM(string(content))}, nil
+}
+
+// backupFirst backs up the document at p before it's replaced: a document
+// that can't be backed up isn't replaced, but one that's gone has nothing to
+// lose.
+func (s *DocService) backupFirst(p string) error {
+	if err := s.backup(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("the document couldn't be backed up first, so it wasn't replaced: %w", err)
+	}
+	return nil
 }
 
 // confirmOpenVersion asks whether to open an earlier version of the document,
@@ -1249,6 +1316,11 @@ func (s *DocService) Format(content, headingCase string) (string, error) {
 	}
 	out, err := o.Format(context.Background(), content)
 	if err != nil {
+		// Looked for again next time: updating oxfmt or Node (with mise or
+		// nvm, say) may have moved it.
+		s.mu.Lock()
+		s.oxfmt = nil
+		s.mu.Unlock()
 		return "", err
 	}
 	switch headingCase {
@@ -1291,12 +1363,12 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 		return "", err
 	}
 	sum := sha256.Sum256(append(src, style...))
-	key := tpl.ID + ":" + name + ":" + hex.EncodeToString(sum[:8])
+	key := name + ":" + hex.EncodeToString(sum[:8])
 	s.mu.Lock()
-	cached, ok := s.previews[key]
+	cached, ok := s.previews[tpl.ID]
 	s.mu.Unlock()
-	if ok {
-		return cached, nil
+	if ok && cached.key == key {
+		return cached.svg, nil
 	}
 	// The samples have no pictures, so they need no folder.
 	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(content, ""), tpl)
@@ -1306,10 +1378,18 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 	if len(pages) == 0 {
 		return "", errors.New("no pages")
 	}
+	// Only the latest preview of each template is kept: restyling the
+	// document's own template, or another document's, replaces it.
 	s.mu.Lock()
-	s.previews[key] = pages[0]
+	s.previews[tpl.ID] = preview{key, pages[0]}
 	s.mu.Unlock()
 	return pages[0], nil
+}
+
+// preview is a template preview, and the sample and template source it shows.
+type preview struct {
+	key string // the sample's name and a hash of the template's source and style
+	svg string
 }
 
 // customTemplatePath is where the document at p keeps its own template
@@ -1568,16 +1648,12 @@ func (s *DocService) ShareTemplate(id string) (string, error) {
 	if err != nil || p == "" {
 		return "", err
 	}
-	f, err := os.Create(p)
-	if err != nil {
+	// Written whole, so a failure doesn't cost the zip it was to replace.
+	var zip bytes.Buffer
+	if err := templates.Export(id, &zip); err != nil {
 		return "", err
 	}
-	if err := templates.Export(id, f); err != nil {
-		f.Close()
-		os.Remove(p)
-		return "", err
-	}
-	if err := f.Close(); err != nil {
+	if err := atomicfile.Write(p, zip.Bytes(), 0o644); err != nil {
 		return "", err
 	}
 	return p, s.Reveal(p)
@@ -1792,7 +1868,7 @@ func readSettings(p string) (Settings, error) {
 	if errors.Is(err, fs.ErrNotExist) {
 		return set, nil
 	}
-	if err == nil {
+	if err == nil && len(bytes.TrimSpace(b)) > 0 { // an empty file sets nothing too
 		err = json.Unmarshal(b, &set)
 	}
 	if err != nil {
@@ -1805,12 +1881,14 @@ func readSettings(p string) (Settings, error) {
 // has. A file left empty is removed.
 func writeSettings(p string, set Settings) error {
 	m := map[string]json.RawMessage{}
-	if b, err := os.ReadFile(p); err == nil {
+	b, err := os.ReadFile(p)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if len(bytes.TrimSpace(b)) > 0 { // an empty file has nothing to keep
 		if err := json.Unmarshal(b, &m); err != nil {
 			return fmt.Errorf("%s: %w", p, err)
 		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return err
 	}
 	on, none := true, ""
 	all, _ := json.Marshal(Settings{AutoFormat: &on, HeadingCase: &none, Author: &none, Peanut: &on, SyncOnSave: &on, SyncOnQuit: &on})
@@ -1819,7 +1897,7 @@ func writeSettings(p string, set Settings) error {
 	for k := range keys {
 		delete(m, k)
 	}
-	b, _ := json.Marshal(set)
+	b, _ = json.Marshal(set)
 	json.Unmarshal(b, &m) // adds set's keys to m
 	if len(m) == 0 {
 		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -1887,15 +1965,19 @@ func (s *DocService) loadState() {
 	}
 }
 
+// saveState writes what the app remembers. Writes are one at a time, each of
+// the state as it is then, so a slower, older one can't land last.
 func (s *DocService) saveState() {
 	p, err := configPath("state.json")
 	if err != nil {
 		return
 	}
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
 	s.mu.Lock()
 	b, _ := json.MarshalIndent(s.state, "", "  ")
 	s.mu.Unlock()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err == nil {
-		os.WriteFile(p, b, 0o644)
+		atomicfile.Write(p, b, 0o644)
 	}
 }

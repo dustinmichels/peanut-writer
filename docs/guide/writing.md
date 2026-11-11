@@ -9,7 +9,7 @@ Everything you can do is a button on the ribbon across the top:
 | Tab            | What's there                                                                       |
 | -------------- | ---------------------------------------------------------------------------------- |
 | **File**       | New, open, save, recent documents, export, settings                                |
-| **Home**       | Bold, italic, strikethrough, code, headings, lists, quotes                         |
+| **Home**       | Bold, italic, strikethrough, highlight, code, headings, lists, quotes              |
 | **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break  |
 | **References** | Cross-reference, footnote, all notes, table of contents, figure and table previews |
 | **Design**     | Templates, Customize, Manage Templates, document properties, settings              |

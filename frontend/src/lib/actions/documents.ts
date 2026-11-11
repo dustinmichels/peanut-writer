@@ -5,7 +5,7 @@ import { DocService } from "@bindings/peanut-writer";
 import type { DocInfo } from "@bindings/peanut-writer/models";
 import { itemsField, replaceDoc } from "@/lib/editor";
 import { scan, wordCount } from "@/lib/markdown";
-import { behindCopies, editor, scheduleRender, state } from "@/lib/store";
+import { behindCopies, clearPreview, editor, scheduleRender, state } from "@/lib/store";
 import { syncCopies } from "./export";
 import { run } from "./run";
 import { effectiveSettings, queueSave, scheduleAutosave } from "./saving";
@@ -18,9 +18,10 @@ export function loadDoc(info: DocInfo) {
   state.dirty = false;
   state.synced = null;
   state.opened = info.content;
-  state.pages = [];
-  state.renderError = "";
-  state.warnings = [];
+  // A dialog still open (⌘O and the Dock's recent documents work over one)
+  // was about the document this replaces.
+  state.dialog = null;
+  clearPreview();
   state.customizing = false;
   state.custom = null;
   if (editor.value) replaceDoc(editor.value, info.content);

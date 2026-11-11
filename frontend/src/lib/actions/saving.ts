@@ -69,9 +69,33 @@ async function saveNow(): Promise<boolean> {
   const content = state.content;
   const info = await run("Save", () => DocService.Save(content));
   if (!info || info.canceled) return false;
-  takeFilled(content, info.content);
-  saved(info);
+  afterSave(content, info);
   return true;
+}
+
+// The latest save's text as sent and as written, when an open dialog kept the
+// properties it filled in out of the editor.
+let filled: { sent: string; written: string } | null = null;
+
+// writtenText is what saving content wrote: the PDF and Word copies are made
+// from it, properties and all.
+export function writtenText(content: string): string {
+  return filled?.sent === content ? filled.written : content;
+}
+
+// afterSave takes what a save of sent wrote. An open dialog may hold places in
+// the text (a figure's, say), which properties filled in would move: then the
+// text the editor sent counts as saved, though the file has them filled in
+// too; the next save fills them in again.
+function afterSave(sent: string, info: DocInfo) {
+  filled = null;
+  if (state.dialog && info.content !== sent) {
+    filled = { sent, written: info.content };
+    saved({ ...info, content: sent });
+    return;
+  }
+  takeFilled(sent, info.content);
+  saved(info);
 }
 
 // takeFilled puts the properties a save filled in (see fillProperties in
@@ -130,8 +154,8 @@ export function effectiveSettings(s: SettingsInfo) {
 
 // autoFormat formats the Markdown with oxfmt when the settings turn Auto
 // Format on, as one undoable edit that keeps the cursor among the text it
-// was in. If the text changes meanwhile, or formatting fails, it's left as
-// it is.
+// was in. If the text changes meanwhile, formatting fails, or a dialog is
+// open (see afterSave), it's left as it is.
 export async function autoFormat() {
   const s = await loadSettings();
   const v = editor.value;
@@ -140,6 +164,7 @@ export async function autoFormat() {
   const before = v.state.doc.toString();
   const after = await run("Auto format", () => DocService.Format(before, headingCase));
   if (after === undefined || after === before || v.state.doc.toString() !== before) return;
+  if (state.dialog) return;
   const changes = diff(before, after).map((c) => ({
     from: c.fromA,
     to: c.toA,
@@ -153,7 +178,7 @@ export async function autoFormat() {
 // stampVersion records the app's version in the front matter of a document
 // about to be saved, outside the undo history.
 function stampVersion() {
-  if (!editor.value || !state.version) return;
+  if (!editor.value || !state.version || state.dialog) return;
   if (readFrontMatter(editor.value.state.doc.toString()).meta["peanut-version"] === state.version)
     return;
   setMeta({ "peanut-version": state.version }, false);
@@ -165,8 +190,7 @@ export async function saveAs(): Promise<boolean> {
   const content = state.content;
   const info = await run("Save As", () => DocService.SaveAs(content));
   if (!info || info.canceled) return false;
-  takeFilled(content, info.content);
-  saved(info);
+  afterSave(content, info);
   toast(`Saved as ${info.name}`, "success");
   if (state.syncOnSave && behindCopies.value) await syncCopies();
   return true;

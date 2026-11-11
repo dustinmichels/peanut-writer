@@ -49,7 +49,7 @@ watch(() => docTemplates.value.map(key).join("\n"), load);
       <button
         class="card"
         :class="{ active: state.template === t.id }"
-        :title="t.description"
+        :title="t.description || t.name"
         @mousedown.prevent
         @click="setTemplate(t.id)"
       >
@@ -89,6 +89,13 @@ watch(() => docTemplates.value.map(key).join("\n"), load);
 .card.active {
   background: var(--active);
   border-color: rgba(193, 105, 79, 0.35);
+}
+/* A long name is cut short (pointing at it shows it, if it has no description). */
+.card span {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .separator {
   align-self: stretch;

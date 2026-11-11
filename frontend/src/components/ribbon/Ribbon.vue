@@ -67,7 +67,9 @@ const PeanutBuddy = defineAsyncComponent(() => import("@/peanut/PeanutBuddy.vue"
 </template>
 
 <style scoped>
+/* As wide as the window, however wide the open tab: the panel scrolls. */
 .ribbon {
+  min-width: 0;
   background: linear-gradient(180deg, #f6ecdf, var(--panel));
 }
 /* The bottom border is the wooden ledge Peanut walks along, shown whether or

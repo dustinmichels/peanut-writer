@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // The ribbon's Home tab: character and paragraph formatting, the paragraph
 // styles, find, and the document's properties and settings.
-import { indentLess, indentMore } from "@codemirror/commands";
 import {
   Bold,
   Code,
   CodeXml,
   IndentDecrease,
   IndentIncrease,
+  Highlighter,
   Italic,
   Link,
   List,
@@ -26,6 +26,8 @@ import { editLink, menu } from "@/lib/actions";
 import {
   type BlockStyle,
   clearFormatting,
+  indentListLess,
+  indentListMore,
   insertDivider,
   type Mark,
   setBlockStyle,
@@ -71,6 +73,12 @@ const styles: { id: BlockStyle; label: string; cls: string }[] = [
           @click="mark('strike')"
         />
         <RibbonButton
+          :icon="Highlighter"
+          title="Highlight (⇧⌘H)"
+          :active="state.marks.has('highlight')"
+          @click="mark('highlight')"
+        />
+        <RibbonButton
           :icon="Code"
           title="Code (⌘`)"
           :active="state.marks.has('code')"
@@ -104,12 +112,12 @@ const styles: { id: BlockStyle; label: string; cls: string }[] = [
         <RibbonButton
           :icon="IndentDecrease"
           title="Decrease indent (⇧⇥)"
-          @click="withView(indentLess)"
+          @click="withView(indentListLess)"
         />
         <RibbonButton
           :icon="IndentIncrease"
           title="Increase indent (⇥)"
-          @click="withView(indentMore)"
+          @click="withView(indentListMore)"
         />
       </div>
       <div class="row">

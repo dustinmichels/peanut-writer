@@ -4,6 +4,7 @@ import { DocService } from "@bindings/peanut-writer";
 import { insertBlock, itemsField } from "@/lib/editor";
 import { type FigureSpec, figureMarkdown, type Item, uniqueLabel } from "@/lib/markdown";
 import { state } from "@/lib/store";
+import { refLabel } from "./crossrefs";
 import { run, view } from "./run";
 
 function base64(file: File): Promise<string> {
@@ -89,7 +90,7 @@ export async function addPictures(): Promise<string[]> {
 export function applyFigure(item: Item, f: FigureSpec) {
   const v = view();
   const items = v.state.field(itemsField);
-  const label = f.label || uniqueLabel("fig", f.caption, items, item.label);
+  const label = refLabel("fig", f.label) || uniqueLabel("fig", f.caption, items, item.label);
   v.dispatch({
     changes: { from: item.from, to: item.to, insert: figureMarkdown({ ...f, label }) },
     userEvent: "input",

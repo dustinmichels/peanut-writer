@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,9 +55,33 @@ func releaseVersion() string {
 type updates struct {
 	app  *application.App
 	docs *DocService // for the window the prompts attach to
-	// busy is set from a check until its prompt is answered, so checks never
-	// stack prompts.
-	busy atomic.Bool
+	// mu is held from a check until its prompt is answered, so checks never
+	// stack prompts: see lock.
+	mu sync.Mutex
+	// manual: a Check for Updates… holds mu; waiting: one waits for it.
+	manual, waiting atomic.Bool
+}
+
+// lock takes mu for a check, or reports that it shouldn't run. A daily check
+// skips while another runs. Check for Updates… waits for a daily check, then
+// checks itself, but is dropped while another Check for Updates… runs or
+// waits, so extra clicks don't queue the same prompt again.
+func (u *updates) lock(asked bool) bool {
+	if !asked {
+		return u.mu.TryLock()
+	}
+	if u.manual.Load() || !u.waiting.CompareAndSwap(false, true) {
+		return false
+	}
+	u.mu.Lock()
+	u.manual.Store(true) // before waiting clears, so no click slips in between
+	u.waiting.Store(false)
+	return true
+}
+
+func (u *updates) unlock() {
+	u.manual.Store(false)
+	u.mu.Unlock()
 }
 
 // startUpdates sets up app.Updater in builds of a release on macOS, and checks
@@ -96,14 +121,16 @@ func startUpdates(app *application.App, docs *DocService) *updates {
 // check asks GitHub for a newer release and offers it. Unless asked (Check
 // for Updates…), it stays silent when there is none or the check fails.
 func (u *updates) check(asked bool) {
+	if !u.lock(asked) {
+		return
+	}
+	defer u.unlock()
+	// Checked once the lock is held: an Update clicked while this waited
+	// for the last check is downloading, and checking again would restart it.
 	switch u.app.Updater.State() {
 	case updater.StateDownloading, updater.StateVerifying, updater.StateInstalling:
 		return // the update window is showing it
 	}
-	if !u.busy.CompareAndSwap(false, true) {
-		return
-	}
-	defer u.busy.Store(false)
 	if asked {
 		u.app.Updater.SkipVersion("") // the update window's Skip lasts until asked
 	}

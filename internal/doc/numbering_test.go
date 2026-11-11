@@ -16,7 +16,7 @@ var update = flag.Bool("update", false, "rewrite testdata/numbering/*.want from 
 // pictures=3 columns=3 width=80 align=left").
 func numbered(d *Document) string {
 	var b strings.Builder
-	walk(d.Blocks, func(x *Block) {
+	Walk(d.Blocks, func(x *Block) {
 		if x.Number == 0 {
 			return
 		}

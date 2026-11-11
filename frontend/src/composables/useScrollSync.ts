@@ -11,9 +11,10 @@ export function useScrollSync(
 ) {
   let sync: ReturnType<typeof syncScroll> | undefined;
 
-  // Hidden, the preview can't scroll; shown again, it lines up with the editor.
+  // Hidden, the preview can't scroll, nor the editor while the template is
+  // customized; both shown again, the preview lines up with the editor.
   watch(
-    previewShown,
+    () => previewShown.value && !state.customizing,
     (shown) => {
       if (shown && state.scrollLinked) sync?.link();
     },

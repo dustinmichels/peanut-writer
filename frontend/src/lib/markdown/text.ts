@@ -21,6 +21,7 @@ export function plain(s: string): string {
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/[*_`~]/g, "")
+    .replace(/==(\S(?:[^=]*\S)?)==/g, "$1")
     .replace(/\\(.)/g, "$1");
 }
 

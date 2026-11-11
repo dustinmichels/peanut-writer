@@ -3,10 +3,12 @@ package doc
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -36,32 +38,52 @@ var markdown = goldmark.New(goldmark.WithExtensions(
 		extension.RightAngleQuote:  "»",
 		extension.Apostrophe:       "’",
 	})),
-), goldmark.WithParserOptions(append(mathParsers,
-	gmparser.WithASTTransformers(util.Prioritized(unusedNotes{}, 100)))...))
+), goldmark.WithParserOptions(slices.Concat(mathParsers, highlightParsers, []gmparser.Option{
+	gmparser.WithASTTransformers(util.Prioritized(unusedNotes{}, 100)),
+})...))
 
 var unusedNotesKey = gmparser.NewContextKey()
 
-// unusedNotes records the labels of footnotes nothing refers to, before the
-// footnote extension drops them (it runs at priority 999).
+// unusedNotes warns about footnotes nothing refers to, before the footnote
+// extension drops them (it runs at priority 999): a second note with a
+// label is one of them, as marks go to the first.
 type unusedNotes struct{}
 
 func (unusedNotes) Transform(root *ast.Document, _ text.Reader, pc gmparser.Context) {
-	var labels []string
+	var unused []string
+	used := map[string]bool{}
 	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if fn, ok := n.(*extast.Footnote); ok && entering {
 			if fn.Index < 0 {
-				labels = append(labels, string(fn.Ref))
+				unused = append(unused, string(fn.Ref))
+			} else {
+				used[string(fn.Ref)] = true
 			}
 			return ast.WalkSkipChildren, nil
 		}
 		return ast.WalkContinue, nil
 	})
-	pc.Set(unusedNotesKey, labels)
+	warnings := make([]string, len(unused))
+	for i, l := range unused {
+		if used[l] {
+			warnings[i] = fmt.Sprintf("footnote label used twice: [^%s]", l)
+		} else {
+			warnings[i] = fmt.Sprintf("footnote nothing refers to: [^%s]", l)
+		}
+	}
+	pc.Set(unusedNotesKey, warnings)
 }
+
+// lineBreaks turns Windows (`\r\n`) and old Mac (`\r`) line breaks into
+// `\n`, as the editor reads them.
+var lineBreaks = strings.NewReplacer("\r\n", "\n", "\r", "\n")
 
 // Parse reads source, resolving image paths against baseDir (the document's
 // folder).
 func Parse(source, baseDir string) *Document {
+	if strings.Contains(source, "\r") {
+		source = lineBreaks.Replace(source)
+	}
 	meta, body := splitFrontMatter(source)
 	src := []byte(body)
 	pc := gmparser.NewContext()
@@ -69,7 +91,15 @@ func Parse(source, baseDir string) *Document {
 
 	// Lines are counted in the whole source: the front matter comes first.
 	lineBase := strings.Count(source, "\n") - strings.Count(body, "\n")
-	p := &parser{src: src, baseDir: baseDir, lineBase: lineBase, notes: map[int]ast.Node{}, dangling: map[string]bool{}}
+	p := &parser{src: src, baseDir: baseDir, lineBase: lineBase, notes: map[int]*extast.Footnote{}, reading: map[int]bool{}, dangling: map[string]bool{}}
+	for i := 0; ; i++ {
+		j := bytes.IndexByte(src[i:], '\n')
+		if j < 0 {
+			break
+		}
+		i += j
+		p.newlines = append(p.newlines, i)
+	}
 	_ = ast.Walk(root, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 		if fn, ok := n.(*extast.Footnote); ok && entering {
 			p.notes[fn.Index] = fn
@@ -77,10 +107,8 @@ func Parse(source, baseDir string) *Document {
 		}
 		return ast.WalkContinue, nil
 	})
-	if labels, ok := pc.Get(unusedNotesKey).([]string); ok {
-		for _, l := range labels {
-			p.warn("footnote nothing refers to: [^%s]", l)
-		}
+	if warnings, ok := pc.Get(unusedNotesKey).([]string); ok {
+		p.warnings = append(p.warnings, warnings...)
 	}
 
 	d := &Document{Meta: meta, Dir: baseDir}
@@ -94,8 +122,11 @@ func Parse(source, baseDir string) *Document {
 type parser struct {
 	src      []byte
 	baseDir  string
-	lineBase int              // source lines before src (the front matter)
-	notes    map[int]ast.Node // footnote content by index
+	lineBase int                      // source lines before src (the front matter)
+	newlines []int                    // offsets of src's line breaks
+	notes    map[int]*extast.Footnote // footnote content by index
+	reading  map[int]bool             // footnotes being read: one marked inside itself stops there
+	inner    map[int]bool             // footnotes read within the note of the text's mark being read
 	labels   map[string]Inline
 	dangling map[string]bool // footnote markers with no note, warned about
 	warnings []string
@@ -109,9 +140,8 @@ func (p *parser) warn(format string, args ...any) {
 
 // splitFrontMatter separates a leading `---` block of `key: value` lines from
 // the body.
-func splitFrontMatter(source string) (Meta, string) {
+func splitFrontMatter(s string) (Meta, string) {
 	var m Meta
-	s := strings.ReplaceAll(source, "\r\n", "\n")
 	if !strings.HasPrefix(s, "---\n") {
 		return m, s
 	}
@@ -250,7 +280,8 @@ func (p *parser) line(n ast.Node) int {
 		}
 		at = n.Lines().At(0).Start
 	}
-	return p.lineBase + bytes.Count(p.src[:at], []byte("\n")) + 1
+	before, _ := slices.BinarySearch(p.newlines, at)
+	return p.lineBase + before + 1
 }
 
 func (p *parser) lines(n ast.Node) string {
@@ -319,7 +350,7 @@ func (p *parser) figure(n ast.Node) (Block, bool) {
 		id, kv = parseAttrs(m[1])
 	}
 	b := Block{Type: BlockFigure, Caption: p.inlines(img), Label: id}
-	b.Src, b.Missing = p.image(string(img.Destination))
+	b.Src, b.Missing = p.image(destination(img.Destination))
 	figureLayout(&b, kv)
 	return b, true
 }
@@ -352,7 +383,7 @@ func (p *parser) grid(n ast.Node) (Block, bool) {
 	b.Caption, b.Label, kv = stripCaption(caption, figureCaptionRe)
 	for _, img := range imgs {
 		pic := Picture{Alt: p.inlines(img)}
-		pic.Src, pic.Missing = p.image(string(img.Destination))
+		pic.Src, pic.Missing = p.image(destination(img.Destination))
 		b.Pictures = append(b.Pictures, pic)
 	}
 	b.Columns = min(len(imgs), 3)
@@ -420,7 +451,7 @@ func attrFields(s string) []string {
 
 func parseWidth(v string) float64 {
 	f, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(v), "%")), 64)
-	if err != nil || f <= 0 {
+	if err != nil || !(f > 0) || math.IsInf(f, 1) { // NaN and Inf aren't widths
 		return 0
 	}
 	return min(f, 100)
@@ -505,7 +536,9 @@ func (p *parser) table(t *extast.Table) Block {
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		var cells [][]Inline
 		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
-			cells = append(cells, p.inlines(cell))
+			xs := p.inlines(cell)
+			cellMath(xs)
+			cells = append(cells, xs)
 		}
 		// Rows are padded or cut to the header's width.
 		for len(cells) < len(b.Align) {
@@ -522,6 +555,18 @@ func (p *parser) table(t *extast.Table) Block {
 		b.Caption, b.Label, _ = stripCaption(p.inlines(next), tableCaptionRe)
 	}
 	return b
+}
+
+// cellMath undoes the `\|` escapes in a table cell's math: a cell's pipes
+// are escaped before its text is read (as goldmark does for code), but its
+// math extension reads them as written.
+func cellMath(xs []Inline) {
+	for i := range xs {
+		if xs[i].Type == InlineMath {
+			xs[i].Text = strings.ReplaceAll(xs[i].Text, `\|`, "|")
+		}
+		cellMath(xs[i].Children)
+	}
 }
 
 // stripCaption strips prefix (`Table:`, `Figure:`) from the front of a
@@ -583,6 +628,8 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 		out = append(out, Inline{Type: t, Children: p.inlines(n)})
 	case *extast.Strikethrough:
 		out = append(out, Inline{Type: InlineStrike, Children: p.inlines(n)})
+	case *highlightNode:
+		out = append(out, Inline{Type: InlineHighlight, Children: p.inlines(n)})
 	case *ast.CodeSpan:
 		var b strings.Builder
 		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
@@ -594,7 +641,7 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 		}
 		out = append(out, Inline{Type: InlineCode, Text: b.String()})
 	case *ast.Link:
-		out = append(out, Inline{Type: InlineLink, URL: string(n.Destination), Children: p.inlines(n)})
+		out = append(out, Inline{Type: InlineLink, URL: destination(n.Destination), Children: p.inlines(n)})
 	case *ast.AutoLink:
 		url := string(n.URL(p.src))
 		label := string(n.Label(p.src))
@@ -603,7 +650,7 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 		}
 		out = append(out, Inline{Type: InlineLink, URL: url, Children: []Inline{{Type: InlineText, Text: label}}})
 	case *ast.Image:
-		src, _ := p.image(string(n.Destination))
+		src, _ := p.image(destination(n.Destination))
 		out = append(out, Inline{Type: InlineImage, Src: src})
 	case *ast.RawHTML:
 		var b strings.Builder
@@ -617,9 +664,26 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 	case *mathNode:
 		out = append(out, p.math(n))
 	case *extast.FootnoteLink:
-		if note, ok := p.notes[n.Index]; ok {
-			out = append(out, Inline{Type: InlineFootnote, Blocks: p.blocks(note)})
+		note, ok := p.notes[n.Index]
+		if !ok {
+			break
 		}
+		if p.reading[n.Index] {
+			p.warn("footnote marked inside itself: [^%s]", note.Ref)
+			break
+		}
+		// Within a note, each note is read once: notes marking another
+		// note twice would otherwise copy it 2ⁿ times down a chain.
+		if len(p.reading) == 0 {
+			p.inner = map[int]bool{}
+		} else if p.inner[n.Index] {
+			p.warn("footnote marked twice within a note: [^%s]", note.Ref)
+			break
+		}
+		p.inner[n.Index] = true
+		p.reading[n.Index] = true
+		out = append(out, Inline{Type: InlineFootnote, Blocks: p.blocks(note)})
+		delete(p.reading, n.Index)
 	case *extast.FootnoteBacklink:
 	default:
 		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
@@ -627,6 +691,12 @@ func (p *parser) inline(out []Inline, n ast.Node) []Inline {
 		}
 	}
 	return out
+}
+
+// destination is a link's or image's target with its backslash escapes and
+// entities read (`a\_b.png`, `?a=1&amp;b=2`), as goldmark's HTML has it.
+func destination(v []byte) string {
+	return string(util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v))))
 }
 
 // mergeText joins neighbouring text runs, which the Markdown parser splits
@@ -683,42 +753,12 @@ func isWordByte(c byte) bool {
 
 // --- Numbering and references ---------------------------------------------
 
-// walk visits blocks in document order, each before its text, and inlines
-// within it, including footnotes' blocks where their marks are: the order
-// Typst lays them out and counts them in.
-func walk(bs []Block, block func(*Block), inline func(*Inline)) {
-	var inl func([]Inline)
-	inl = func(xs []Inline) {
-		for i := range xs {
-			x := &xs[i]
-			inline(x)
-			inl(x.Children)
-			walk(x.Blocks, block, inline)
-		}
-	}
-	for i := range bs {
-		b := &bs[i]
-		block(b)
-		inl(b.Inlines)
-		inl(b.Caption)
-		for _, row := range append([][][]Inline{b.Header}, b.Rows...) {
-			for _, cell := range row {
-				inl(cell)
-			}
-		}
-		walk(b.Children, block, inline)
-		for _, item := range b.Items {
-			walk(item, block, inline)
-		}
-	}
-}
-
 // number numbers figures, tables and labelled equations in document order
 // (those in footnotes where the note's mark is) and records their labels.
 func (p *parser) number(blocks []Block) {
 	p.labels = map[string]Inline{}
 	figs, tables, eqs := 0, 0, 0
-	walk(blocks, func(b *Block) {
+	Walk(blocks, func(b *Block) {
 		kind := ""
 		switch b.Type {
 		case BlockFigure:
@@ -749,7 +789,7 @@ var danglingRe = regexp.MustCompile(`\[\^([^\]\s]+)\]`)
 // resolve fills in what each reference points to, and warns about
 // footnote marks with no note.
 func (p *parser) resolve(blocks []Block) {
-	walk(blocks, func(*Block) {}, func(x *Inline) {
+	Walk(blocks, func(*Block) {}, func(x *Inline) {
 		switch x.Type {
 		case InlineRef:
 			if t, ok := p.labels[x.Label]; ok {

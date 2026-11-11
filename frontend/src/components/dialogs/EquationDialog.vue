@@ -4,7 +4,7 @@
 import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
 import { Trash2 } from "lucide-vue-next";
 import Modal from "@/components/ui/Modal.vue";
-import { applyEquation, deleteBlock, equationURL } from "@/lib/actions";
+import { applyEquation, deleteBlock, equationURL, refLabel } from "@/lib/actions";
 import type { DisplayEquation } from "@/lib/markdown";
 import { state } from "@/lib/store";
 
@@ -111,18 +111,13 @@ async function put(s: Snippet) {
   el.setSelectionRange(at, at);
 }
 
-// A name is an `eq:` label, which numbers the equation.
-function fullLabel(): string {
-  const l = label.value.trim().replace(/\s+/g, "-");
-  return !l || l.startsWith("eq:") ? l : `eq:${l}`;
-}
-
 function submit() {
   if (!tex.value.trim()) {
     remove();
     return;
   }
-  applyEquation(props.eq, tex.value, fullLabel(), props.replace);
+  // A name is an `eq:` label, which numbers the equation.
+  applyEquation(props.eq, tex.value, refLabel("eq", label.value), props.replace);
   emit("close");
 }
 function remove() {

@@ -26,7 +26,7 @@ abstract: Short.
 
 # One
 
-Text with **bold**, *emph*, ~~strike~~, ` + "`code`" + `, a [link](https://example.com),
+Text with **bold**, *emph*, ~~strike~~, ==highlight==, ` + "`code`" + `, a [link](https://example.com),
 a hard  
 break, an inline ![x](images/p.svg) image, a note[^n] and an untyped one.[^e] See @fig:a, @tbl:b, @eq:e, @fig:noted and @fig:nope.
 
@@ -160,18 +160,73 @@ func TestUnreadableMathFallsBack(t *testing.T) {
 	}
 }
 
-// Half-typed Markdown (`#` or `$$` just typed) has empty headings and math
-// in doc.json; the preview must still render.
+// Half-typed Markdown (`#` or `$$` just typed, a link or code block begun)
+// has empty headings, math, links and code in doc.json; the preview must
+// still render.
 func TestHalfTypedRenders(t *testing.T) {
 	ty, err := Find()
 	if err != nil {
 		t.Skip(err)
 	}
-	for _, src := range []string{"#", "## ", "- #", "> #", "$$", "$$\n$$ {#eq:a}", "a $$$$ b"} {
+	for _, src := range []string{"#", "## ", "- #", "> #", ">", "$$", "$$\n$$ {#eq:a}", "a $$$$ b", "[]()", "[a]()", "[](https://a.b)", "```\n```"} {
 		d := doc.Parse(src, t.TempDir())
 		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
 			t.Errorf("%q: %v", src, err)
 		}
+	}
+}
+
+// A page break where Typst can't break pages (in a quote, a list item or a
+// note), ours or a template's before chapters, is left out instead of
+// stopping the whole document. One at the top level still breaks.
+func TestPageBreaksInContainers(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	src := "# One\n\n\\pagebreak\n\n> # Quoted\n>\n> \\pagebreak\n\n- # Listed\n\n  \\pagebreak\n\nText[^1]\n\n[^1]: Note.\n\n    \\pagebreak\n"
+	d := doc.Parse(src, t.TempDir())
+	for _, tpl := range templates.List() {
+		pages, _, err := ty.Preview(context.Background(), d, tpl)
+		if err != nil {
+			t.Errorf("%s: %v", tpl.ID, err)
+		} else if len(pages) < 2 {
+			t.Errorf("%s: %d pages, want the top-level break", tpl.ID, len(pages))
+		}
+	}
+}
+
+// An image Typst can't read (a HEIC photo, a damaged file) shows as a
+// missing picture, with a warning naming it, rather than stopping the
+// preview or PDF; the document's other images are still drawn.
+func TestUnreadableImageFallsBack(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	dir := t.TempDir()
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>`
+	for name, b := range map[string]string{"ok.svg": svg, "photo.heic": "ftypheic", "broken.png": "not a png", "broken.svg": "<svg"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(b), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := doc.Parse("Inline ![](broken.png) and ![](ok.svg).\n\n![A photo](photo.heic)\n\n![](ok.svg) ![](broken.svg)\n", dir)
+	pages, warnings, err := ty.Preview(context.Background(), d, templates.List()[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var unreadable []string
+	for _, w := range warnings {
+		if strings.HasPrefix(w, "image can't be read") {
+			unreadable = append(unreadable, w)
+		}
+	}
+	if len(pages) == 0 || len(unreadable) != 3 {
+		t.Fatalf("%d pages, warnings %q", len(pages), warnings)
+	}
+	if _, err := ty.PDF(context.Background(), d, templates.List()[0]); err != nil {
+		t.Errorf("PDF: %v", err)
 	}
 }
 

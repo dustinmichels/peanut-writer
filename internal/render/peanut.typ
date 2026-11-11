@@ -55,20 +55,35 @@
 )
 
 // node renders one block or inline (one function, since Typst functions
-// can't call each other before they're defined).
-#let node(n) = {
-  let all(xs) = { for x in xs { node(x) } }
-  let marked(x) = { _placed(x); node(x) }
-  let blocks(xs) = xs.map(marked).join(parbreak())
+// can't call each other before they're defined). In a note (note: true), as
+// in Word and the web page, a heading is bold text, kept out of the outline
+// and its numbering, and a note within the note is its text in brackets,
+// not a note numbered among the others.
+#let node(n, note: false) = {
+  // doc.json omits empty fields: an empty code block's text, a link's
+  // children (`[](url)`) or URL (`[a]()`), an empty quote's blocks.
+  let all(xs) = { for x in xs { node(x, note: note) } }
+  let kids = n.at("children", default: ())
+  let marked(x) = { _placed(x); node(x, note: note) }
+  // Quotes, list items and notes are containers, where a page break (ours,
+  // or a template's before chapter headings) is an error that stops the
+  // whole document: there they're left out.
+  let contained(c) = { show pagebreak: none; c }
+  let blocks(xs) = contained(xs.map(marked).join(parbreak()))
   let t = n.type
 
   // Inlines.
-  if t == "text" { n.text }
-  else if t == "strong" { strong(all(n.children)) }
-  else if t == "emph" { emph(all(n.children)) }
-  else if t == "strike" { strike(all(n.children)) }
-  else if t == "code" { raw(n.text) }
-  else if t == "link" { link(n.url, all(n.children)) }
+  if t == "text" { n.at("text", default: "") }
+  else if t == "strong" { strong(all(kids)) }
+  else if t == "emph" { emph(all(kids)) }
+  else if t == "strike" { strike(all(kids)) }
+  else if t == "highlight" { highlight(all(kids)) }
+  else if t == "code" { raw(n.at("text", default: "")) }
+  else if t == "link" {
+    // Typst can't link to an empty URL.
+    let url = n.at("url", default: "")
+    if url == "" { all(kids) } else { link(url, all(kids)) }
+  }
   else if t == "linebreak" { linebreak() }
   else if t == "math" { _math(n, display: n.at("display", default: false)) }
   else if t == "image" {
@@ -79,40 +94,47 @@
   }
   else if t == "footnote" {
     // A note whose text isn't typed yet ("[^1]: ") has no blocks.
-    let body = blocks(n.at("blocks", default: ()))
-    // A heading's note stays out of the outline's copy of the heading (a
-    // show rule can't hide it: it would still be numbered and listed).
-    context if not _in_outline.get() { footnote(_unmarked(if body == none [] else { body })) }
+    let bs = n.at("blocks", default: ())
+    if note { [ (#bs.map(x => node(x, note: true)).join([ ]))] } else {
+      let body = bs.map(x => { _placed(x); node(x, note: true) }).join(parbreak())
+      // A heading's note stays out of the outline's copy of the heading (a
+      // show rule can't hide it: it would still be numbered and listed).
+      context if not _in_outline.get() { footnote(_unmarked(contained(if body == none [] else { body }))) }
+    }
   }
 
   // Blocks. Paragraphs are separated with parbreak() by whoever lays them out.
   else if t == "paragraph" { all(n.at("inlines", default: ())) }
   else if t == "heading" {
-    // The heading's mark is in its text, where the outline pane looks for it;
-    // boxed, as a bare place would split the number from the text.
-    let mark = _mark(n.at("line", default: 0))
-    heading(level: n.level, [#if mark != none { box(mark) }#all(n.at("inlines", default: ()))])
+    if note { strong(all(n.at("inlines", default: ()))) } else {
+      // The heading's mark is in its text, where the outline pane looks for
+      // it; boxed, as a bare place would split the number from the text.
+      let mark = _mark(n.at("line", default: 0))
+      heading(level: n.level, [#if mark != none { box(mark) }#all(n.at("inlines", default: ()))])
+    }
   }
   else if t == "list" {
     // Tight items: a nested list follows its text without a paragraph break.
     let tight = n.at("tight", default: false)
-    let items = n.items.map(xs => if tight { xs.map(marked).join() } else { blocks(xs) })
+    let items = n.items.map(xs => if tight { contained(xs.map(marked).join()) } else { blocks(xs) })
     if n.at("ordered", default: false) {
       enum(start: n.at("start", default: 1), tight: n.at("tight", default: false), ..items)
     } else {
       list(tight: n.at("tight", default: false), ..items)
     }
   }
-  else if t == "quote" { quote(block: true, blocks(n.children)) }
-  else if t == "codeblock" { raw(n.text, block: true, lang: n.at("lang", default: none)) }
+  else if t == "quote" { quote(block: true, blocks(kids)) }
+  else if t == "codeblock" { raw(n.at("text", default: ""), block: true, lang: n.at("lang", default: none)) }
   else if t == "rule" { block(above: 1.2em, below: 1.2em, line(length: 100%, stroke: 0.6pt + luma(160))) }
   else if t == "pagebreak" { pagebreak(weak: true) }
-  else if t == "toc" { outline() }
+  else if t == "toc" { outline(depth: 3) } // levels 1–3, as in Word and the web page
   else if t == "equation" {
-    // Only a labelled equation is numbered.
+    // Only a labelled equation is numbered (doc.json leaves the label out
+    // when an earlier block has it).
     let numbered = n.at("number", default: 0) > 0
     let eq = _math(n, display: true, numbering: if numbered { "(1)" } else { none })
-    if numbered [#eq#label(n.label)] else { eq }
+    let l = n.at("label", default: "")
+    if numbered and l != "" [#eq#label(l)] else { eq }
   }
   else if t == "figure" {
     let w = n.at("width", default: 0)

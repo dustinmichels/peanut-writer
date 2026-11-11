@@ -8,26 +8,31 @@ export { displayMathClose } from "./fences";
 export {
   type FootnoteMark,
   type Footnotes,
+  type FootnoteScan,
   gatherFootnotes,
   renumberFootnotes,
+  rescanFootnotes,
   scanFootnotes,
 } from "./footnotes";
 export { type Meta, readFrontMatter, writeFrontMatter } from "./frontMatter";
 export {
   captionMarkdown,
   type DisplayEquation,
-  displayEquations,
   equationMarkdown,
   type FigureSpec,
   figureMarkdown,
   figureSpec,
   type Item,
+  type ItemScan,
   type Kind,
   kindName,
   type Picture,
   type RefAt,
+  linkText,
   relabelChanges,
+  rescanItems,
   scan,
+  scanItems,
   uniqueLabel,
 } from "./items";
 export {

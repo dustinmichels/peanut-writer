@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"peanut-writer/internal/doc"
@@ -53,7 +55,48 @@ type CompileError struct{ Output string }
 func (e *CompileError) Error() string { return e.Output }
 
 // Typst runs the typst binary.
-type Typst struct{ Bin string }
+type Typst struct {
+	Bin string
+
+	mu      sync.Mutex
+	badMath map[string]string // LaTeX mitex can't read, and why: drawn as its source from the first run
+}
+
+// knownBad is the math of ms already found unreadable.
+func (t *Typst) knownBad(ms []doc.Math) []problem {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var bad []problem
+	seen := map[string]bool{}
+	for _, m := range ms {
+		if why, ok := t.badMath[m.TeX]; ok && !seen[m.TeX] {
+			seen[m.TeX] = true
+			bad = append(bad, problem{m.TeX, why})
+		}
+	}
+	return bad
+}
+
+// findBadMath finds the math of ms mitex can't read, in the workspace dir,
+// checking only what isn't known already, and remembers it.
+func (t *Typst) findBadMath(ctx context.Context, dir string, ms []doc.Math) []problem {
+	bad := t.knownBad(ms)
+	known := map[string]bool{}
+	for _, p := range bad {
+		known[p.what] = true
+	}
+	rest := slices.DeleteFunc(slices.Clone(ms), func(m doc.Math) bool { return known[m.TeX] })
+	found, _ := t.unreadableMath(ctx, dir, rest)
+	t.mu.Lock()
+	if t.badMath == nil || len(t.badMath) > 1000 {
+		t.badMath = map[string]string{}
+	}
+	for _, p := range found {
+		t.badMath[p.what] = p.why
+	}
+	t.mu.Unlock()
+	return append(bad, found...)
+}
 
 // Find looks for typst beside the app's executable (where the packaged app
 // keeps it), then on PATH, then where Homebrew and mise install it: apps
@@ -65,13 +108,13 @@ func Find() (*Typst, error) {
 	}
 	if exe, err := os.Executable(); err == nil {
 		if p := filepath.Join(filepath.Dir(exe), name); isFile(p) {
-			return &Typst{p}, nil
+			return &Typst{Bin: p}, nil
 		}
 	}
 	// Not a mise shim: it picks a version by the working folder, which the
 	// app's isn't. The real binary is found below.
 	if p, err := exec.LookPath(name); err == nil && !strings.Contains(filepath.ToSlash(p), "/mise/shims/") {
-		return &Typst{p}, nil
+		return &Typst{Bin: p}, nil
 	}
 	candidates := []string{"/opt/homebrew/bin/typst", "/usr/local/bin/typst"}
 	if home, err := os.UserHomeDir(); err == nil {
@@ -82,7 +125,7 @@ func Find() (*Typst, error) {
 	}
 	for _, p := range candidates {
 		if isFile(p) {
-			return &Typst{p}, nil
+			return &Typst{Bin: p}, nil
 		}
 	}
 	return nil, errors.New("typst wasn't found: install it with `brew install typst` (or `mise install`)")
@@ -126,23 +169,43 @@ func (t *Typst) PDF(ctx context.Context, d *doc.Document, tpl templates.Template
 
 // render compiles d with tpl to output in a new workspace, returned for the
 // caller to read output from and remove, with Typst's warnings. Math mitex
-// can't read doesn't stop it: if compiling fails, each such formula is
-// found (see unreadableMath), shown as its LaTeX source with a warning, and
-// it's compiled again.
+// can't read and images Typst can't (a HEIC photo, a damaged file) don't
+// stop it: if compiling fails, each is found (see findBadMath and
+// unreadableImages), shown as its LaTeX source or a missing picture with a
+// warning, and it's compiled again. Math already found unreadable is shown
+// as its source from the start. Images, the slower check (each is decoded),
+// are checked only when the math found isn't the whole problem.
 func (t *Typst) render(ctx context.Context, d *doc.Document, tpl templates.Template, output string, flags ...string) (string, []string, error) {
-	dir, err := t.workspace(d, tpl, nil)
+	ms := doc.ReadableMath(d.Blocks)
+	bad := unreadable{math: t.knownBad(ms)}
+	dir, images, err := t.workspace(d, tpl, bad)
 	if err != nil {
 		return "", nil, err
 	}
 	stderr, err := t.compile(ctx, dir, "main.typ", output, flags...)
-	var unreadable []mathError
-	if ce := (*CompileError)(nil); errors.As(err, &ce) {
-		if unreadable, _ = t.unreadableMath(ctx, dir, doc.ReadableMath(d.Blocks)); len(unreadable) > 0 {
-			os.RemoveAll(dir)
-			if dir, err = t.workspace(d, tpl, unreadable); err != nil {
-				return "", nil, err
+	retry := func() error {
+		os.RemoveAll(dir)
+		var werr error
+		if dir, images, werr = t.workspace(d, tpl, bad); werr != nil {
+			return werr
+		}
+		stderr, err = t.compile(ctx, dir, "main.typ", output, flags...)
+		return nil
+	}
+	ce := (*CompileError)(nil)
+	if errors.As(err, &ce) {
+		if found := t.findBadMath(ctx, dir, ms); len(found) > len(bad.math) {
+			bad.math = found
+			if werr := retry(); werr != nil {
+				return "", nil, werr
 			}
-			stderr, err = t.compile(ctx, dir, "main.typ", output, flags...)
+		}
+	}
+	if errors.As(err, &ce) {
+		if bad.images, _ = t.unreadableImages(ctx, dir, images); len(bad.images) > 0 {
+			if werr := retry(); werr != nil {
+				return "", nil, werr
+			}
 		}
 	}
 	if err != nil {
@@ -150,43 +213,40 @@ func (t *Typst) render(ctx context.Context, d *doc.Document, tpl templates.Templ
 		return "", nil, err
 	}
 	warnings := diagnostics(stderr)
-	for _, m := range unreadable {
-		warnings = append(warnings, fmt.Sprintf("math can't be read (%s): %s", m.why, m.tex))
+	for _, m := range bad.math {
+		warnings = append(warnings, fmt.Sprintf("math can't be read (%s): %s", m.why, m.what))
+	}
+	for _, m := range bad.images {
+		warnings = append(warnings, fmt.Sprintf("image can't be read (%s): %s", m.why, filepath.Base(m.what)))
 	}
 	return dir, warnings, nil
 }
 
-// mathError is LaTeX mitex can't read, and mitex's reason.
-type mathError struct{ tex, why string }
+// problem is what Typst can't read (LaTeX math, an image's path), and why.
+type problem struct{ what, why string }
 
-// checkedAt finds the line of check.typ a Typst error's trace passes
-// through.
-var checkedAt = regexp.MustCompile(`at check\.typ:(\d+):`)
+// unreadable is a document's math and images Typst can't read.
+type unreadable struct{ math, images []problem }
 
-// unreadableMath finds the math in ms that mitex can't read (or whose
-// reading Typst then can't run), in the workspace dir. Each formula is read
-// on its own line of a check file; Typst stops at the first one that fails,
-// so the check runs again on those after it. An error that isn't one
-// formula's ends the search.
-func (t *Typst) unreadableMath(ctx context.Context, dir string, ms []doc.Math) ([]mathError, error) {
-	var texs []string
-	seen := map[string]bool{}
-	for _, m := range ms {
-		if !seen[m.TeX] {
-			seen[m.TeX] = true
-			texs = append(texs, m.TeX)
-		}
-	}
+// checkedAt finds the line of check.typ a Typst error is at, or whose
+// trace passes through it.
+var checkedAt = regexp.MustCompile(`(?:^|\s)check\.typ:(\d+):`)
+
+// failing runs each of the Typst lines in the workspace dir, after head, and
+// finds those that fail, by index, with Typst's reason. An error is the
+// line's it's at (or passes through), or the line's reading the workspace
+// file it's in (files[i], line i's; nil when none do). Typst stops at the
+// first line that fails, so the check runs again on those after it. An
+// error that isn't one line's ends the search.
+func (t *Typst) failing(ctx context.Context, dir, head string, lines, files []string) (map[int]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	var bad []mathError
-	for len(texs) > 0 {
-		var src strings.Builder
-		src.WriteString("#import \"mitex/lib.typ\": mimath\n")
-		for _, tex := range texs {
-			fmt.Fprintf(&src, "#let _ = mimath(%s)\n", typstString(tex)) // line i+2
-		}
-		if err := os.WriteFile(filepath.Join(dir, "check.typ"), []byte(src.String()), 0o600); err != nil {
+	first := strings.Count(head, "\n") + 1 // check.typ's line of lines[0]
+	bad := map[int]string{}
+	for from := 0; from < len(lines); {
+		// Lines already checked are left blank, so each keeps its place.
+		src := head + strings.Repeat("\n", from) + strings.Join(lines[from:], "\n") + "\n"
+		if err := os.WriteFile(filepath.Join(dir, "check.typ"), []byte(src), 0o600); err != nil {
 			return bad, err
 		}
 		cmd := exec.CommandContext(ctx, t.Bin, "compile", "--root", ".", "check.typ", "check.pdf")
@@ -200,20 +260,71 @@ func (t *Typst) unreadableMath(ctx context.Context, dir string, ms []doc.Math) (
 			return bad, ctx.Err()
 		}
 		out := ansi.ReplaceAllString(stderr.String(), "")
-		m := checkedAt.FindStringSubmatch(out)
-		if m == nil {
+		i := -1
+		if m := checkedAt.FindStringSubmatch(out); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			i = n - first
+		} else {
+			for j := from; j < len(files) && i < 0; j++ {
+				if strings.Contains(out, " "+strings.TrimPrefix(files[j], "/")+":") {
+					i = j
+				}
+			}
+		}
+		if i < from || i >= len(lines) {
 			return bad, nil
 		}
-		i, _ := strconv.Atoi(m[1])
-		if i -= 2; i < 0 || i >= len(texs) {
-			return bad, nil
+		why := out
+		if j := strings.Index(out, "error: "); j >= 0 {
+			why = out[j+len("error: "):]
 		}
-		why, _, _ := strings.Cut(out, "\n")
-		why = why[strings.LastIndex(why, "error: ")+len("error: "):]
-		bad = append(bad, mathError{texs[i], strings.TrimSpace(why)})
-		texs = texs[i+1:]
+		why, _, _ = strings.Cut(why, "\n")
+		bad[i] = strings.TrimSpace(why)
+		from = i + 1
 	}
 	return bad, nil
+}
+
+// unreadableMath finds the math in ms that mitex can't read (or whose
+// reading Typst then can't run), in the workspace dir.
+func (t *Typst) unreadableMath(ctx context.Context, dir string, ms []doc.Math) ([]problem, error) {
+	var texs, lines []string
+	seen := map[string]bool{}
+	for _, m := range ms {
+		if !seen[m.TeX] {
+			seen[m.TeX] = true
+			texs = append(texs, m.TeX)
+			lines = append(lines, "#let _ = mimath("+typstString(m.TeX)+")")
+		}
+	}
+	failed, err := t.failing(ctx, dir, "#import \"mitex/lib.typ\": mimath\n", lines, nil)
+	var bad []problem
+	for i, tex := range texs {
+		if why, ok := failed[i]; ok {
+			bad = append(bad, problem{tex, why})
+		}
+	}
+	return bad, err
+}
+
+// unreadableImages finds the images Typst can't read (an unknown format, a
+// damaged file) of those placed in the workspace dir (paths to their names
+// there, see docJSON).
+func (t *Typst) unreadableImages(ctx context.Context, dir string, placed map[string]string) ([]problem, error) {
+	paths := slices.Sorted(maps.Keys(placed))
+	lines, files := make([]string, len(paths)), make([]string, len(paths))
+	for i, p := range paths {
+		files[i] = placed[p]
+		lines[i] = "#image(" + typstString(files[i]) + ")"
+	}
+	failed, err := t.failing(ctx, dir, "", lines, files)
+	var bad []problem
+	for i, p := range paths {
+		if why, ok := failed[i]; ok {
+			bad = append(bad, problem{p, why})
+		}
+	}
+	return bad, err
 }
 
 // PNG draws the image at path widthPt points wide, at 2x, as PNG.
@@ -304,29 +415,32 @@ func (t *Typst) Equations(ctx context.Context, ms []doc.Math, sizePt float64, fo
 		}
 		return nil
 	}
-	all := make([]int, len(ms))
-	for i := range all {
-		all[i] = i
-	}
-	err = draw(all)
-	if ce := (*CompileError)(nil); errors.As(err, &ce) {
-		unreadable, _ := t.unreadableMath(ctx, dir, ms)
-		if len(unreadable) == 0 {
-			return nil, err
+	// readable is the index of each math of ms not in bad.
+	readable := func(bad []problem) []int {
+		skip := map[string]bool{}
+		for _, m := range bad {
+			skip[m.what] = true
 		}
-		bad := map[string]bool{}
-		for _, m := range unreadable {
-			bad[m.tex] = true
-		}
-		var rest []int
+		var idx []int
 		for i, m := range ms {
-			if !bad[m.TeX] {
-				rest = append(rest, i)
+			if !skip[m.TeX] {
+				idx = append(idx, i)
 			}
 		}
+		return idx
+	}
+	known := t.knownBad(ms)
+	if idx := readable(known); len(idx) > 0 {
+		err = draw(idx)
+	}
+	if ce := (*CompileError)(nil); errors.As(err, &ce) {
+		bad := t.findBadMath(ctx, dir, ms)
+		if len(bad) == len(known) {
+			return nil, err
+		}
 		err = nil
-		if len(rest) > 0 {
-			err = draw(rest)
+		if idx := readable(bad); len(idx) > 0 {
+			err = draw(idx)
 		}
 	}
 	if err != nil {
@@ -355,24 +469,25 @@ func (t *Typst) Fonts(ctx context.Context) ([]string, error) {
 // workspace writes main.typ, the renderer, the template, its style (a custom
 // template's changes, read by style.typ), doc.json, mitex and the document's
 // images (in img/, which doc.json refers to them in) to a new temporary
-// folder. The math in unreadable is shown as its source.
-func (t *Typst) workspace(d *doc.Document, tpl templates.Template, unreadable []mathError) (string, error) {
+// folder, and returns it with the images' paths' names there. What's in bad
+// is shown as math's source and missing pictures.
+func (t *Typst) workspace(d *doc.Document, tpl templates.Template, bad unreadable) (string, map[string]string, error) {
 	src, err := tpl.Source()
 	if err != nil {
-		return "", fmt.Errorf("template %s: %w", tpl.Name, err)
+		return "", nil, fmt.Errorf("template %s: %w", tpl.Name, err)
 	}
 	style, err := json.Marshal(tpl.TypstStyle())
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	dir, err := os.MkdirTemp("", "peanut-render-*")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	data, err := docJSON(d, dir, unreadable)
+	data, images, err := docJSON(d, dir, bad)
 	if err != nil {
 		os.RemoveAll(dir)
-		return "", err
+		return "", nil, err
 	}
 	files := map[string][]byte{
 		"main.typ": []byte(mainTyp), "peanut.typ": renderer, "template.typ": src,
@@ -381,35 +496,50 @@ func (t *Typst) workspace(d *doc.Document, tpl templates.Template, unreadable []
 	for name, b := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
 			os.RemoveAll(dir)
-			return "", err
+			return "", nil, err
 		}
 	}
 	if err := writeMitex(dir); err != nil {
 		os.RemoveAll(dir)
-		return "", err
+		return "", nil, err
 	}
-	return dir, nil
+	return dir, images, nil
 }
 
 // docJSON is d as doc.json in the workspace dir: only the properties the
-// document shows, the math in unreadable marked so, and its images put in
-// dir/img and referred to there, as Typst reads nothing outside the
-// workspace.
-func docJSON(d *doc.Document, dir string, unreadable []mathError) ([]byte, error) {
+// document shows, the math in bad marked so, and its images put in dir/img
+// (but those in bad, shown missing) and referred to there, as Typst reads
+// nothing outside the workspace. The images' paths' names there are
+// returned too.
+func docJSON(d *doc.Document, dir string, bad unreadable) ([]byte, map[string]string, error) {
 	// A deep copy, so d keeps its own paths (Word reads them).
 	b, err := json.Marshal(d)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var shown doc.Document
 	if err := json.Unmarshal(b, &shown); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	shown.Meta = d.Meta.Shown()
+	skip := map[string]bool{}
+	for _, m := range bad.images {
+		skip[m.what] = true
+	}
 	placed := map[string]string{}
 	var failed error
-	place := func(src *string) {
+	// place puts the image at *src in the workspace; one in bad is missing
+	// instead, named in *missing (nil for an inline image, which has no
+	// placeholder).
+	place := func(src, missing *string) {
 		if *src == "" || failed != nil {
+			return
+		}
+		if skip[*src] {
+			if missing != nil {
+				*missing = filepath.Base(*src)
+			}
+			*src = ""
 			return
 		}
 		name, ok := placed[*src]
@@ -428,27 +558,38 @@ func docJSON(d *doc.Document, dir string, unreadable []mathError) ([]byte, error
 		*src = name
 	}
 	why := map[string]string{}
-	for _, m := range unreadable {
-		why[m.tex] = m.why
+	for _, m := range bad.math {
+		why[m.what] = m.why
 	}
+	labels := map[string]bool{}
 	doc.Walk(shown.Blocks, func(b *doc.Block) {
-		place(&b.Src)
+		place(&b.Src, &b.Missing)
 		for j := range b.Pictures {
-			place(&b.Pictures[j].Src)
+			place(&b.Pictures[j].Src, &b.Pictures[j].Missing)
 		}
 		if b.Type == doc.BlockEquation && b.Error == "" {
 			b.Error = why[b.Text]
 		}
+		// A label used twice (or in a note marked twice) would stop Typst:
+		// only the first block keeps it, as references resolve.
+		if b.Label != "" && b.Number > 0 {
+			if labels[b.Label] {
+				b.Label = ""
+			} else {
+				labels[b.Label] = true
+			}
+		}
 	}, func(x *doc.Inline) {
-		place(&x.Src)
+		place(&x.Src, nil)
 		if x.Type == doc.InlineMath && x.Error == "" {
 			x.Error = why[x.Text]
 		}
 	})
 	if failed != nil {
-		return nil, failed
+		return nil, nil, failed
 	}
-	return json.Marshal(&shown)
+	data, err := json.Marshal(&shown)
+	return data, placed, err
 }
 
 // linkInto puts the file src at dst: a hard link, or a copy where one can't
@@ -522,7 +663,11 @@ func diagnostics(stderr string) []string {
 	return lines
 }
 
+// typstQuote escapes s for a Typst string literal, writing each character
+// Typst counts as a line break as an escape: a quoted string stays on its
+// line (failing finds what fails by its line).
+var typstQuote = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`,
+	"\v", `\u{b}`, "\f", `\u{c}`, "\u0085", `\u{85}`, "\u2028", `\u{2028}`, "\u2029", `\u{2029}`)
+
 // typstString quotes s as a Typst string literal.
-func typstString(s string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(s) + `"`
-}
+func typstString(s string) string { return `"` + typstQuote.Replace(s) + `"` }

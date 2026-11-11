@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -41,10 +42,19 @@ func main() {
 		ShouldQuit:       docs.shouldClose,
 		SingleInstance: &application.SingleInstanceOptions{
 			UniqueID: "com.dustinmichels.peanutwriter",
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+			// A second launch (from the command line: Finder sends files to
+			// this one) shows this window, opening the document it was given.
+			OnSecondInstanceLaunch: func(d application.SecondInstanceData) {
 				if docs.window != nil {
 					docs.window.UnMinimise()
 					docs.window.Focus()
+				}
+				if len(d.Args) > 1 && strings.EqualFold(filepath.Ext(strings.TrimRight(d.Args[1], `/\`)), packageExt) {
+					p := d.Args[1]
+					if !filepath.IsAbs(p) {
+						p = filepath.Join(d.WorkingDir, p)
+					}
+					docs.openedWithFile(p)
 				}
 			},
 		},

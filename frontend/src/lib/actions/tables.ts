@@ -2,6 +2,7 @@
 
 import { insertBlock, itemsField } from "@/lib/editor";
 import { captionMarkdown, type Item, type Table, uniqueLabel, writeTable } from "@/lib/markdown";
+import { refLabel } from "./crossrefs";
 import { view } from "./run";
 
 // applyTable writes table in place of item's, or inserts it, with its caption
@@ -9,7 +10,8 @@ import { view } from "./run";
 export function applyTable(item: Item | undefined, table: Table, caption: string, label: string) {
   const v = view();
   const items = v.state.field(itemsField);
-  const id = label || (caption && uniqueLabel("tbl", caption, items, item?.label ?? ""));
+  const id =
+    refLabel("tbl", label) || (caption && uniqueLabel("tbl", caption, items, item?.label ?? ""));
   const text = writeTable(table) + (caption || id ? `\n\n${captionMarkdown(caption, id)}` : "");
   if (item) {
     v.dispatch({

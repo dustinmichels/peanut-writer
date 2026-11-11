@@ -3,7 +3,7 @@
 
 import { Transaction } from "@codemirror/state";
 import { DocService } from "@bindings/peanut-writer";
-import type { Style } from "@bindings/peanut-writer/internal/templates/models";
+import type { Style, Template } from "@bindings/peanut-writer/internal/templates/models";
 import { type Meta, readFrontMatter, writeFrontMatter } from "@/lib/markdown";
 import { scheduleRender, state, toast } from "@/lib/store";
 import { loadCustom } from "./documents";
@@ -52,28 +52,31 @@ export async function customizeTemplate() {
   state.customizing = true;
 }
 
-// Style changes are saved one at a time, in order.
+// Style changes are saved one at a time, in order. One made in a document
+// since replaced by another is dropped: the backend would give it to the
+// document open now.
 let styling: Promise<unknown> = Promise.resolve();
 
-// setTemplateStyle sets the fonts and colors of the document's own template.
-export function setTemplateStyle(style: Style) {
+function restyle(change: () => Promise<Template>) {
+  const path = state.path;
   styling = styling.then(async () => {
-    const t = await run("Customize template", () => DocService.SetTemplateStyle(style));
-    if (!t) return;
+    if (state.path !== path) return;
+    const t = await run("Customize template", change);
+    if (!t || state.path !== path) return;
     state.custom = t;
     scheduleRender(0);
   });
 }
 
+// setTemplateStyle sets the fonts and colors of the document's own template.
+export function setTemplateStyle(style: Style) {
+  restyle(() => DocService.SetTemplateStyle(style));
+}
+
 // setTemplateBase bases the document's own template on another template,
 // keeping its changes.
 export function setTemplateBase(base: string) {
-  styling = styling.then(async () => {
-    const t = await run("Customize template", () => DocService.SetTemplateBase(base));
-    if (!t) return;
-    state.custom = t;
-    scheduleRender(0);
-  });
+  restyle(() => DocService.SetTemplateBase(base));
 }
 
 // saveCustomTemplate adds the document's own template to the user's
@@ -97,6 +100,7 @@ export async function saveCustomTemplate(name: string, description: string) {
 // removeCustomTemplate deletes the document's own template and goes back to
 // the one it was based on.
 export async function removeCustomTemplate() {
+  await styling; // or a change still being saved fails, or brings it back
   const old = state.custom;
   const base = await run("Remove customization", () => DocService.RemoveCustomTemplate());
   if (base === undefined) return;

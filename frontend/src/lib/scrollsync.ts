@@ -98,11 +98,14 @@ export function syncScroll(
   ed.addEventListener("scroll", onEditor, { passive: true });
   preview.addEventListener("scroll", onPreview, { passive: true });
 
-  // A new render or zoom moves the headings in the preview: line it up again
-  // (after the pages are laid out).
-  const stop = watch(() => [state.pages, state.outline, state.zoom, state.fitZoom], follow, {
-    flush: "post",
-  });
+  // A new render or zoom moves the headings in the preview, and focusing on
+  // a section (or no longer) changes what the editor shows, maybe without
+  // scrolling it: line them up again (after the pages are laid out).
+  const stop = watch(
+    () => [state.pages, state.outline, state.zoom, state.fitZoom, state.focusedHeading],
+    follow,
+    { flush: "post" },
+  );
 
   return {
     stop() {

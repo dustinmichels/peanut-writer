@@ -32,15 +32,20 @@ type Version struct {
 // Save makes the version name of the document at docPath: copies of the
 // document and of those of its sidecars (files beside it) that exist, and
 // word and pdf as its Word and PDF copies. The version appears whole or not
-// at all.
+// at all. Documents in one folder share its versions folder: another's
+// version of the same name gets this one's copies beside its own.
 func Save(docPath, name string, sidecars []string, word, pdf []byte) (Version, error) {
 	if err := checkName(name); err != nil {
 		return Version{}, err
 	}
 	root := filepath.Join(filepath.Dir(docPath), Folder)
 	dest := filepath.Join(root, name)
+	shared := false
 	if _, err := os.Stat(dest); err == nil {
-		return Version{}, fmt.Errorf("%w: “%s”", ErrExists, name)
+		if _, err := os.Lstat(filepath.Join(dest, filepath.Base(docPath))); err == nil {
+			return Version{}, fmt.Errorf("%w: “%s”", ErrExists, name)
+		}
+		shared = true
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return Version{}, err
 	}
@@ -53,30 +58,53 @@ func Save(docPath, name string, sidecars []string, word, pdf []byte) (Version, e
 		return Version{}, err
 	}
 	defer os.RemoveAll(tmp) // left only if the rename failed
-	for _, p := range append([]string{docPath}, sidecars...) {
+	var names []string // the files written, the document's copy last
+	write := func(name string, b []byte) error {
+		names = append(names, name)
+		return os.WriteFile(filepath.Join(tmp, name), b, 0o644)
+	}
+	for _, p := range sidecars {
 		b, err := os.ReadFile(p)
-		if errors.Is(err, fs.ErrNotExist) && p != docPath {
+		if errors.Is(err, fs.ErrNotExist) {
 			continue
+		}
+		if err == nil {
+			err = write(filepath.Base(p), b)
 		}
 		if err != nil {
 			return Version{}, err
 		}
-		if err := os.WriteFile(filepath.Join(tmp, filepath.Base(p)), b, 0o644); err != nil {
+	}
+	b, err := os.ReadFile(docPath)
+	if err == nil {
+		err = errors.Join(write(stem(docPath)+".docx", word), write(stem(docPath)+".pdf", pdf), write(filepath.Base(docPath), b))
+	}
+	if err != nil {
+		return Version{}, err
+	}
+	if !shared {
+		if err := os.Chmod(tmp, 0o755); err != nil {
 			return Version{}, err
 		}
+		if err := os.Rename(tmp, dest); err != nil {
+			return Version{}, err
+		}
+		return read(docPath, name)
 	}
-	base := filepath.Join(tmp, stem(docPath))
-	if err := os.WriteFile(base+".docx", word, 0o644); err != nil {
-		return Version{}, err
+	// Moved in one at a time, the document's copy last, as List finds the
+	// version by it; nothing of the other document's is replaced.
+	for _, n := range names {
+		if _, err := os.Lstat(filepath.Join(dest, n)); err == nil {
+			return Version{}, fmt.Errorf("%w: “%s”", ErrExists, name)
+		}
 	}
-	if err := os.WriteFile(base+".pdf", pdf, 0o644); err != nil {
-		return Version{}, err
-	}
-	if err := os.Chmod(tmp, 0o755); err != nil {
-		return Version{}, err
-	}
-	if err := os.Rename(tmp, dest); err != nil {
-		return Version{}, err
+	for i, n := range names {
+		if err := os.Rename(filepath.Join(tmp, n), filepath.Join(dest, n)); err != nil {
+			for _, m := range names[:i] {
+				os.Remove(filepath.Join(dest, m))
+			}
+			return Version{}, err
+		}
 	}
 	return read(docPath, name)
 }
@@ -109,7 +137,9 @@ func List(docPath string) ([]Version, error) {
 
 // Restore puts the version name's copies back as the document at docPath and
 // its sidecars: a sidecar the version has none of is removed. It returns the
-// document's restored content.
+// document's restored content. All of it is read before anything is replaced,
+// and what was replaced is put back if a later file fails, so a failure leaves
+// the document, its template and settings as they were.
 func Restore(docPath, name string, sidecars []string) (string, error) {
 	if err := checkName(name); err != nil {
 		return "", err
@@ -118,27 +148,56 @@ func Restore(docPath, name string, sidecars []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	content, err := os.ReadFile(v.Path)
-	if err != nil {
-		return "", err
-	}
 	dir := filepath.Dir(v.Path)
-	for _, p := range sidecars {
-		b, err := os.ReadFile(filepath.Join(dir, filepath.Base(p)))
-		switch {
-		case errors.Is(err, fs.ErrNotExist):
-			if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return "", err
-			}
-		case err != nil:
+	paths := append(slices.Clone(sidecars), docPath)
+	restored := make([]file, len(paths))
+	was := make([]file, len(paths))
+	for i, p := range paths {
+		if restored[i], err = readFile(filepath.Join(dir, filepath.Base(p))); err != nil {
 			return "", err
-		default:
-			if err := atomicfile.Write(p, b, 0o644); err != nil {
-				return "", err
-			}
+		}
+		if was[i], err = readFile(p); err != nil {
+			return "", err
 		}
 	}
-	return string(content), atomicfile.Write(docPath, content, 0o644)
+	doc := restored[len(paths)-1]
+	if !doc.exists {
+		return "", fmt.Errorf("there's no version “%s”", name)
+	}
+	for i, p := range paths {
+		if err := restored[i].put(p); err != nil {
+			for j := i - 1; j >= 0; j-- {
+				err = errors.Join(err, was[j].put(paths[j]))
+			}
+			return "", err
+		}
+	}
+	return string(doc.data), nil
+}
+
+// file is a file's content, or its absence.
+type file struct {
+	data   []byte
+	exists bool
+}
+
+func readFile(p string) (file, error) {
+	b, err := os.ReadFile(p)
+	if errors.Is(err, fs.ErrNotExist) {
+		return file{}, nil
+	}
+	return file{b, err == nil}, err
+}
+
+// put makes the file at p hold f: f's content, or no file.
+func (f file) put(p string) error {
+	if f.exists {
+		return atomicfile.Write(p, f.data, 0o644)
+	}
+	if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // read describes the version name of the document at docPath, which must

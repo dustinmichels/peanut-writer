@@ -2,6 +2,7 @@
 import { onMounted, ref, useTemplateRef } from "vue";
 import Modal from "@/components/ui/Modal.vue";
 import { insertText } from "@/lib/editor";
+import { linkText } from "@/lib/markdown";
 import { editor } from "@/lib/store";
 
 const props = defineProps<{ text: string }>();
@@ -17,8 +18,9 @@ function submit() {
   let target = url.value.trim();
   if (!/^[a-z]+:/i.test(target))
     target = target.includes("@") ? `mailto:${target}` : `https://${target}`;
+  // The text is Markdown (as selected): kept as written, but for brackets.
   const label = text.value.trim() || target;
-  insertText(v, `[${label.replace(/([\][])/g, "\\$1")}](<${target}>)`);
+  insertText(v, `[${linkText(label)}](<${target.replace(/[<>]/g, "\\$&")}>)`);
   emit("close");
 }
 </script>

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -106,6 +107,22 @@ func TestImportNamesAfterTheZipAndAvoidsBuiltins(t *testing.T) {
 	}
 }
 
+func TestImportWindowsZipAndLongNames(t *testing.T) {
+	userHome(t)
+	p := writeZip(t, map[string]string{`Thesis\template.typ`: "#let template(meta, body) = body", `Thesis\template.json`: `{}`})
+	if dir, err := Import(p); err != nil || filepath.Base(dir) != "thesis" {
+		t.Errorf("zip with backslashes: %q, %v", dir, err)
+	}
+	// A folder name over 255 bytes can't be made.
+	id, err := Save(Custom{Base: "classic"}, strings.Repeat("Long name ", 30), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := User(id); err != nil || len(id) > 64 {
+		t.Errorf("saved as %q: %v", id, err)
+	}
+}
+
 func TestImportRejectsZipsWithoutATemplate(t *testing.T) {
 	userHome(t)
 	for name, files := range map[string]map[string]string{
@@ -113,6 +130,7 @@ func TestImportRejectsZipsWithoutATemplate(t *testing.T) {
 		"split":        {"a/template.typ": "x", "b/template.json": "{}"},
 		"too deep":     {"a/b/template.typ": "x", "a/b/template.json": "{}"},
 		"bad json":     {"template.typ": "x", "template.json": "{"},
+		"bad color":    {"template.typ": "x", "template.json": `{"style": {"textColor": "red"}}`},
 		"mac metadata": {"__MACOSX/template.typ": "x", "__MACOSX/template.json": "{}"},
 	} {
 		if _, err := Import(writeZip(t, files)); err == nil {
@@ -128,7 +146,7 @@ func TestImportRejectsZipsWithoutATemplate(t *testing.T) {
 func TestCustomTemplateChangesOnlyWhatItSets(t *testing.T) {
 	userHome(t)
 	p := filepath.Join(t.TempDir(), "Doc.template.json")
-	if err := WriteCustom(p, &Custom{Base: "elegant", Style: Style{BodyFont: " Georgia ", HeadingColor: "#aa0000"}}); err != nil {
+	if err := WriteCustom(p, &Custom{Base: "elegant", Style: Style{BodyFont: " Georgia\n Pro ", HeadingColor: "#aa0000"}}); err != nil {
 		t.Fatal(err)
 	}
 	c, err := ReadCustom(p)
@@ -139,7 +157,7 @@ func TestCustomTemplateChangesOnlyWhatItSets(t *testing.T) {
 	if got.ID != CustomID || got.Base != "elegant" {
 		t.Errorf("id %q, base %q", got.ID, got.Base)
 	}
-	if got.Docx.BodyFont != "Georgia" || got.Docx.HeadingColor != "AA0000" {
+	if got.Docx.BodyFont != "Georgia Pro" || got.Docx.HeadingColor != "AA0000" {
 		t.Errorf("changes not applied: %q, %q", got.Docx.BodyFont, got.Docx.HeadingColor)
 	}
 	if got.Docx.HeadingFont != base.Docx.HeadingFont || got.Docx.TitleColor != base.Docx.TitleColor {

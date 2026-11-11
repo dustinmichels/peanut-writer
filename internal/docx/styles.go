@@ -22,7 +22,7 @@ func rpr(font string, bold, italic bool, col string, size float64) string {
 		fmt.Fprintf(&b, `<w:color w:val="%s"/>`, c)
 	}
 	if size > 0 {
-		fmt.Fprintf(&b, `<w:sz w:val="%[1]d"/><w:szCs w:val="%[1]d"/>`, half(size))
+		fmt.Fprintf(&b, `<w:sz w:val="%[1]d"/><w:szCs w:val="%[1]d"/>`, half(min(max(size, 1), maxFontSize)))
 	}
 	return b.String()
 }
@@ -69,7 +69,7 @@ func (w *writer) headingSize(level int) float64 {
 		hs = []float64{w.st.FontSize * 1.6, w.st.FontSize * 1.3, w.st.FontSize * 1.1}
 	}
 	if s := hs[min(level, len(hs))-1]; s > 0 {
-		return s
+		return min(s, maxFontSize)
 	}
 	return w.st.FontSize
 }

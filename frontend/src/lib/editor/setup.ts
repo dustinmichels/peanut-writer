@@ -1,13 +1,7 @@
 // Setting up the editor, and swapping in a new document.
 
 import { autocompletion } from "@codemirror/autocomplete";
-import {
-  defaultKeymap,
-  history,
-  historyKeymap,
-  indentLess,
-  indentMore,
-} from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { EditorState, type Extension } from "@codemirror/state";
@@ -18,7 +12,7 @@ import {
   highlightActiveLine,
   keymap,
 } from "@codemirror/view";
-import { setBlockStyle, toggleMark } from "./commands";
+import { indentListLess, indentListMore, setBlockStyle, toggleMark } from "./commands";
 import { refCompletions } from "./completion";
 import { decorations, lineStyles } from "./decorations";
 import {
@@ -34,6 +28,7 @@ import {
 import { followFootnotes, followLabels, guardProperties } from "./filters";
 import { focusField, focusGuard, focusKeymap } from "./focus";
 import { hiddenKeymap, hiddenMarks, settleCursor } from "./hidden";
+import { highlight } from "./highlight";
 import { math } from "./math";
 import { showExtension, showSlot, theme } from "./theme";
 import type { Handlers } from "./types";
@@ -49,13 +44,14 @@ export function createEditor(
     { key: "Mod-b", run: (v) => toggleMark(v, "strong") },
     { key: "Mod-i", run: (v) => toggleMark(v, "emph") },
     { key: "Mod-Shift-x", run: (v) => toggleMark(v, "strike") },
+    { key: "Mod-Shift-h", run: (v) => toggleMark(v, "highlight") },
     { key: "Mod-`", run: (v) => toggleMark(v, "code") },
     { key: "Mod-Alt-1", run: (v) => (setBlockStyle(v, "h1"), true) },
     { key: "Mod-Alt-2", run: (v) => (setBlockStyle(v, "h2"), true) },
     { key: "Mod-Alt-3", run: (v) => (setBlockStyle(v, "h3"), true) },
     { key: "Mod-Alt-4", run: (v) => (setBlockStyle(v, "h4"), true) },
     { key: "Mod-Alt-0", run: (v) => (setBlockStyle(v, "p"), true) },
-    { key: "Tab", run: indentMore, shift: indentLess },
+    { key: "Tab", run: indentListMore, shift: indentListLess },
   ]);
 
   const extensions: Extension[] = [
@@ -73,7 +69,7 @@ export function createEditor(
     EditorView.lineWrapping,
     EditorState.allowMultipleSelections.of(false),
     bodyHint,
-    markdown({ base: markdownLanguage, addKeymap: false, extensions: [math] }),
+    markdown({ base: markdownLanguage, addKeymap: false, extensions: [math, highlight] }),
     // Highlighting comes with showSlot.
     theme,
     hiddenKeymap,

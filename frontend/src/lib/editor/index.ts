@@ -10,6 +10,8 @@ export {
   type BlockStyle,
   blockStyleAt,
   clearFormatting,
+  indentListLess,
+  indentListMore,
   insertBlock,
   insertDivider,
   inlineMath,

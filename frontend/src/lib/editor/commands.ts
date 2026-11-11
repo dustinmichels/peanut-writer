@@ -1,24 +1,33 @@
 // Editing commands for the ribbon and the keyboard: inline styles, block
 // styles, lists, code blocks, and inserting blocks, footnotes and inline math.
 
+import { indentLess, indentMore } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { ChangeSet, EditorSelection, EditorState, type Line } from "@codemirror/state";
+import {
+  ChangeSet,
+  type ChangeSpec,
+  EditorSelection,
+  EditorState,
+  type Line,
+} from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { renumberFootnotes } from "@/lib/markdown";
-import { fenceRe, footnotesField } from "./fields";
+import { footnotesField } from "./fields";
 
-export type Mark = "strong" | "emph" | "strike" | "code";
+export type Mark = "strong" | "emph" | "strike" | "highlight" | "code";
 const markText: Record<Mark, string> = {
   strong: "**",
   emph: "*",
   strike: "~~",
+  highlight: "==",
   code: "`",
 };
 const markNode: Record<Mark, string> = {
   strong: "StrongEmphasis",
   emph: "Emphasis",
   strike: "Strikethrough",
+  highlight: "Highlight",
   code: "InlineCode",
 };
 
@@ -46,18 +55,15 @@ export function toggleMark(view: EditorView, mark: Mark): boolean {
       n = n.parent
     ) {
       if (n.name === node) {
-        const inner = state.sliceDoc(n.from, n.to);
-        if (inner.startsWith(s) && inner.endsWith(s)) {
-          return {
-            changes: [
-              { from: n.from, to: n.from + s.length },
-              { from: n.to - s.length, to: n.to },
-            ],
-            range: EditorSelection.range(
-              Math.max(n.from, range.from - s.length),
-              Math.max(n.from, range.to - s.length),
-            ),
-          };
+        // Its marks as written (`__` too, or a run of backticks).
+        const open = n.firstChild;
+        const close = n.lastChild;
+        if (open && close && open.to <= close.from && open.name === close.name) {
+          const changes = state.changes([
+            { from: open.from, to: open.to },
+            { from: close.from, to: close.to },
+          ]);
+          return { changes, range: range.map(changes) };
         }
       }
     }
@@ -85,13 +91,15 @@ export function toggleMark(view: EditorView, mark: Mark): boolean {
   return true;
 }
 
-// clearFormatting removes bold, italic, strikethrough and code marks from the
-// selection.
+// clearFormatting removes bold, italic, strikethrough, highlight and code
+// marks from the selection.
 export function clearFormatting(view: EditorView) {
   const { from, to } = view.state.selection.main;
   if (from === to) return;
   // Not underscores: they're more often in names than marks.
-  const text = view.state.sliceDoc(from, to).replace(/(\*\*|~~|\*|`)(?=\S)([\s\S]*?\S)\1/g, "$2");
+  const text = view.state
+    .sliceDoc(from, to)
+    .replace(/(\*\*|~~|==|\*|`)(?=\S)([\s\S]*?\S)\1/g, "$2");
   view.dispatch({
     changes: { from, to, insert: text },
     selection: { anchor: from, head: from + text.length },
@@ -114,10 +122,13 @@ export function blockStyleAt(state: EditorState): BlockStyle | "code" | "list" {
   return "p";
 }
 
+// selectedLines are the lines the selection touches, but not the one it ends
+// at the start of (as selecting whole lines leaves it).
 function selectedLines(state: EditorState) {
   const lines: Line[] = [];
   const { from, to } = state.selection.main;
-  for (let p = state.doc.lineAt(from).from; p <= to;) {
+  const end = to > from && state.doc.lineAt(to).from === to ? to - 1 : to;
+  for (let p = state.doc.lineAt(from).from; p <= end;) {
     const line = state.doc.lineAt(p);
     lines.push(line);
     p = line.to + 1;
@@ -129,14 +140,18 @@ function selectedLines(state: EditorState) {
 // setBlockStyle makes the selected lines a heading, a quote or plain text.
 export function setBlockStyle(view: EditorView, style: BlockStyle) {
   const prefix = style === "p" ? "" : style === "quote" ? "> " : "#".repeat(Number(style[1])) + " ";
-  const changes = selectedLines(view.state).map((line) => {
-    const m = prefixRe.exec(line.text)!;
-    return {
-      from: line.from + m[1].length,
-      to: line.from + m[0].length,
-      insert: prefix,
-    };
-  });
+  const lines = selectedLines(view.state);
+  // Blank lines between the selected paragraphs stay blank, not empty headings.
+  const changes = lines
+    .filter((line) => style[0] !== "h" || lines.length === 1 || line.text.trim() !== "")
+    .map((line) => {
+      const m = prefixRe.exec(line.text)!;
+      return {
+        from: line.from + m[1].length,
+        to: line.from + m[0].length,
+        insert: prefix,
+      };
+    });
   view.dispatch({ changes, userEvent: "input.format" });
   view.focus();
 }
@@ -165,34 +180,142 @@ export function toggleList(view: EditorView, kind: "bullet" | "ordered") {
   view.focus();
 }
 
+// A list item's first line, unquoted: its indentation, marker and the space
+// after it.
+const itemRe = /^([ \t]*)(?:[-*+]|(\d+)([.)]))([ \t]*)/;
+
+// columns counts the width of white space, a tab running to the next
+// multiple of four.
+function columns(ws: string): number {
+  let c = 0;
+  for (const ch of ws) c = ch === "\t" ? c + 4 - (c % 4) : c + 1;
+  return c;
+}
+
+interface ItemLine {
+  node: SyntaxNode; // the ListItem
+  line: Line;
+  indent: number; // column of the marker
+  content: number; // column of the text
+  num?: { from: number; to: number; value: number }; // an ordered item's number
+}
+
+// itemLine is the list item starting on line, outside quotes, or null.
+function itemLine(state: EditorState, line: Line): ItemLine | null {
+  const m = itemRe.exec(line.text);
+  if (!m) return null;
+  const mark = syntaxTree(state).resolveInner(line.from + m[1].length, 1);
+  const node = mark.name === "ListMark" ? mark.parent : null;
+  if (node?.name !== "ListItem" || state.doc.lineAt(node.from).number !== line.number) return null;
+  const indent = columns(m[1]);
+  const markWidth = m[0].length - m[1].length - m[4].length;
+  const space = columns(m[4]);
+  const numFrom = line.from + m[1].length;
+  return {
+    node,
+    line,
+    indent,
+    content: indent + markWidth + (space === 0 || space > 4 ? 1 : space),
+    num: m[2] ? { from: numFrom, to: numFrom + m[2].length, value: Number(m[2]) } : undefined,
+  };
+}
+
+function itemAt(state: EditorState, node: SyntaxNode | null): ItemLine | null {
+  return node?.name === "ListItem" ? itemLine(state, state.doc.lineAt(node.from)) : null;
+}
+
+// indentList nests the list item the selection starts on under the one
+// before it (more) or lifts it out to its parent's level (!more), with its
+// sub-items and the selected lines after it. Numbers follow: a nested item
+// carries on the sub-list it joins, or starts one at 1. Off a list item it
+// indents the lines as CodeMirror does; the first item and a top-level one
+// can't move, and stay.
+function indentList(view: EditorView, more: boolean): boolean {
+  const { state } = view;
+  const lines = selectedLines(state);
+  const it = itemLine(state, lines[0]);
+  if (!it) return more ? indentMore(view) : indentLess(view);
+
+  let target: number;
+  let number: number | undefined;
+  const changes: ChangeSpec[] = [];
+  if (more) {
+    const prev = itemAt(state, it.node.prevSibling);
+    if (!prev) return true;
+    // Joining a sub-list the item before already has.
+    const sub = prev.node.lastChild;
+    const subLast = /List$/.test(sub?.name ?? "") ? itemAt(state, sub!.lastChild) : null;
+    target = subLast?.indent ?? prev.content;
+    number = subLast?.num ? subLast.num.value + 1 : 1;
+  } else {
+    const parent = itemAt(state, it.node.parent?.parent ?? null);
+    if (!parent) return true;
+    target = parent.indent;
+    number = parent.num ? parent.num.value + 1 : 1;
+    // The items after it in its sub-list become its own, starting at 1.
+    const next = itemAt(state, it.node.nextSibling);
+    if (next?.num) changes.push({ from: next.num.from, to: next.num.to, insert: "1" });
+  }
+  if (it.num) changes.push({ from: it.num.from, to: it.num.to, insert: String(number) });
+
+  const delta = target - it.indent;
+  const last = Math.max(lines.at(-1)!.number, state.doc.lineAt(it.node.to).number);
+  for (let n = it.line.number; n <= last; n++) {
+    const line = state.doc.line(n);
+    const ws = /^[ \t]*/.exec(line.text)![0];
+    if (ws.length === line.length) continue;
+    const insert = " ".repeat(Math.max(0, columns(ws) + delta));
+    if (insert !== ws) changes.push({ from: line.from, to: line.from + ws.length, insert });
+  }
+  view.dispatch({ changes, userEvent: more ? "input.indent" : "delete.dedent" });
+  return true;
+}
+
+export const indentListMore = (view: EditorView) => indentList(view, true);
+export const indentListLess = (view: EditorView) => indentList(view, false);
+
 // toggleCodeBlock fences the selected lines, or removes the fences around
 // the code block the cursor is in.
 export function toggleCodeBlock(view: EditorView) {
   const state = view.state;
-  const { from, to } = state.selection.main;
-  const a = state.doc.lineAt(from);
-  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(a.from, 1); n; n = n.parent) {
+  const lines = selectedLines(state);
+  const a = lines[0];
+  // From the line's end: in a list or quote the fence follows its marker.
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(a.to, -1); n; n = n.parent) {
     if (n.name !== "FencedCode") continue;
     const open = state.doc.lineAt(n.from);
     const close = state.doc.lineAt(n.to);
-    const closed = close.number > open.number && fenceRe.test(close.text);
+    const last = n.lastChild;
+    const closed = close.number > open.number && last?.name === "CodeMark" && last.from > n.from;
+    // The opening fence goes with the next line's markers up to its column (a
+    // list item's indent, a quote's `>`), its own staying: the code joins the
+    // item or quote it was in. A block of only its fence takes nothing more.
+    let openTo = open.to;
+    if (close.number > open.number) {
+      const next = state.doc.line(open.number + 1);
+      openTo = next.from + Math.min(n.from - open.from, /^[ \t>]*/.exec(next.text)![0].length);
+    }
     const changes = !closed
-      ? [{ from: open.from, to: Math.min(open.to + 1, state.doc.length) }]
+      ? [{ from: n.from, to: openTo }]
       : close.number === open.number + 1
-        ? [{ from: open.from, to: close.to }]
+        ? [{ from: n.from, to: close.to }]
         : [
-            { from: open.from, to: open.to + 1 },
+            { from: n.from, to: openTo },
             { from: close.from - 1, to: close.to },
           ];
     view.dispatch({ changes, userEvent: "input.format" });
     view.focus();
     return;
   }
-  const b = state.doc.lineAt(to);
+  const b = lines[lines.length - 1];
   const body = state.sliceDoc(a.from, b.to);
-  insertBlock(view, "```\n" + body + "\n```", {
+  // Longer than any fence in it, which would close it early.
+  const fence = "`".repeat(
+    Math.max(3, ...[...body.matchAll(/^ {0,3}(`{3,})/gm)].map((m) => m[1].length + 1)),
+  );
+  insertBlock(view, `${fence}\n${body}\n${fence}`, {
     replace: { from: a.from, to: b.to },
-    cursorOffset: 4,
+    cursorOffset: fence.length + 1,
   });
 }
 

@@ -1,8 +1,11 @@
 package doc
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -120,6 +123,68 @@ func TestFootnoteFiguresAndOrphans(t *testing.T) {
 	want := []string{"footnote nothing refers to: [^2]", "footnote with no note: [^x]"}
 	if strings.Join(notes, "|") != strings.Join(want, "|") {
 		t.Errorf("footnote warnings = %q, want %q", notes, want)
+	}
+}
+
+// A note marked inside itself, directly or through another note, stops
+// there instead of nesting forever (a stack overflow kills the app).
+func TestFootnoteMarkedInsideItself(t *testing.T) {
+	d := Parse("Text[^a].\n\n[^a]: See [^b].\n\n[^b]: Back to [^a].\n", "")
+	a := d.Blocks[0].Inlines[1]
+	if a.Type != InlineFootnote || len(a.Blocks) != 1 {
+		t.Fatalf("note a = %+v", a)
+	}
+	b := a.Blocks[0].Inlines[1]
+	if b.Type != InlineFootnote || PlainText(b.Blocks[0].Inlines) != "Back to ." {
+		t.Errorf("note b = %+v", b)
+	}
+	if want := []string{"footnote marked inside itself: [^a]"}; !slices.Equal(d.Warnings, want) {
+		t.Errorf("warnings = %q, want %q", d.Warnings, want)
+	}
+
+	// Notes marking the next one twice, 40 deep: each is read once within
+	// a note, not 2⁴⁰ times.
+	var src strings.Builder
+	src.WriteString("Text[^1].\n\n")
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&src, "[^%d]: Note [^%d] and [^%[2]d].\n\n", i, i+1)
+	}
+	if b, err := json.Marshal(Parse(src.String(), "")); err != nil || len(b) > 1e5 {
+		t.Errorf("chain of notes: %d bytes, %v", len(b), err)
+	}
+}
+
+// Link and picture targets are read with their escapes and entities undone,
+// as goldmark's own HTML has them.
+func TestDestinationsUnescaped(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a_b.png"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := Parse("[q](http://a.com/?a=1&amp;b=2) ![i](a\\_b.png)\n\n![F](a\\_b.png)\n", dir)
+	xs := d.Blocks[0].Inlines
+	if xs[0].URL != "http://a.com/?a=1&b=2" || xs[2].Src == "" || d.Blocks[1].Src == "" {
+		t.Errorf("link %q, image %q, figure %q", xs[0].URL, xs[2].Src, d.Blocks[1].Src)
+	}
+}
+
+// A pipe in a table cell is written `\|`, in code and math too: there it
+// reads as a pipe (`$\|x\|$` is |x|, not the norm ‖x‖).
+func TestTableCellPipes(t *testing.T) {
+	d := Parse("| a |\n|---|\n| `x\\|y` and **$\\|z\\|$** |\n", "")
+	cell := d.Blocks[0].Rows[0][0]
+	if cell[0].Text != "x|y" || cell[2].Children[0].Text != "|z|" {
+		t.Errorf("cell %+v", cell)
+	}
+}
+
+// Windows and old Mac line breaks read as the editor reads them, lines
+// counted the same.
+func TestLineBreaks(t *testing.T) {
+	d := Parse("---\r\ntitle: X\r---\r# H\r\n\rone\rtwo\n", "")
+	if d.Meta.Title != "X" || len(d.Blocks) != 2 || d.Blocks[0].Line != 4 || d.Blocks[1].Line != 6 ||
+		PlainText(d.Blocks[1].Inlines) != "one two" {
+		t.Errorf("meta %+v, blocks %+v", d.Meta, d.Blocks)
 	}
 }
 

@@ -8,13 +8,22 @@ import (
 	"image/jpeg"
 )
 
+// maxUprightPixels is the most pixels upright turns (a 108 MP phone photo
+// fits): turning holds the decoded image and two RGBA copies (about 12 bytes
+// a pixel), and a tiny file can claim a huge size.
+const maxUprightPixels = 1 << 27
+
 // upright is a JPEG turned the way its EXIF orientation says it's seen.
 // Word lays a picture out by its stored pixels, so a phone photo stored on
 // its side would come out stretched. The turned copy has no EXIF, so nothing
-// turns it again. data itself when it's stored upright (or can't be read).
+// turns it again. data itself when it's stored upright (or can't be read,
+// or is too big to turn: see maxUprightPixels).
 func upright(data []byte) []byte {
 	o := jpegOrientation(data)
 	if o == 1 {
+		return data
+	}
+	if cfg, err := jpeg.DecodeConfig(bytes.NewReader(data)); err != nil || cfg.Width*cfg.Height > maxUprightPixels {
 		return data
 	}
 	src, err := jpeg.Decode(bytes.NewReader(data))

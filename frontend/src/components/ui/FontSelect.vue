@@ -108,6 +108,15 @@ function move(by: number) {
   nextTick(reveal);
 }
 
+// WebKit sends a resting pointer a mouse move when the list scrolls under it:
+// only a real move selects the font there.
+let pointer = "";
+function hover(e: MouseEvent, i: number) {
+  const at = `${e.screenX},${e.screenY}`;
+  if (at !== pointer) selected.value = i;
+  pointer = at;
+}
+
 function typed() {
   selected.value = 0;
   list.value?.scrollTo({ top: 0 });
@@ -220,7 +229,7 @@ function fontStyle(name: string | undefined) {
           role="option"
           :aria-selected="c.value === value"
           :class="{ on: i === selected, chosen: c.value === value }"
-          @mousemove="selected = i"
+          @mousemove="hover($event, i)"
           @mousedown.prevent
           @click="pick(c)"
         >

@@ -6,6 +6,7 @@ package mdfmt
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -17,6 +18,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"peanut-writer/internal/doc"
 )
 
 const timeout = 20 * time.Second
@@ -86,18 +89,41 @@ func find(name string, candidates ...string) string {
 	return ""
 }
 
+// config is oxfmt's configuration: its defaults, except that code blocks
+// keep their code as written (by default it lays out JavaScript, CSS, JSON,
+// Markdown and more inside them, changing what the document shows).
+const config = `{"embeddedLanguageFormatting": "off"}`
+
 // Format returns src as oxfmt lays it out.
 func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 	// oxfmt's math ends only at a bare `$$` line: an equation's attribute
-	// block (`$$ {#eq:a}`) is taken out, and put back afterwards.
-	src, attrs := takeEquationAttrs(src)
+	// block (`$$ {#eq:a}`) is taken out, and put back afterwards. One left
+	// open (being typed) oxfmt would close, changing the document.
+	md, attrs, closed := takeEquationAttrs(src)
+	if !closed {
+		return "", errors.New("an equation's closing $$ is missing")
+	}
+	// Given explicitly, so no config file oxfmt might find around the
+	// temporary folder applies either.
+	cfg, err := os.CreateTemp("", "peanut-oxfmt-*.json")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(cfg.Name())
+	_, err = cfg.WriteString(config)
+	if err = errors.Join(err, cfg.Close()); err != nil {
+		return "", err
+	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, o.Bin, "--stdin-filepath", "document.md")
-	// No project's formatter config applies.
+	cmd := exec.CommandContext(ctx, o.Bin, "--config", cfg.Name(), "--stdin-filepath", "document.md")
+	// A launcher that runs oxfmt as its child (a version manager's shim, say)
+	// leaves it holding the output when the timeout kills the launcher: the
+	// wait for that output is cut short.
+	cmd.WaitDelay = time.Second
 	cmd.Dir = os.TempDir()
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(o.Node)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cmd.Stdin = strings.NewReader(src)
+	cmd.Stdin = strings.NewReader(md)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -113,7 +139,27 @@ func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 	if !ok {
 		return "", errors.New("formatting would lose equation labels")
 	}
+	// oxfmt reads some Markdown differently from the app (a table right
+	// under a paragraph, a row without pipes, an equation right after a
+	// list): there its layout would change the document, so it's not used.
+	if reading(out) != reading(src) {
+		return "", errors.New("formatting would change how the document reads, so it's left as written")
+	}
 	return out, nil
+}
+
+var (
+	lineField = regexp.MustCompile(`"line":\d+,?`)
+	spaces    = regexp.MustCompile(`(?:\\t| )+`)
+)
+
+// reading is the document src describes, as the renderers see it, without
+// source lines or differences in spacing within text.
+func reading(src string) string {
+	d := doc.Parse(src, "")
+	d.Warnings = nil
+	b, _ := json.Marshal(d)
+	return spaces.ReplaceAllString(lineField.ReplaceAllString(string(b), ""), " ")
 }
 
 var (
@@ -124,9 +170,9 @@ var (
 
 // equationEnds finds the last line of each equation block (in quotes and
 // lists too): from a line starting `$$` to one ending `$$` (and maybe an
-// attribute block), outside top-level code fences.
-func equationEnds(lines []string) []int {
-	var ends []int
+// attribute block), outside top-level code fences. closed is false when the
+// last one never ends.
+func equationEnds(lines []string) (ends []int, closed bool) {
 	open := "" // the open code fence
 	for i := 0; i < len(lines); i++ {
 		body := strings.TrimRight(lines[i], "\r\n")
@@ -147,22 +193,23 @@ func equationEnds(lines []string) []int {
 		j, rest := i, content[2:]
 		for !mathClose.MatchString(rest) {
 			if j++; j == len(lines) {
-				return ends // unclosed
+				return ends, false
 			}
 			rest = strings.TrimRight(lines[j], "\r\n")
 		}
 		ends = append(ends, j)
 		i = j
 	}
-	return ends
+	return ends, true
 }
 
 // takeEquationAttrs removes equations' attribute blocks, returning them in
-// order ("" for none).
-func takeEquationAttrs(src string) (string, []string) {
+// order ("" for none), and whether every equation is closed.
+func takeEquationAttrs(src string) (string, []string, bool) {
 	lines := strings.SplitAfter(src, "\n")
 	var attrs []string
-	for _, i := range equationEnds(lines) {
+	ends, closed := equationEnds(lines)
+	for _, i := range ends {
 		body := strings.TrimRight(lines[i], "\r\n")
 		m := mathClose.FindStringSubmatchIndex(body)
 		a := ""
@@ -172,15 +219,15 @@ func takeEquationAttrs(src string) (string, []string) {
 		}
 		attrs = append(attrs, a)
 	}
-	return strings.Join(lines, ""), attrs
+	return strings.Join(lines, ""), attrs, closed
 }
 
 // putEquationAttrs puts attribute blocks back on src's equations; false if
 // the equations aren't the ones they were taken from.
 func putEquationAttrs(src string, attrs []string) (string, bool) {
 	lines := strings.SplitAfter(src, "\n")
-	ends := equationEnds(lines)
-	if len(ends) != len(attrs) {
+	ends, closed := equationEnds(lines)
+	if !closed || len(ends) != len(attrs) {
 		return "", false
 	}
 	for k, i := range ends {
@@ -200,7 +247,7 @@ var (
 	// Parts of a heading that aren't its words: code, math, link targets and
 	// reference labels, attribute blocks, cross-references, footnotes,
 	// autolinks, URLs, entities and escapes.
-	protected = regexp.MustCompile("`+[^`]*`+|\\$\\$?(?:\\\\.|[^$\\\\])+\\$\\$?|\\]\\([^)]*\\)|\\]\\[[^\\]]*\\]|\\{[^}]*\\}|@[\\w:.-]+|\\[\\^[^\\]]*\\]|<[^>]*>|https?://\\S+|&#?\\w+;|\\\\.")
+	protected = regexp.MustCompile("`+[^`]*`+|\\$\\$?(?:\\\\.|[^$\\\\])+\\$\\$?|\\]\\((?:[^()]|\\([^()]*\\))*\\)|\\]\\([^)]*\\)|\\]\\[[^\\]]*\\]|\\{[^}]*\\}|@[\\w:.-]+|\\[\\^[^\\]]*\\]|<[^>]*>|https?://\\S+|&#?\\w+;|\\\\.")
 	word      = regexp.MustCompile(`[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*`)
 )
 
@@ -214,14 +261,15 @@ var minor = map[string]bool{
 }
 
 // CaseHeadings recases src's ATX headings with recase (TitleCase or
-// SentenceCase), leaving front matter and code blocks alone.
+// SentenceCase), leaving front matter and code blocks alone. A `---` first
+// line that's never closed is a rule, not front matter.
 func CaseHeadings(src string, recase func(string) string) string {
 	lines := strings.SplitAfter(src, "\n")
 	i := 0
 	if len(lines) > 0 && strings.TrimRight(lines[0], "\r\n") == "---" {
-		for i = 1; i < len(lines); i++ {
-			if t := strings.TrimRight(lines[i], "\r\n"); t == "---" || t == "..." {
-				i++
+		for j := 1; j < len(lines); j++ {
+			if t := strings.TrimSpace(lines[j]); t == "---" || t == "..." {
+				i = j + 1
 				break
 			}
 		}

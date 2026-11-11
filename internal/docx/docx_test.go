@@ -11,6 +11,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -195,6 +197,45 @@ func TestWrite(t *testing.T) {
 	}
 	if drawn == 0 {
 		t.Error("Equations was never called")
+	}
+}
+
+// A hand-edited template.json's odd values still make a file Word opens:
+// font sizes 1–1638pt, spacing 0–1584pt, the text inside the page.
+func TestOddStylesStayInWordsLimits(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtures(t, dir)
+	d := doc.Parse(sample, dir)
+	sizes := regexp.MustCompile(`<w:sz w:val="(\d+)"`)
+	spacing := regexp.MustCompile(`w:(?:before|after|line|firstLine|top|left|right|bottom)="(-?\d+)"`)
+	for _, st := range []templates.DocxStyle{
+		{FontSize: 0.1, SpaceAfter: -6, HeadingSizes: []float64{-1}, Columns: -2},
+		{FontSize: 1e9, TitleSize: 5000, LineSpacing: 1e9, SpaceAfter: 1e9, FirstLineIndent: 1e9, Margin: 1e9, Columns: 1e9, HeadingSizes: []float64{1e9}},
+		{Margin: 5, Columns: 50},
+	} {
+		out, err := Write(d, st, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		checkPackage(t, "odd", out, countFootnotes(d.Blocks))
+		z, _ := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+		for _, f := range z.File {
+			r, _ := f.Open()
+			b, _ := io.ReadAll(r)
+			for _, m := range sizes.FindAllSubmatch(b, -1) {
+				if n, _ := strconv.Atoi(string(m[1])); n < 2 || n > 3276 {
+					t.Errorf("%+v: %s: %s", st, f.Name, m[0])
+				}
+			}
+			for _, m := range spacing.FindAllSubmatch(b, -1) {
+				if n, _ := strconv.Atoi(string(m[1])); n < 0 || n > 31680 {
+					t.Errorf("%+v: %s: %s", st, f.Name, m[0])
+				}
+			}
+			if bytes.Contains(b, []byte(`cx="-`)) || bytes.Contains(b, []byte(`cy="-`)) {
+				t.Errorf("%+v: %s: negative picture size", st, f.Name)
+			}
+		}
 	}
 }
 
@@ -450,5 +491,47 @@ func TestNumberedItemsInFootnotes(t *testing.T) {
 	}
 	if mark, tbl := strings.Index(notes, "<w:footnoteRef/>"), strings.Index(notes, "<w:tbl>"); mark < 0 || tbl < 0 || mark > tbl {
 		t.Errorf("note mark at %d, table at %d: the mark should come first", mark, tbl)
+	}
+}
+
+// footnotesXML is word/footnotes.xml of src written in the first template.
+func footnotesXML(t *testing.T, src string) string {
+	t.Helper()
+	out, err := Write(doc.Parse(src, ""), templates.List()[0].Docx, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := z.Open("word/footnotes.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	b, _ := io.ReadAll(f)
+	return string(b)
+}
+
+// A note starting with a quote holding a table or a list has its mark before
+// them too, not in the first cell or item.
+func TestFootnoteMarkBeforeQuotedBlocks(t *testing.T) {
+	for _, note := range []string{"> | A |\n    > |---|\n    > | 1 |\n", "> - item\n"} {
+		_, first, _ := strings.Cut(footnotesXML(t, "Text.[^n]\n\n[^n]: "+note), `<w:footnote w:id="1">`)
+		if !strings.HasPrefix(first, `<w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr>`+footnoteMark+`</w:p>`) {
+			t.Errorf("%q: the note doesn't start with its mark on its own: %.300s", note, first)
+		}
+	}
+}
+
+// A note within a note keeps all its text, in brackets: its list items,
+// code and quotes too, not just its paragraphs.
+func TestNoteWithinNote(t *testing.T) {
+	notes := footnotesXML(t, "Text.[^a]\n\n[^a]: See.[^b]\n\n[^b]: - one\n\n    ```\n    two\n    ```\n\n    > three\n")
+	for _, want := range []string{">one<", ">two<", ">three<"} {
+		if !strings.Contains(notes, want) {
+			t.Errorf("the note within a note lost %s: %s", want, notes)
+		}
 	}
 }

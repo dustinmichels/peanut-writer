@@ -81,7 +81,7 @@ function setAlign(a: Align) {
   t.align[cur.c] = t.align[cur.c] === a ? "" : a;
 }
 
-// Enter moves down a row, adding one at the bottom.
+// Enter moves down a row (from the header too), adding one at the bottom.
 function enter(r: number, c: number) {
   if (r === t.rows.length - 1) t.rows.push(Array(t.header.length).fill(""));
   focusCell(r + 1, c);
@@ -185,7 +185,7 @@ const alignOf = (c: number) => t.align[c] || "left";
                 :style="{ textAlign: alignOf(c) }"
                 placeholder="Heading"
                 @focus="((cur.r = -1), (cur.c = c))"
-                @keydown.enter.prevent="focusCell(0, c)"
+                @keydown.enter.exact.prevent="enter(-1, c)"
               />
             </th>
           </tr>

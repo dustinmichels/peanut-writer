@@ -2,11 +2,8 @@ package mdfmt
 
 import (
 	"context"
-	"encoding/json"
-	"regexp"
+	"strings"
 	"testing"
-
-	"peanut-writer/internal/doc"
 )
 
 func TestTitleCase(t *testing.T) {
@@ -22,6 +19,7 @@ func TestTitleCase(t *testing.T) {
 		"see @fig:the-chart for more":        "See @fig:the-chart for More",
 		"intro {#sec:the-intro}":             "Intro {#sec:the-intro}",
 		"a [link to it](https://x.io/a/the)": "A [Link to It](https://x.io/a/the)",
+		"see [it](https://x.io/A_(b)_the)":   "See [It](https://x.io/A_(b)_the)",
 		"*what* is *the* point":              "*What* Is *the* Point",
 		"the $\\sin x$ of a wave":            "The $\\sin x$ of a Wave",
 		"the $a \\$ b$ of it":                "The $a \\$ b$ of It",
@@ -53,6 +51,10 @@ func TestCaseHeadings(t *testing.T) {
 	want := "---\ntitle: the front matter\n---\n\n# The First Part ##\n\nbody text of the part\n\n````md\n# a fenced heading\n```\n# still fenced\n````\n\n   ## The Last Part\n"
 	if got := CaseHeadings(in, TitleCase); got != want {
 		t.Errorf("CaseHeadings:\n%s\nwant:\n%s", got, want)
+	}
+	// Never closed, so a rule, not front matter.
+	if got := CaseHeadings("---\n\n# the first part\n", TitleCase); got != "---\n\n# The First Part\n" {
+		t.Errorf("CaseHeadings after a rule: %q", got)
 	}
 }
 
@@ -101,22 +103,13 @@ $$ {#eq:one}
 
 \pagebreak
 
+` + "```js\nconst a = {b:1}\n```" + `
+
 [^1]: The note.
 ## Methods
 `
 
-var lineField = regexp.MustCompile(`"line":\d+,?`)
-
-// model is the document as the renderer sees it, without source lines.
-func model(t *testing.T, src string) string {
-	b, err := json.Marshal(doc.Parse(src, ""))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return lineField.ReplaceAllString(string(b), "")
-}
-
-// Formatting tidies the Markdown without changing the document it describes.
+// Formatting tidies the Markdown, stably, leaving code as written.
 func TestFormatKeepsDocument(t *testing.T) {
 	o, err := Find()
 	if err != nil {
@@ -129,8 +122,8 @@ func TestFormatKeepsDocument(t *testing.T) {
 	if got == messy {
 		t.Fatal("nothing was formatted")
 	}
-	if a, b := model(t, messy), model(t, got); a != b {
-		t.Errorf("formatting changed the document:\n%s\nformatted:\n%s", messy, got)
+	if !strings.Contains(got, "const a = {b:1}\n") {
+		t.Errorf("code was formatted:\n%s", got)
 	}
 	again, err := o.Format(context.Background(), got)
 	if err != nil {
@@ -138,5 +131,24 @@ func TestFormatKeepsDocument(t *testing.T) {
 	}
 	if again != got {
 		t.Errorf("formatting isn't stable:\n%s\nthen:\n%s", got, again)
+	}
+}
+
+// Where oxfmt would read the Markdown differently, or close an equation
+// being typed, the document is left as it is.
+func TestFormatLeavesWhatItWouldChange(t *testing.T) {
+	o, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, src := range []string{
+		"1. | a | b |\n   |---|---|\n   | 1 | 2 |\nA row of the table, without pipes\n",
+		"- item\n$$ x $$ {#eq:a}\n",
+		"> quote\n$$ x $$\n",
+		"Text\n\n$$\nx\n",
+	} {
+		if got, err := o.Format(context.Background(), src); err == nil {
+			t.Errorf("%q formatted as %q", src, got)
+		}
 	}
 }

@@ -33,6 +33,7 @@ import {
   shownEquations,
   typedEquation,
 } from "./fields";
+import { coverage } from "./hidden";
 import type { Handlers } from "./types";
 import { EquationWidget } from "./widgets/equation";
 import { FigureWidget } from "./widgets/figure";
@@ -103,10 +104,8 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   // Figures, tables and display equations replace their Markdown; nothing
   // else is decorated inside them. Those in lists and quotes stay as their
   // Markdown.
-  const hidden: { from: number; to: number }[] = [];
   for (const it of items) {
     if (it.kind === "equation" || it.prefix !== undefined) continue;
-    hidden.push(it);
     if (it.kind === "figure") {
       ranges.push({
         from: it.from,
@@ -128,7 +127,6 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
     }
   }
   for (const eq of shownEquations(state)) {
-    hidden.push(eq);
     const n = items.find((x) => x.kind === "equation" && x.from === eq.from)?.number ?? 0;
     ranges.push({
       from: eq.from,
@@ -148,7 +146,7 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
   }
 
   // Cross-references and footnote marks, outside code and math.
-  const out = (pos: number) => pos < fm.to || hidden.some((h) => pos >= h.from && pos <= h.to);
+  const out = coverage(state);
   for (const r of crossRefs(state)) {
     if (out(r.from)) continue;
     const target = labels.get(r.label);
@@ -285,7 +283,7 @@ export const lineStyles = ViewPlugin.fromClass(
             const cls = blockLineClass[n.name];
             if (h) add(n.from, `pw-h pw-h${h[1]}`);
             else if (cls) {
-              for (let p = n.from; p <= n.to;) {
+              for (let p = Math.max(n.from, from); p <= Math.min(n.to, to);) {
                 const line = view.state.doc.lineAt(p);
                 if (line.from >= from && line.from <= to) add(line.from, cls);
                 p = line.to + 1;

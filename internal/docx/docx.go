@@ -143,12 +143,16 @@ func (p *part) add(typ, target string, external bool) string {
 type orderedList struct{ level, start int }
 
 func newWriter(st templates.DocxStyle, opt Options) *writer {
+	// A hand-edited template.json can hold anything: values are kept within
+	// what Word reads (font sizes up to 1638pt, line spacing up to 132 lines).
 	if st.FontSize <= 0 {
 		st.FontSize = 11
 	}
+	st.FontSize = min(st.FontSize, maxFontSize)
 	if st.LineSpacing <= 0 {
 		st.LineSpacing = 1
 	}
+	st.LineSpacing = min(st.LineSpacing, 132)
 	if st.Margin <= 0 {
 		st.Margin = 1
 	}
@@ -166,9 +170,11 @@ func newWriter(st templates.DocxStyle, opt Options) *writer {
 	if strings.EqualFold(st.Paper, "a4") {
 		w.pageW, w.pageH = 11906, 16838
 	}
-	w.margin = int(math.Round(st.Margin * 1440))
-	w.cols = max(st.Columns, 1)
-	w.textW = max((w.pageW-2*w.margin-columnGap*(w.cols-1))/w.cols, 1440)
+	// At least an inch of text each way, and columns at least an inch wide.
+	w.margin = int(math.Round(min(st.Margin*1440, float64(min(w.pageW, w.pageH)-1440)/2)))
+	w.cols = min(max(st.Columns, 1), (w.pageW-2*w.margin+columnGap)/(1440+columnGap))
+	w.textW = (w.pageW - 2*w.margin - columnGap*(w.cols-1)) / w.cols
+	w.st.FirstLineIndent = min(st.FirstLineIndent, float64(w.textW)/1440)
 	// The document part's fixed relationships come first: styles,
 	// numbering, settings, footnotes, footer, header.
 	w.docRels.next = 6
@@ -176,11 +182,15 @@ func newWriter(st templates.DocxStyle, opt Options) *writer {
 	return w
 }
 
-// twips converts points to twentieths of a point.
-func twips(pt float64) int { return int(math.Round(pt * 20)) }
+// twips converts points to twentieths of a point, for paragraph spacing,
+// which Word takes from 0 to 1584pt.
+func twips(pt float64) int { return int(math.Round(min(max(pt, 0), 1584) * 20)) }
 
 // half converts points to half-points, the unit of font sizes.
 func half(pt float64) int { return int(math.Round(pt * 2)) }
+
+// maxFontSize is the largest font size Word takes, in points.
+const maxFontSize = 1638
 
 // emu converts points to English Metric Units, the unit of drawings.
 func emu(pt float64) int64 { return int64(math.Round(pt * 12700)) }

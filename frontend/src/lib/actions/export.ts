@@ -4,7 +4,7 @@
 import { DocService } from "@bindings/peanut-writer";
 import { state, toast } from "@/lib/store";
 import { run } from "./run";
-import { formatAndSave } from "./saving";
+import { formatAndSave, writtenText } from "./saving";
 
 async function exported(kind: string, f: () => Promise<string>) {
   const path = await run(`Export as ${kind}`, f);
@@ -24,9 +24,10 @@ export async function syncFiles() {
   if (await formatAndSave()) await syncCopies();
 }
 
+// syncCopies writes the copies of the document as it was saved.
 export async function syncCopies() {
   const content = state.content;
-  const paths = await run("Sync files", () => DocService.SyncFiles(content));
+  const paths = await run("Sync files", () => DocService.SyncFiles(writtenText(content)));
   if (!paths?.length) return;
   state.synced = content;
   toast(`Synced ${paths.map((p) => p.split("/").pop()).join(" and ")}`, "success", {

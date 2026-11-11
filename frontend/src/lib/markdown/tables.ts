@@ -9,22 +9,20 @@ export interface Table {
   rows: string[][];
 }
 
+// splitRow splits a row at its unescaped pipes: as in GFM (and goldmark),
+// even within code spans and math, where a pipe is written `\|`.
 function splitRow(line: string): string[] {
   let s = line.trim();
   if (s.startsWith("|")) s = s.slice(1);
   if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
   const cells: string[] = [];
   let cur = "";
-  let code = false;
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === "\\" && s[i + 1] === "|") {
       cur += "\\|";
       i++;
-    } else if (c === "`") {
-      code = !code;
-      cur += c;
-    } else if (c === "|" && !code) {
+    } else if (c === "|") {
       cells.push(cur.trim());
       cur = "";
     } else cur += c;
@@ -135,6 +133,7 @@ export function parseDelimited(text: string): Table | null {
   rows.push(row);
 
   const kept = rows.filter((r) => r.some((c) => c !== ""));
+  if (!kept.length) return null;
   const n = Math.max(...kept.map((r) => r.length));
   const fit = (r: string[]) => Array.from({ length: n }, (_, i) => r[i] ?? "");
   return {

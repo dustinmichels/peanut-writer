@@ -79,11 +79,14 @@ type writer struct {
 
 	headings map[*doc.Block]heading
 	toc      []tocEntry
-	// placed holds the labels given an id: a label used twice marks only
-	// the first, as references resolve.
+	// placed holds the ids given out: headings', then each label's on its
+	// first block (a label used twice marks only the first, as references
+	// resolve).
 	placed map[string]bool
 	notes  []string
 	inNote bool
+	inLink bool                // writing a link's text, where no other link can go
+	inTOC  bool                // writing the table of contents, which leaves notes out
 	images map[string]string   // path → data URL, "" when unreadable
 	math   map[string]*mathPic // nil when it can't be drawn
 }
@@ -91,8 +94,9 @@ type writer struct {
 type heading struct{ id, number string }
 
 type tocEntry struct {
-	level            int
-	id, number, text string
+	level      int
+	id, number string
+	heading    *doc.Block
 }
 
 func (w *writer) printf(format string, a ...any) { fmt.Fprintf(w.out, format, a...) }
@@ -125,8 +129,9 @@ func (w *writer) collectHeadings(bs []doc.Block) {
 					h.number = strings.Join(parts, ".")
 				}
 				w.headings[b] = h
+				w.placed[h.id] = true
 				if level <= 3 && text != "" {
-					w.toc = append(w.toc, tocEntry{level, h.id, h.number, text})
+					w.toc = append(w.toc, tocEntry{level, h.id, h.number, b})
 				}
 			case doc.BlockList:
 				for j := range b.Items {
@@ -140,9 +145,11 @@ func (w *writer) collectHeadings(bs []doc.Block) {
 	walk(bs)
 }
 
-// idAttr is ` id="label"` for the first block with label, else "".
+// idAttr is ` id="label"` for the first block with label, else "". A label
+// that is a heading's id or a footnote's (fn:1, fnref:1) gets none: an id
+// names one element, and those can't be referred to anyway.
 func (w *writer) idAttr(label string) string {
-	if label == "" || w.placed[label] {
+	if label == "" || w.placed[label] || strings.HasPrefix(label, "fn:") || strings.HasPrefix(label, "fnref:") {
 		return ""
 	}
 	w.placed[label] = true
@@ -398,9 +405,20 @@ func (w *writer) tocBlock() {
 		if e.number != "" {
 			num = `<span class="num">` + e.number + `</span> `
 		}
-		w.printf("<li class=\"l%d\"><a href=\"#%s\">%s%s</a></li>\n", e.level, e.id, num, esc(e.text))
+		w.printf("<li class=\"l%d\"><a href=\"#%s\">%s%s</a></li>\n", e.level, e.id, num, w.tocText(e.heading.Inlines))
 	}
 	w.out.WriteString("</ul>\n</nav>\n")
+}
+
+// tocText is a heading's text as the table of contents shows it: in a
+// link, so references and links are plain text, and without its notes'
+// marks.
+func (w *writer) tocText(xs []doc.Inline) string {
+	inLink, inTOC := w.inLink, w.inTOC
+	w.inLink, w.inTOC = true, true
+	s := w.inlines(xs)
+	w.inLink, w.inTOC = inLink, inTOC
+	return s
 }
 
 // equation writes an equation block, centered; a numbered one has "(N)" at
@@ -451,12 +469,16 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline) {
 			w.wrap(sb, "em", x.Children)
 		case doc.InlineStrike:
 			w.wrap(sb, "del", x.Children)
+		case doc.InlineHighlight:
+			w.wrap(sb, "mark", x.Children)
 		case doc.InlineCode:
 			sb.WriteString("<code>" + esc(x.Text) + "</code>")
 		case doc.InlineLink:
-			if u := strings.TrimSpace(x.URL); u != "" {
+			if u := strings.TrimSpace(x.URL); u != "" && !w.inLink && !scriptURL(u) {
 				sb.WriteString(`<a href="` + esc(strings.ReplaceAll(u, " ", "%20")) + `">`)
+				w.inLink = true
 				w.inline(sb, x.Children)
+				w.inLink = false
 				sb.WriteString("</a>")
 			} else {
 				w.inline(sb, x.Children)
@@ -487,8 +509,9 @@ func (w *writer) wrap(sb *strings.Builder, tag string, xs []doc.Inline) {
 	sb.WriteString("</" + tag + ">")
 }
 
-// ref is "Figure N", "Table N" or "Equation N", linked to what it names;
-// an unknown reference is a bold "??", as LaTeX writes it.
+// ref is "Figure N", "Table N" or "Equation N", linked to what it names
+// (but not in a link's text); an unknown reference is a bold "??", as LaTeX
+// writes it.
 func (w *writer) ref(sb *strings.Builder, x doc.Inline) {
 	word := ""
 	switch x.Kind {
@@ -502,29 +525,31 @@ func (w *writer) ref(sb *strings.Builder, x doc.Inline) {
 		sb.WriteString("<strong>??</strong>")
 		return
 	}
+	if w.inLink {
+		fmt.Fprintf(sb, "%s %d", word, x.Number)
+		return
+	}
 	fmt.Fprintf(sb, `<a class="ref" href="#%s">%s %d</a>`, esc(x.Label), word, x.Number)
 }
 
-// footnote writes the note's mark and keeps its text for the end; a note
-// within a note goes in brackets.
+// footnote writes the note's mark (unlinked in a link's text) and keeps its
+// text for the end; a note within a note goes in brackets.
 func (w *writer) footnote(sb *strings.Builder, x doc.Inline) {
+	if w.inTOC {
+		return
+	}
 	if w.inNote {
 		sb.WriteString(" (")
-		for i, b := range x.Blocks {
-			if i > 0 {
-				sb.WriteString(" ")
-			}
-			w.inline(sb, b.Inlines)
-		}
+		w.flatText(sb, x.Blocks, false)
 		sb.WriteString(")")
 		return
 	}
 	n := len(w.notes) + 1
 	var body strings.Builder
-	out := w.out
-	w.out, w.inNote = &body, true
+	out, inLink := w.out, w.inLink
+	w.out, w.inNote, w.inLink = &body, true, false
 	w.blocks(x.Blocks)
-	w.out, w.inNote = out, false
+	w.out, w.inNote, w.inLink = out, false, inLink
 	note := body.String()
 	back := fmt.Sprintf(` <a class="back" href="#fnref:%d" aria-label="Back to the text">↩</a>`, n)
 	if strings.HasSuffix(note, "</p>\n") {
@@ -533,7 +558,61 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline) {
 		note += "<p>" + back + "</p>\n"
 	}
 	w.notes = append(w.notes, fmt.Sprintf("<li id=\"fn:%d\">\n%s</li>\n", n, note))
+	if w.inLink {
+		fmt.Fprintf(sb, `<sup class="fnref" id="fnref:%d">%d</sup>`, n, n)
+		return
+	}
 	fmt.Fprintf(sb, `<sup class="fnref"><a id="fnref:%d" href="#fn:%d">%d</a></sup>`, n, n, n)
+}
+
+// flatText writes the text of blocks in a line, for a note within a note:
+// paragraphs, a list's items, a quote's text, code, an equation, a table's
+// caption and cells and a figure's caption, a space between each (and
+// before the first when gap). It reports whether any text went before
+// what comes next.
+func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, gap bool) bool {
+	add := func(write func(*strings.Builder)) {
+		var t strings.Builder
+		write(&t)
+		if t.Len() == 0 {
+			return
+		}
+		if gap {
+			sb.WriteString(" ")
+		}
+		sb.WriteString(t.String())
+		gap = true
+	}
+	text := func(xs []doc.Inline) { add(func(t *strings.Builder) { w.inline(t, xs) }) }
+	for i := range bs {
+		b := &bs[i]
+		switch b.Type {
+		case doc.BlockParagraph, doc.BlockHeading:
+			text(b.Inlines)
+		case doc.BlockCode:
+			if s := strings.ReplaceAll(strings.TrimSuffix(b.Text, "\n"), "\n", " "); s != "" {
+				add(func(t *strings.Builder) { t.WriteString("<code>" + esc(s) + "</code>") })
+			}
+		case doc.BlockEquation:
+			add(func(t *strings.Builder) {
+				w.inlineMath(t, doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error})
+			})
+		case doc.BlockFigure:
+			text(b.Caption)
+		case doc.BlockTable:
+			text(b.Caption)
+			for _, row := range append([][][]doc.Inline{b.Header}, b.Rows...) {
+				for _, cell := range row {
+					text(cell)
+				}
+			}
+		}
+		gap = w.flatText(sb, b.Children, gap)
+		for _, item := range b.Items {
+			gap = w.flatText(sb, item, gap)
+		}
+	}
+	return gap
 }
 
 // mathPic is math drawn as SVG, its size in points.
@@ -657,7 +736,7 @@ func (w *writer) css() string {
 	p("body { margin: 0; background: #fff; color: #%s; font-family: %s; font-size: %spt; line-height: %s; }",
 		text, fontStack(st.BodyFont, "serif"), num(fs), num(lineHeight))
 	p("article { max-width: 42em; margin: 0 auto; padding: 3em 1.5em 4em; }")
-	p("p { margin: 0 0 %spt; }", num(st.SpaceAfter))
+	p("p { margin: 0 0 %spt; }", num(max(st.SpaceAfter, 0)))
 	if st.FirstLineIndent > 0 {
 		p("article > p + p, blockquote > p + p { text-indent: %sin; }", num(st.FirstLineIndent))
 	}
@@ -675,7 +754,11 @@ func (w *writer) css() string {
 		sizes = []float64{fs * 1.6, fs * 1.3, fs * 1.1}
 	}
 	for level := 1; level <= 6; level++ {
-		p("h%d { font-size: %spt; }", level, num(sizes[min(level, len(sizes))-1]))
+		size := sizes[min(level, len(sizes))-1]
+		if size <= 0 {
+			size = fs
+		}
+		p("h%d { font-size: %spt; }", level, num(size))
 	}
 	p(".num { margin-right: 0.25em; }")
 
@@ -684,8 +767,8 @@ func (w *writer) css() string {
 		titleSize = fs * 2
 	}
 	align := "left"
-	if st.TitleAlign == "center" {
-		align = "center"
+	if st.TitleAlign == "center" || st.TitleAlign == "right" {
+		align = st.TitleAlign
 	}
 	p(".running { margin: 0 0 2em; text-align: right; font-size: 0.85em; opacity: 0.7; }")
 	p("header.title { text-align: %s; margin-bottom: 2.5em; }", align)
@@ -797,14 +880,38 @@ func num(v float64) string {
 	return strconv.FormatFloat(math.Round(v*100)/100, 'f', -1, 64)
 }
 
-// esc escapes text for HTML content or attributes, dropping characters
-// HTML can't hold (and carriage returns).
+// scriptURL is whether a link to u would run code when followed (a
+// javascript:, vbscript: or data: URL), read as browsers do: ignoring the
+// tabs, newlines and other control characters in it, and what esc drops.
+func scriptURL(u string) bool {
+	u = strings.Map(func(r rune) rune {
+		if r <= ' ' || dropped(r) {
+			return -1
+		}
+		return r
+	}, u)
+	scheme, _, ok := strings.Cut(u, ":")
+	if !ok {
+		return false
+	}
+	switch strings.ToLower(scheme) {
+	case "javascript", "vbscript", "data":
+		return true
+	}
+	return false
+}
+
+// dropped is whether esc leaves r out: characters HTML can't hold, and
+// carriage returns.
+func dropped(r rune) bool {
+	return r < 0x20 && r != '\t' && r != '\n' || r == 0x7F || r == 0xFFFE || r == 0xFFFF
+}
+
+// esc escapes text for HTML content or attributes, leaving out dropped
+// characters.
 func esc(s string) string {
 	s = strings.Map(func(r rune) rune {
-		if r == '\t' || r == '\n' {
-			return r
-		}
-		if r < 0x20 || r == 0x7F || r == 0xFFFE || r == 0xFFFF {
+		if dropped(r) {
 			return -1
 		}
 		return r

@@ -83,7 +83,9 @@
   font-family: var(--ui);
   color: var(--muted);
 }
-.cm-editor .pw-heading-mark {
+.cm-editor .pw-heading-mark,
+.cm-editor .pw-quote-mark {
+  font-style: normal;
   color: var(--marks);
 }
 .cm-editor .pw-bullet {

@@ -10,6 +10,11 @@ export function useAppEvents() {
   let offMenu: (() => void) | undefined;
   let offRecent: (() => void) | undefined;
   let offBackup: (() => void) | undefined;
+  // A file dropped outside the editor mustn't replace the page.
+  const block = (e: DragEvent) => e.preventDefault();
+  // User templates are edited in a text editor (Design → Edit): coming back
+  // picks up their changes.
+  const focused = () => void refreshTemplates();
 
   onMounted(() => {
     offMenu = Events.On("menu", (e: { data: string }) => menu(e.data));
@@ -17,16 +22,16 @@ export function useAppEvents() {
     offBackup = Events.On("backupFailed", (e: { data: string }) =>
       toast(`Backup: ${e.data}`, "error"),
     );
-    // A file dropped outside the editor mustn't replace the page.
-    window.addEventListener("dragover", (e) => e.preventDefault());
-    window.addEventListener("drop", (e) => e.preventDefault());
-    // User templates are edited in a text editor (Design → Edit): coming back
-    // picks up their changes.
-    window.addEventListener("focus", () => void refreshTemplates());
+    window.addEventListener("dragover", block);
+    window.addEventListener("drop", block);
+    window.addEventListener("focus", focused);
   });
   onUnmounted(() => {
     offMenu?.();
     offRecent?.();
     offBackup?.();
+    window.removeEventListener("dragover", block);
+    window.removeEventListener("drop", block);
+    window.removeEventListener("focus", focused);
   });
 }

@@ -4,6 +4,7 @@
 import { type Position, parseAttrs } from "./attrs";
 import { type Block, type Paragraph, paragraphs, readBlocks } from "./blocks";
 import { readFrontMatter } from "./frontMatter";
+import { type Restarts, reread, splice } from "./restart";
 
 export type Kind = "figure" | "table" | "equation";
 
@@ -75,13 +76,77 @@ export function relabelChanges(
   });
 }
 
-const image = String.raw`!\[((?:\\.|[^\]\\])*)\]\(\s*<?([^)>\s]+)>?(?:\s+"[^"]*")?\s*\)`;
-// A paragraph holding only an image, and maybe an attribute block.
-const figureRe = new RegExp(String.raw`^${image}\s*(\{[^{}]*\})?\s*$`);
-const imageAt = new RegExp(image, "y");
+// Code spans and math bind tighter than an alt text's brackets, and keep
+// their backslashes (goldmark; math as lib/editor/math.ts reads it). masked
+// hides their brackets and backslashes from the image patterns below; it
+// keeps text's length, so matches index text.
+const literalRe =
+  /(?<![\\`])(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)|(?<!\\)\$\$(?:\\.|[^$\\]|\$(?!\$))*\$\$|(?<!\\)\$(?![\s$])(?:\\.|[^$\\])*(?<!\s)\$(?!\d)/g;
+const masked = (text: string) => text.replace(literalRe, (m) => m.replace(/[[\]\\]/g, "\u0001"));
+
+// group is match m's group i, from text: m was matched against masked(text),
+// with indices ("d").
+const group = (m: RegExpExecArray, text: string, i: number) => {
+  const at = m.indices![i];
+  return at && text.slice(...at);
+};
+
+// An image as goldmark reads it: alt text with balanced brackets, then a
+// destination, `<…>` (spaces allowed) or bare (balanced parentheses, maybe
+// empty), and maybe a title. Groups: alt, `<…>` destination, bare one.
+const image = String.raw`!\[((?:\\.|[^[\]\\]|\[(?:\\.|[^[\]\\])*\])*)\]\(\s*(?:<((?:\\.|[^<>\n\\])*)>|((?:\\.|[^\s()\\]|\((?:\\.|[^\s()\\])*\))*))(?:\s+(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\((?:\\.|[^()\\])*\)))?\s*\)`;
+// A paragraph holding only an image, and maybe an attribute block (after
+// white space or a `\` line break).
+const figureRe = new RegExp(String.raw`^${image}(?:\s|\\\n)*(\{[^{}]*\})?\s*$`, "d");
+const imageAt = new RegExp(image, "yd");
 const trailingAttrs = /\s*(\{[^{}]*\})\s*$/;
 const tableCaption = /^(?:table:|:\s)/i;
 const figureCaption = /^figure:/i;
+
+// imageSrc is an image's destination as goldmark reads it (internal/doc's
+// destination): escapes undone, then numeric character references
+// (`&#38;`, `&#x26;`), then named ones (`&amp;`).
+const imageSrc = (m: RegExpExecArray, text: string) =>
+  (group(m, text, 2) ?? group(m, text, 3)!)
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(/&#(?:[xX]([0-9a-fA-F]+)|([0-9]{1,7}));/g, (_, hex?: string, dec?: string) => {
+      // goldmark parses decimal ones with Go's base prefixes: a leading 0
+      // reads as octal, and as 0 when it isn't.
+      const code =
+        hex !== undefined
+          ? parseInt(hex, 16)
+          : dec!.length > 1 && dec![0] === "0"
+            ? /[89]/.test(dec!)
+              ? 0
+              : parseInt(dec!, 8)
+            : Number(dec);
+      return code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
+        ? String.fromCodePoint(code)
+        : "\ufffd";
+    })
+    .replace(/&[A-Za-z0-9]+;/g, entity);
+
+// entity is what a named character reference (`&amp;`) stands for, as
+// written when it's no HTML entity. The web view's own decoder knows them
+// all; without one (tests) only the common ones are known.
+let decoder: HTMLTextAreaElement | undefined;
+const commonEntities: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&apos;": "'",
+  "&nbsp;": "\u00a0",
+};
+function entity(ref: string): string {
+  if (typeof document === "undefined") return commonEntities[ref] ?? ref;
+  decoder ??= document.createElement("textarea");
+  decoder.innerHTML = ref;
+  const s = decoder.value;
+  // A name the decoder doesn't know whole can start with one it knows
+  // without its `;` (`&ampx;` reads `&x;`): goldmark leaves those be.
+  return s.endsWith(";") && s !== ";" ? ref : s;
+}
 
 // texReads mirrors internal/doc's check of an equation's TeX: one with a `}`
 // that closes nothing isn't drawn, so it isn't numbered.
@@ -95,7 +160,19 @@ function texReads(tex: string): boolean {
   return true;
 }
 
-const unescapeAlt = (s: string) => s.replace(/\\([\]\\[])/g, "$1");
+// outsideLiteral applies f to s outside its code spans and math, which keep
+// their backslashes as written.
+function outsideLiteral(s: string, f: (part: string) => string): string {
+  let out = "";
+  let last = 0;
+  for (const m of s.matchAll(literalRe)) {
+    out += f(s.slice(last, m.index)) + m[0];
+    last = m.index + m[0].length;
+  }
+  return out + f(s.slice(last));
+}
+
+const unescapeAlt = (s: string) => outsideLiteral(s, (p) => p.replace(/\\([\]\\[])/g, "$1"));
 
 // figureOf reads a paragraph holding only an image and maybe an attribute
 // block, or a grid: two or more images apart only by white space, then a
@@ -109,15 +186,16 @@ function figureOf(p: Paragraph): Omit<Item, "number"> | null {
     line: first.line + 1,
     prefix: p.prefix,
   };
-  const fig = figureRe.exec(text);
+  const hidden = masked(text);
+  const fig = figureRe.exec(hidden);
   if (fig) {
-    const a = parseAttrs(fig[3]);
+    const a = parseAttrs(fig[4]);
     return {
       kind: "figure",
       label: a.id,
-      caption: unescapeAlt(fig[1]),
+      caption: unescapeAlt(group(fig, text, 1)!),
       ...at,
-      pictures: [{ src: fig[2], alt: "" }],
+      pictures: [{ src: imageSrc(fig, text), alt: "" }],
       width: a.width,
       position: a.position,
     };
@@ -125,9 +203,9 @@ function figureOf(p: Paragraph): Omit<Item, "number"> | null {
   const pictures: Picture[] = [];
   let pos = 0;
   let gap = "";
-  for (let m; (imageAt.lastIndex = pos), (m = imageAt.exec(text));) {
-    pictures.push({ src: m[2], alt: unescapeAlt(m[1]) });
-    gap = /^\s*/.exec(text.slice(imageAt.lastIndex))![0];
+  for (let m; (imageAt.lastIndex = pos), (m = imageAt.exec(hidden));) {
+    pictures.push({ src: imageSrc(m, text), alt: unescapeAlt(group(m, text, 1)!) });
+    gap = /^(?:\s|\\\n)*/.exec(text.slice(imageAt.lastIndex))![0];
     pos = imageAt.lastIndex + gap.length;
   }
   const rest = text.slice(pos);
@@ -155,9 +233,101 @@ function figureOf(p: Paragraph): Omit<Item, "number"> | null {
 // footnotes, which the Go side numbers where the note's mark is, are left
 // out.
 export function scan(text: string): Item[] {
-  const items: Item[] = [];
+  return scanItems(text).items;
+}
+
+// A display equation at the top level of the document, which the editor
+// shows as a block: its TeX, and its label (`eq:` ones only, as internal/doc
+// reads them).
+export interface DisplayEquation {
+  from: number; // its opening `$$` line
+  to: number; // the end of its closing `$$` line
+  tex: string;
+  label: string;
+}
+
+// A reading of the document: its items (see scan), its closed display
+// equations outside lists, quotes and footnotes, labelled or not, and where
+// it can be read again from after an edit.
+export interface ItemScan {
+  items: Item[];
+  equations: DisplayEquation[];
+  restarts: Restarts;
+}
+
+type Read = Pick<ItemScan, "items" | "equations">;
+
+// scanItems reads text whole.
+export function scanItems(text: string): ItemScan {
+  const fm = readFrontMatter(text).to;
+  const restarts: Restarts = { at: [], line: [] };
+  let line = 0;
+  for (let i = text.indexOf("\n"); i >= 0 && i < fm; i = text.indexOf("\n", i + 1)) line++;
+  const read = readItems(text, fm, line, (at, l) => {
+    restarts.at.push(at);
+    restarts.line.push(l);
+    return false;
+  });
+  return { items: numbered(read.items), equations: read.equations, restarts };
+}
+
+// rescanItems reads text again after the edit that made it from the text
+// prev read: fromA–toA of that text became fromA–toB.
+export function rescanItems(
+  prev: ItemScan,
+  text: string,
+  fromA: number,
+  toA: number,
+  toB: number,
+): ItemScan {
+  // The front matter is where reading starts, the first restart point.
+  if (readFrontMatter(text).to !== prev.restarts.at[0]) return scanItems(text);
+  let fresh: Read = { items: [], equations: [] };
+  const r = reread(prev.restarts, fromA, toA, toB, (from, line, point) => {
+    fresh = readItems(text, from, line, point);
+  });
+  if (!r) return scanItems(text);
+  const { shift, lines } = r;
+  const move = <T extends { from: number; to: number }>(x: T): T => ({
+    ...x,
+    from: x.from + shift,
+    to: x.to + shift,
+  });
+  const items = splice(prev.items, fresh.items, r, (x) => {
+    const y = move(x);
+    y.line += lines;
+    if (y.tableFrom !== undefined) y.tableFrom += shift;
+    if (y.tableTo !== undefined) y.tableTo += shift;
+    if (y.captionFrom !== undefined) y.captionFrom += shift;
+    if (y.captionTo !== undefined) y.captionTo += shift;
+    return y;
+  });
+  return {
+    items: numbered(items),
+    equations: splice(prev.equations, fresh.equations, r, move),
+    restarts: r.restarts,
+  };
+}
+
+// numbered numbers items in order, by kind.
+function numbered(items: Item[]): Item[] {
   const count: Record<Kind, number> = { figure: 0, table: 0, equation: 0 };
-  const push = (x: Omit<Item, "number">) => items.push({ ...x, number: ++count[x.kind] });
+  return items.map((x) => {
+    const number = ++count[x.kind];
+    return x.number === number ? x : { ...x, number };
+  });
+}
+
+// readItems reads the items and display equations from a restart point (see
+// readBlocks), unnumbered.
+function readItems(
+  text: string,
+  from: number,
+  line: number,
+  point: (at: number, line: number) => boolean,
+): Read {
+  const items: Item[] = [];
+  const push = (x: Omit<Item, "number">) => items.push({ ...x, number: 0 });
   const visit = (blocks: Block[]) => {
     const list = paragraphs(blocks);
     for (let i = 0; i < list.length; i++) {
@@ -219,8 +389,20 @@ export function scan(text: string): Item[] {
       }
     }
   };
-  visit(readBlocks(text, readFrontMatter(text).to).children);
-  return items;
+  const root = readBlocks(text, from, line, point);
+  visit(root.children);
+  const equations: DisplayEquation[] = [];
+  for (const b of root.children) {
+    if (b.type !== "equation" || !b.closed) continue;
+    const id = parseAttrs(b.attrs || undefined).id;
+    equations.push({
+      from: b.from,
+      to: b.to,
+      tex: b.tex.trim(),
+      label: id.startsWith("eq:") ? id : "",
+    });
+  }
+  return { items, equations };
 }
 
 function slug(s: string): string {
@@ -253,8 +435,26 @@ export function uniqueLabel(
   return label;
 }
 
+// escapeCaption escapes brackets and backslashes, leaving code spans and
+// math (`$\alpha$`) as written: goldmark reads them before the brackets.
 function escapeCaption(s: string): string {
-  return s.replace(/([\][\\])/g, "\\$1").replace(/\s*\n\s*/g, " ");
+  return outsideLiteral(s.replace(/\s*\n\s*/g, " "), (p) => p.replace(/([\][\\])/g, "\\$1"));
+}
+
+// linkText makes Markdown (text selected in the editor) a link's text: its
+// brackets escaped, outside code and math, and a backslash ending it doubled,
+// so they can't end the link early. Its other escapes stay as they are.
+export function linkText(md: string): string {
+  return outsideLiteral(md, (p) => p.replace(/(?<!\\)[[\]]/g, "\\$&")).replace(
+    /(?<!\\)(\\\\)*\\$/,
+    "$&\\",
+  );
+}
+
+// destination writes src as an image's destination, between `<…>` when it
+// holds spaces or parentheses (`images/my picture (1).png`).
+function destination(src: string): string {
+  return /[\s()<>]/.test(src) ? `<${src.replace(/[<>]/g, "\\$&")}>` : src;
 }
 
 export interface FigureSpec {
@@ -277,10 +477,11 @@ export function figureMarkdown(f: FigureSpec): string {
     f.position ? `align=${f.position}` : "",
   ].filter(Boolean);
   const block = attrs.length ? `{${attrs.join(" ")}}` : "";
-  if (!grid) return `![${escapeCaption(f.caption)}](${f.pictures[0]?.src ?? ""})${block}`;
+  if (!grid)
+    return `![${escapeCaption(f.caption)}](${destination(f.pictures[0]?.src ?? "")})${block}`;
   const caption = f.caption.replace(/\s*\n\s*/g, " ").trim();
   return [
-    ...f.pictures.map((p) => `![${escapeCaption(p.alt)}](${p.src})`),
+    ...f.pictures.map((p) => `![${escapeCaption(p.alt)}](${destination(p.src)})`),
     ["Figure:", caption, block].filter(Boolean).join(" "),
   ].join("\n");
 }
@@ -303,30 +504,6 @@ export function captionMarkdown(caption: string, label: string): string {
     /:\s+\{/,
     ": {",
   );
-}
-
-// A display equation at the top level of the document, which the editor
-// shows as a block: its TeX, and its label (`eq:` ones only, as internal/doc
-// reads them).
-export interface DisplayEquation {
-  from: number; // its opening `$$` line
-  to: number; // the end of its closing `$$` line
-  tex: string;
-  label: string;
-}
-
-// displayEquations finds the closed display equations outside lists, quotes
-// and footnotes, labelled or not.
-export function displayEquations(text: string): DisplayEquation[] {
-  const out: DisplayEquation[] = [];
-  if (!text.includes("$$")) return out;
-  const root = readBlocks(text, readFrontMatter(text).to);
-  for (const b of root.children) {
-    if (b.type !== "equation" || !b.closed) continue;
-    const id = parseAttrs(b.attrs || undefined).id;
-    out.push({ from: b.from, to: b.to, tex: b.tex.trim(), label: id.startsWith("eq:") ? id : "" });
-  }
-  return out;
 }
 
 // equationMarkdown writes a display equation on lines of its own, its label

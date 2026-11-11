@@ -14,9 +14,9 @@ import (
 
 // runProps are the character properties that nesting accumulates.
 type runProps struct {
-	b, i, strike, code bool
-	style              string  // character style
-	lower              float64 // points to lower the run by (an inline equation)
+	b, i, strike, code, mark bool
+	style                    string  // character style
+	lower                    float64 // points to lower the run by (an inline equation)
 }
 
 // rPr is the run properties element, "" when there are none.
@@ -35,6 +35,9 @@ func (w *writer) rPr(p runProps) string {
 	}
 	if p.lower != 0 {
 		props += fmt.Sprintf(`<w:position w:val="%d"/>`, -half(p.lower))
+	}
+	if p.mark {
+		props += `<w:highlight w:val="yellow"/>`
 	}
 	if style != "" {
 		props = `<w:rStyle w:val="` + style + `"/>` + props
@@ -107,6 +110,9 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline, p runProps) {
 			w.inline(sb, x.Children, q)
 		case doc.InlineStrike:
 			q.strike = true
+			w.inline(sb, x.Children, q)
+		case doc.InlineHighlight:
+			q.mark = true
 			w.inline(sb, x.Children, q)
 		case doc.InlineCode:
 			q.code = true
@@ -214,12 +220,7 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	if w.inNote {
 		// Word has no notes within notes: the text goes in brackets.
 		sb.WriteString(w.run(" (", p))
-		for i, b := range x.Blocks {
-			if i > 0 {
-				sb.WriteString(w.run(" ", p))
-			}
-			w.inline(sb, b.Inlines, p)
-		}
+		w.flatText(sb, x.Blocks, p, false)
 		sb.WriteString(w.run(")", p))
 		return
 	}
@@ -228,11 +229,16 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	out, part, style, indent, right := w.out, w.part, w.paraStyle, w.indent, w.right
 	w.out, w.part, w.paraStyle, w.inNote, w.prefix = &body, &w.noteRels, "FootnoteText", true, footnoteMark
 	w.indent, w.right = 0, 0 // the note starts at its own margin, wherever its mark is
-	// The mark starts the note's first paragraph, or is one of its own before
-	// a table, list, picture or the like (not in its first cell or item).
-	if len(x.Blocks) > 0 {
-		switch x.Blocks[0].Type {
-		case doc.BlockParagraph, doc.BlockHeading, doc.BlockQuote:
+	// The mark starts the note's first paragraph (in a quote, too), or is one
+	// of its own before a table, list, picture or the like (not in its first
+	// cell or item).
+	first := x.Blocks
+	for len(first) > 0 && first[0].Type == doc.BlockQuote {
+		first = first[0].Children
+	}
+	if len(first) > 0 {
+		switch first[0].Type {
+		case doc.BlockParagraph, doc.BlockHeading:
 		default:
 			w.para("FootnoteText", "", "")
 		}
@@ -248,6 +254,51 @@ func (w *writer) footnote(sb *strings.Builder, x doc.Inline, p runProps) {
 	// hidden SEQ fields here count them where the mark is, keeping Word's
 	// numbering of later ones in the text in step.
 	countNumbered(x.Blocks, func(kind string) { sb.WriteString(w.hiddenSeq(kind)) })
+}
+
+// flatText writes the text of blocks in a line, for a note within a note:
+// paragraphs, a list's items, a quote's text, code, an equation, a table's
+// caption and cells and a figure's caption, a space between each (and
+// before the first when gap). It reports whether any text went before
+// what comes next.
+func (w *writer) flatText(sb *strings.Builder, bs []doc.Block, p runProps, gap bool) bool {
+	add := func(runs string) {
+		if runs == "" {
+			return
+		}
+		if gap {
+			sb.WriteString(w.run(" ", p))
+		}
+		sb.WriteString(runs)
+		gap = true
+	}
+	for i := range bs {
+		b := &bs[i]
+		switch b.Type {
+		case doc.BlockParagraph, doc.BlockHeading:
+			add(w.inlines(b.Inlines, p))
+		case doc.BlockCode:
+			q := p
+			q.code = true
+			add(w.run(strings.ReplaceAll(strings.TrimSuffix(b.Text, "\n"), "\n", " "), q))
+		case doc.BlockEquation:
+			add(w.math(doc.Inline{Type: doc.InlineMath, Text: b.Text, Display: true, Error: b.Error}, p))
+		case doc.BlockFigure:
+			add(w.inlines(b.Caption, p))
+		case doc.BlockTable:
+			add(w.inlines(b.Caption, p))
+			for _, row := range append([][][]doc.Inline{b.Header}, b.Rows...) {
+				for _, cell := range row {
+					add(w.inlines(cell, p))
+				}
+			}
+		}
+		gap = w.flatText(sb, b.Children, p, gap)
+		for _, item := range b.Items {
+			gap = w.flatText(sb, item, p, gap)
+		}
+	}
+	return gap
 }
 
 // countNumbered calls f with the SEQ name of each numbered figure, table and

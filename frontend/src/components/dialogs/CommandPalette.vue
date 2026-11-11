@@ -32,6 +32,15 @@ function move(by: number) {
   nextTick(() => list.value?.children[selected.value]?.scrollIntoView({ block: "nearest" }));
 }
 
+// WebKit sends a resting pointer a mouse move when the list scrolls under it:
+// only a real move selects the command there.
+let pointer = "";
+function hover(e: MouseEvent, i: number) {
+  const at = `${e.screenX},${e.screenY}`;
+  if (at !== pointer) selected.value = i;
+  pointer = at;
+}
+
 function key(e: KeyboardEvent) {
   switch (e.key) {
     case "ArrowDown":
@@ -73,7 +82,7 @@ function key(e: KeyboardEvent) {
           role="option"
           :aria-selected="i === selected"
           :class="{ on: i === selected, off: !enabled(c) }"
-          @mousemove="selected = i"
+          @mousemove="hover($event, i)"
           @mousedown.prevent
           @click="run(c)"
         >

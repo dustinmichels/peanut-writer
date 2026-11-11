@@ -166,6 +166,7 @@ li.editing {
 b {
   color: var(--roast);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 em {
   margin-left: 6px;

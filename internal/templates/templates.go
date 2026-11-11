@@ -11,6 +11,7 @@ package templates
 
 import (
 	"archive/zip"
+	"bytes"
 	"cmp"
 	"embed"
 	"encoding/json"
@@ -24,6 +25,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"peanut-writer/internal/atomicfile"
 )
@@ -153,11 +155,11 @@ func Save(c Custom, name, description string) (string, error) {
 
 var hexColor = regexp.MustCompile(`^[0-9A-F]{6}$`)
 
-// Check tidies s (colors upper case, without "#"; fonts trimmed) and reports
-// what's wrong with it.
+// Check tidies s (colors upper case, without "#"; fonts on one line, single
+// spaced: no font's name has a line break) and reports what's wrong with it.
 func (s *Style) Check() error {
 	for _, f := range []*string{&s.BodyFont, &s.HeadingFont, &s.MonoFont} {
-		*f = strings.TrimSpace(*f)
+		*f = strings.Join(strings.FieldsFunc(*f, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) }), " ")
 	}
 	if s.FontSize != 0 && (s.FontSize < 6 || s.FontSize > 72) {
 		return fmt.Errorf("a font size of %gpt is out of range (6–72)", s.FontSize)
@@ -274,12 +276,12 @@ func List() []Template {
 
 // Get finds a template by id, falling back to Default.
 func Get(id string) Template {
-	if id != "" {
-		for _, t := range List() {
-			if t.ID == id {
-				return t
-			}
+	if slices.Contains(builtinOrder, id) {
+		if t, err := loadBuiltin(id); err == nil {
+			return t
 		}
+	} else if t, err := User(id); err == nil {
+		return t
 	}
 	t, err := loadBuiltin(Default)
 	if err != nil {
@@ -334,7 +336,7 @@ func loadUser(dir string) (Template, error) {
 		return Template{}, err
 	}
 	t, err := decode(b)
-	t.ID, t.dir = filepath.Base(dir), dir
+	t.ID, t.dir, t.Builtin = filepath.Base(dir), dir, false // whatever template.json says
 	if t.Name == "" {
 		t.Name = t.ID
 	}
@@ -346,7 +348,9 @@ func loadUser(dir string) (Template, error) {
 	return t, err
 }
 
-// decode reads template.json; Word styles left out take Wordy's look.
+// decode reads template.json; Word styles left out take Wordy's look. Its
+// style (a saved custom template's changes) is checked as a document's
+// custom template is: Typst can't read a color that isn't RRGGBB.
 func decode(b []byte) (Template, error) {
 	t := Template{Docx: DocxStyle{
 		Paper: "letter", Margin: 1, BodyFont: "Aptos", HeadingFont: "Aptos Display", MonoFont: "Menlo",
@@ -354,7 +358,11 @@ func decode(b []byte) (Template, error) {
 		HeadingSizes: []float64{20, 16, 14}, TitleSize: 28, TitleColor: "000000", TitleAlign: "left",
 		CaptionSize: 9, CaptionColor: "0E2841", CaptionItalic: true, AccentColor: "0F4761",
 	}}
-	if err := json.Unmarshal(b, &t); err != nil {
+	err := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &t) // as some editors save it
+	if err == nil {
+		err = t.Style.Check()
+	}
+	if err != nil {
 		return t, fmt.Errorf("template.json: %w", err)
 	}
 	return t, nil
@@ -362,16 +370,22 @@ func decode(b []byte) (Template, error) {
 
 var safeID = regexp.MustCompile(`[^a-z0-9-]+`)
 
-// slug turns s into a folder name: lowercase letters, digits and dashes.
+// slug turns s into a folder name: lowercase letters, digits and dashes, at
+// most 64 of them (a long name would make a name the disk won't take).
 func slug(s string) string {
-	return strings.Trim(safeID.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	s = strings.Trim(safeID.ReplaceAllString(strings.ToLower(s), "-"), "-")
+	return strings.TrimRight(s[:min(len(s), 64)], "-")
 }
 
-// User finds one of the user's templates (not a built-in one) by id.
+// User finds one of the user's templates (not a built-in one) by id: a
+// folder named exactly id (whatever case the disk ignores), as List has it.
 func User(id string) (Template, error) {
-	for _, t := range List() {
-		if t.ID == id && !t.Builtin {
-			return t, nil
+	if dir, err := UserDir(); err == nil && !reserved(id) {
+		entries, _ := os.ReadDir(dir)
+		if i := slices.IndexFunc(entries, func(e fs.DirEntry) bool { return e.Name() == id }); i >= 0 && entries[i].IsDir() {
+			if t, err := loadUser(filepath.Join(dir, id)); err == nil {
+				return t, nil
+			}
 		}
 	}
 	return Template{}, fmt.Errorf("there's no template %q in your templates folder", id)
@@ -440,6 +454,7 @@ func Import(p string) (string, error) {
 	defer zr.Close()
 	var typ, meta *zip.File
 	for _, f := range zr.File {
+		f.Name = strings.ReplaceAll(f.Name, `\`, "/") // as some Windows zippers write it
 		dir, name := path.Split(f.Name)
 		if strings.Count(dir, "/") > 1 || strings.HasPrefix(dir, "__MACOSX/") {
 			continue
@@ -536,5 +551,5 @@ func writeMeta(dir string, t Template) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "template.json"), append(meta, '\n'), 0o644)
+	return atomicfile.Write(filepath.Join(dir, "template.json"), append(meta, '\n'), 0o644)
 }
