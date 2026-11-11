@@ -136,6 +136,7 @@ export const defaultSettings = {
   autoFormat: true,
   headingCase: "none",
   peanut: true,
+  peanutActivity: "chill",
   syncOnSave: false,
   syncOnQuit: true,
 };
@@ -147,6 +148,8 @@ export function effectiveSettings(s: SettingsInfo) {
     autoFormat: s.document.autoFormat ?? s.user.autoFormat ?? defaultSettings.autoFormat,
     headingCase: s.document.headingCase ?? s.user.headingCase ?? defaultSettings.headingCase,
     peanut: s.document.peanut ?? s.user.peanut ?? defaultSettings.peanut,
+    peanutActivity:
+      s.document.peanutActivity ?? s.user.peanutActivity ?? defaultSettings.peanutActivity,
     syncOnSave: s.document.syncOnSave ?? s.user.syncOnSave ?? defaultSettings.syncOnSave,
     syncOnQuit: s.document.syncOnQuit ?? s.user.syncOnQuit ?? defaultSettings.syncOnQuit,
   };

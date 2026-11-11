@@ -1,7 +1,8 @@
 // Peanut, the plush character from github.com/dustinmichels/peanut, trimmed
 // to what the writing buddy needs: body, face, legs, hats, perching on a
-// ledge, walking, bouncing and blinking. Boots, the mustache, material modes
-// and jumps are left behind.
+// ledge, walking, bouncing and blinking. Boots, the mustache and material
+// modes are left behind; the stubby arms, headphones, jamming, joyful jumps
+// and poking at things are the buddy's own.
 
 import * as THREE from "three";
 import { fbm3D } from "./noise";
@@ -11,7 +12,7 @@ import {
   createContactShadowTexture,
   type CorduroyTextureBundle,
 } from "./textureGenerator";
-import { createBirthdayHat, createCowboyHat, type HatKind } from "./hats";
+import { createBirthdayHat, createCowboyHat, createHeadphones, type HatKind } from "./hats";
 
 export interface PeanutModelHandle {
   group: THREE.Group;
@@ -33,8 +34,39 @@ export interface PeanutModelHandle {
   walk: (direction: -1 | 0 | 1) => void;
   // Pop a hat on (swapping out any other) or, with null, take it off.
   setHat: (kind: HatKind | null) => void;
+  // Nod, sway and tap along to the beat, one hand on his headphones.
+  setJamming: (jamming: boolean) => void;
+  // Leap for joy (JUMP_MS long), arms flung up; twirl spins him round in the air.
+  jump: (twirl: boolean) => void;
+  // Turn his back to the camera, or back round again.
+  setFacingAway: (away: boolean) => void;
+  // Turn a little to screen-right and look up, hand on chin.
+  setInspecting: (inspecting: boolean) => void;
+  // Hop and reach up and out to screen-right with the arm on that side, to
+  // prod whatever's above him there (POKE_MS long, touching it POKE_TOUCH_MS in).
+  poke: () => void;
   dispose: () => void;
 }
+
+const JUMP_S = 1.0;
+const JUMP_CROUCH = 0.18; // share of the jump spent crouching, then...
+const JUMP_LAND = 0.8; // ...in the air until this share, then landing
+const JUMP_HEIGHT = 0.7;
+const POKE_S = 1.1;
+const POKE_TOUCH = 0.45; // share of the poke at the top of its hop
+const POKE_HOP = 0.9; // as high as he can go without his head leaving the stage
+// Arms only come out for moves that need them, sprouting from his shoulders,
+// and stay out this long after the last such move so a run of them doesn't flicker.
+const ARMS_LINGER_S = 0.4;
+export const JUMP_MS = JUMP_S * 1000;
+export const POKE_MS = POKE_S * 1000;
+export const POKE_TOUCH_MS = POKE_S * POKE_TOUCH * 1000;
+const INSPECT_TURN = 0.45; // how far he turns toward screen-right to inspect
+const BEAT_HZ = 2; // 120 bpm in his headphones
+
+// The shoulder socket on the x > 0 side, in bodyContainer space: at the top
+// of the lower bulb, a little forward. The other is its mirror image.
+const SHOULDER = new THREE.Vector3(0.76, 1.86, 0.08);
 
 // Standing & perched pose transform definitions. Perched, the bottom of the
 // body (local y 0.75, squashed to ~0.71) rests on the ledge.
@@ -431,18 +463,9 @@ function createBootieUpperGeometry(
   return geom;
 }
 
-// Create one ribbed corduroy leg and authentic plush bootie foot
-function createCorduroyLeg(
-  isRight: boolean,
-  corduroyTextures: CorduroyTextureBundle,
-): {
-  legGroup: THREE.Group;
-  footGroup: THREE.Group;
-} {
-  const legGroup = new THREE.Group();
-
-  // Plush Corduroy Physical Material with micro-fiber velvet sheen
-  const corduroyMaterial = new THREE.MeshPhysicalMaterial({
+// Plush Corduroy Physical Material with micro-fiber velvet sheen
+function createCorduroyMaterial(corduroyTextures: CorduroyTextureBundle): THREE.Material {
+  return new THREE.MeshPhysicalMaterial({
     map: corduroyTextures.map,
     normalMap: corduroyTextures.normalMap,
     normalScale: new THREE.Vector2(1.3, 1.3),
@@ -454,6 +477,38 @@ function createCorduroyLeg(
     sheenRoughness: 0.55,
     side: THREE.DoubleSide,
   });
+}
+
+// One stubby corduroy arm hanging from its shoulder pivot (side +1 or -1:
+// the side of the body it's on), ending in a round mitten. Its rotation is
+// its pose: x pitches it forward (negative) or back, then z splays it out.
+function createArm(side: 1 | -1, material: THREE.Material): THREE.Group {
+  const shoulder = new THREE.Group();
+  shoulder.position.set(side * SHOULDER.x, SHOULDER.y, SHOULDER.z);
+  shoulder.rotation.order = "ZXY";
+  const sleeve = new THREE.Mesh(new THREE.CapsuleGeometry(0.078, 0.5, 6, 20), material);
+  sleeve.position.y = -0.3;
+  const mitten = new THREE.Mesh(new THREE.SphereGeometry(0.118, 24, 16), material);
+  mitten.scale.set(1, 0.92, 1.08);
+  mitten.position.y = -0.66;
+  for (const m of [sleeve, mitten]) {
+    m.castShadow = true;
+    m.receiveShadow = true;
+    shoulder.add(m);
+  }
+  return shoulder;
+}
+
+// Create one ribbed corduroy leg and authentic plush bootie foot
+function createCorduroyLeg(
+  isRight: boolean,
+  corduroyTextures: CorduroyTextureBundle,
+): {
+  legGroup: THREE.Group;
+  footGroup: THREE.Group;
+} {
+  const legGroup = new THREE.Group();
+  const corduroyMaterial = createCorduroyMaterial(corduroyTextures);
 
   // Leg stem cylinder extends from y = 0.04 (deep inside shoe) up to y = 1.0 (inside body dome)
   const legBottomY = 0.04;
@@ -573,14 +628,26 @@ export function createPeanutModel(): PeanutModelHandle {
   mouth.position.set(0, 2.28, 0.835);
   bodyContainer.add(mouth);
 
-  const hats = { cowboy: createCowboyHat(), birthday: createBirthdayHat() };
-  bodyContainer.add(hats.cowboy.group, hats.birthday.group);
+  const hats = {
+    cowboy: createCowboyHat(),
+    birthday: createBirthdayHat(),
+    headphones: createHeadphones(),
+  };
+  bodyContainer.add(hats.cowboy.group, hats.birthday.group, hats.headphones.group);
 
   // 4. Corduroy Legs & Booties
   const { legGroup: leftLeg, footGroup: leftFoot } = createCorduroyLeg(false, corduroyTextures);
   const { legGroup: rightLeg, footGroup: rightFoot } = createCorduroyLeg(true, corduroyTextures);
   rootGroup.add(leftLeg);
   rootGroup.add(rightLeg);
+
+  // 5. Stubby corduroy arms, riding on the body so they sway and squash with it
+  const armMaterial = createCorduroyMaterial(corduroyTextures);
+  const arms = [
+    [createArm(1, armMaterial), 1],
+    [createArm(-1, armMaterial), -1],
+  ] as const;
+  for (const [arm] of arms) bodyContainer.add(arm);
 
   const shadowMat = new THREE.MeshBasicMaterial({
     map: shadowTexture,
@@ -595,12 +662,25 @@ export function createPeanutModel(): PeanutModelHandle {
   shadowMesh.position.set(0, 0.002, 0.02);
   rootGroup.add(shadowMesh);
 
-  // Perched/standing and walking state, each eased in and out
+  // Perched/standing, walking, jamming and inspecting state, each eased in and out
   let isSitting = false;
   let sitProgress = 0.0;
   let walkDir: -1 | 0 | 1 = 0;
   let walkAmount = 0.0;
   let walkPhase = 0.0;
+  let heading = 0.0;
+  let facingAway = false;
+  let jamming = false;
+  let jamAmount = 0.0;
+  let inspecting = false;
+  let inspectAmount = 0.0;
+  // One-off moves, by the animation time they started at (-1: not under way)
+  let clock = 0.0;
+  let jumpStart = -1;
+  let jumpTwirl = false;
+  let pokeStart = -1;
+  let armsNeededAt = -Infinity; // when a move last needed his arms
+  let armsOut = 0.0; // 0 tucked away, 1 out
 
   function setSitting(sitting: boolean) {
     isSitting = sitting;
@@ -613,6 +693,28 @@ export function createPeanutModel(): PeanutModelHandle {
   function setHat(kind: HatKind | null) {
     hats.cowboy.setVisible(kind === "cowboy");
     hats.birthday.setVisible(kind === "birthday");
+    hats.headphones.setVisible(kind === "headphones");
+  }
+
+  function setJamming(on: boolean) {
+    jamming = on;
+  }
+
+  function jump(twirl: boolean) {
+    jumpStart = clock;
+    jumpTwirl = twirl;
+  }
+
+  function setInspecting(on: boolean) {
+    inspecting = on;
+  }
+
+  function poke() {
+    pokeStart = clock;
+  }
+
+  function setFacingAway(away: boolean) {
+    facingAway = away;
   }
 
   function animate(
@@ -621,6 +723,8 @@ export function createPeanutModel(): PeanutModelHandle {
     blinkProgress: number,
     deltaSeconds: number,
   ) {
+    clock = time;
+    const lerp = THREE.MathUtils.lerp;
     const sitSpeed = 2.0; // ~0.5s transition
     if (isSitting && sitProgress < 1.0) {
       sitProgress = Math.min(1.0, sitProgress + deltaSeconds * sitSpeed);
@@ -632,10 +736,73 @@ export function createPeanutModel(): PeanutModelHandle {
       walkDir === 0 ? Math.max(0, walkAmount - walkStep) : Math.min(1, walkAmount + walkStep);
     walkPhase += deltaSeconds * Math.PI * 2 * STEP_HZ * walkAmount;
     const w = walkAmount * walkAmount * (3 - 2 * walkAmount); // smoothstep
+    const moodStep = deltaSeconds * 2.5; // ~0.4s to get into or out of a groove
+    jamAmount = jamming ? Math.min(1, jamAmount + moodStep) : Math.max(0, jamAmount - moodStep);
+    inspectAmount = inspecting
+      ? Math.min(1, inspectAmount + moodStep)
+      : Math.max(0, inspectAmount - moodStep);
+    const j = smoothstep(0, 1, jamAmount);
+    const insp = smoothstep(0, 1, inspectAmount);
 
-    // Turn toward the walking direction, or back to the camera's three-quarter view
-    const heading = walkDir === 0 ? 0 : CAMERA_YAW + walkDir * WALK_HEADING;
-    rootGroup.rotation.y += (heading - rootGroup.rotation.y) * Math.min(1, deltaSeconds * 8);
+    // The beat: a nod down and back up on each one
+    const beat = time * BEAT_HZ;
+    const nod = (1 - Math.cos(beat * Math.PI * 2)) / 2;
+
+    // A jump: crouch, fly (stretched while fast, arms flung up, legs tucked
+    // back, maybe twirling), then land with a squash as the arms come down
+    let jumpLift = 0;
+    let crouch = 0;
+    let stretch = 0;
+    let armsUp = 0;
+    let tuck = 0;
+    let land = 0;
+    let turn = 0;
+    if (jumpStart >= 0) {
+      const p = (time - jumpStart) / JUMP_S;
+      if (p >= 1 || p < 0) jumpStart = -1;
+      else if (p < JUMP_CROUCH) crouch = Math.sin(((p / JUMP_CROUCH) * Math.PI) / 2);
+      else if (p < JUMP_LAND) {
+        const a = (p - JUMP_CROUCH) / (JUMP_LAND - JUMP_CROUCH);
+        jumpLift = 4 * a * (1 - a) * JUMP_HEIGHT;
+        stretch = Math.abs(1 - 2 * a);
+        armsUp = smoothstep(0, 0.2, a);
+        tuck = Math.sin(a * Math.PI);
+        if (jumpTwirl) turn = smoothstep(0.05, 0.95, a) * Math.PI * 2;
+      } else {
+        const l = (p - JUMP_LAND) / (1 - JUMP_LAND);
+        land = Math.sin(l * Math.PI);
+        armsUp = 1 - smoothstep(0, 0.7, l);
+      }
+    }
+
+    // A poke: the near hand reaches up, he hops and jabs, holds a moment and
+    // comes back down
+    let reach = 0;
+    let jab = 0;
+    if (pokeStart >= 0) {
+      const p = (time - pokeStart) / POKE_S;
+      if (p >= 1 || p < 0) pokeStart = -1;
+      else {
+        reach = smoothstep(0, 0.3, p) * (1 - smoothstep(0.75, 1, p));
+        jab = Math.sin(smoothstep(POKE_TOUCH - 0.15, POKE_TOUCH + 0.15, p) * Math.PI);
+      }
+    }
+
+    // Arms sprout for jamming, inspecting, poking and jumping, and tuck away after
+    if (jamming || inspecting || jumpStart >= 0 || pokeStart >= 0) armsNeededAt = time;
+    const armsWanted = time - armsNeededAt < ARMS_LINGER_S;
+    armsOut = armsWanted
+      ? Math.min(1, armsOut + deltaSeconds * 5)
+      : Math.max(0, armsOut - deltaSeconds * 5);
+
+    // Turn toward the walking direction, his back to the camera, or back to
+    // the camera's three-quarter view; inspecting, a little toward
+    // screen-right. Big turns, like showing his back, go slower.
+    const targetHeading =
+      walkDir !== 0 ? CAMERA_YAW + walkDir * WALK_HEADING : facingAway ? CAMERA_YAW + Math.PI : 0;
+    const turnRate = Math.abs(targetHeading - heading) > Math.PI / 2 ? 3.5 : 8;
+    heading += (targetHeading - heading) * Math.min(1, deltaSeconds * turnRate);
+    rootGroup.rotation.y = heading + turn + INSPECT_TURN * insp;
 
     // Blink: squeeze the bead eyes flat and back open
     const eyeScaleY = 1.0 - 0.9 * Math.sin(blinkProgress * Math.PI);
@@ -643,6 +810,7 @@ export function createPeanutModel(): PeanutModelHandle {
     rightEye.scale.y = eyeScaleY;
     hats.cowboy.update(deltaSeconds);
     hats.birthday.update(deltaSeconds);
+    hats.headphones.update(deltaSeconds);
 
     const s = sitProgress * sitProgress * (3 - 2 * sitProgress); // smoothstep
 
@@ -655,15 +823,14 @@ export function createPeanutModel(): PeanutModelHandle {
     const walkBob = -Math.abs(Math.sin(walkPhase)) * 0.05 * w;
 
     // Body perching position, rotation & squash
-    const seatPosY = THREE.MathUtils.lerp(STAND_BODY_POS.y, PERCH_BODY_POS.y, s) + walkBob;
-    const seatPosZ = THREE.MathUtils.lerp(STAND_BODY_POS.z, PERCH_BODY_POS.z, s);
-    const seatTiltX = THREE.MathUtils.lerp(0, -0.05, s);
-    const seatSquashY = THREE.MathUtils.lerp(1.0, 0.95, s);
-    const seatSquashXZ = THREE.MathUtils.lerp(1.0, 1.03, s);
+    const seatPosY = lerp(STAND_BODY_POS.y, PERCH_BODY_POS.y, s) + walkBob - nod * 0.04 * j;
+    const seatPosZ = lerp(STAND_BODY_POS.z, PERCH_BODY_POS.z, s);
+    const seatTiltX = lerp(0, -0.05, s);
+    const seatSquashY = lerp(1.0, 0.95, s);
+    const seatSquashXZ = lerp(1.0, 1.03, s);
 
     // Contact shadow on the floor while standing; perched there's no floor below
-    shadowMesh.position.y = 0.002;
-    shadowMat.opacity = THREE.MathUtils.lerp(0.85, 0, s);
+    shadowMat.opacity = lerp(0.85, 0, s);
 
     // Legs swing from standing to dangling in sync with the body's descent
     const rotS = Math.min(1.0, Math.pow(s, 0.75));
@@ -672,27 +839,31 @@ export function createPeanutModel(): PeanutModelHandle {
     rightFoot.quaternion.copy(STAND_RIGHT_FOOT_QUAT).slerp(PERCH_RIGHT_FOOT_QUAT, rotS);
     leftFoot.quaternion.copy(STAND_LEFT_FOOT_QUAT).slerp(PERCH_LEFT_FOOT_QUAT, rotS);
 
-    // Dangling feet kick out of step; walking legs stride out of step
-    const kick = Math.sin(time * 2.4) * 0.16 * s;
+    // Dangling feet kick out of step (to the beat when jamming); walking legs
+    // stride out of step; jumping legs both tuck back
+    const kick =
+      Math.sin(time * 2.4) * 0.16 * s * (1 - j) + Math.sin(beat * Math.PI) * 0.22 * s * j;
     const stride = Math.sin(walkPhase) * 0.5 * w;
-    tempBounceQuat.setFromEuler(tempBounceEuler.set(kick + stride, 0, 0));
+    tempBounceQuat.setFromEuler(tempBounceEuler.set(kick + stride + tuck * 0.25, 0, 0));
     rightLeg.quaternion.multiply(tempBounceQuat);
-    tempBounceQuat.setFromEuler(tempBounceEuler.set(-kick - stride, 0, 0));
+    tempBounceQuat.setFromEuler(tempBounceEuler.set(-kick - stride + tuck * 0.25, 0, 0));
     leftLeg.quaternion.multiply(tempBounceQuat);
+    // Standing, he taps a toe to the beat
+    const tap = Math.max(0, Math.sin(beat * Math.PI * 2)) * j * (1 - s);
+    tempBounceQuat.setFromEuler(tempBounceEuler.set(-0.45 * tap, 0, 0));
+    rightFoot.quaternion.multiply(tempBounceQuat);
 
     let squashY = 1.0;
     let squashXZ = 1.0;
     let wiggleZ = 0.0;
-    rootGroup.position.y = 0;
+    let bounceLift = 0;
     if (bounceProgress > 0) {
       // Bounce squash and stretch physics
       const p = bounceProgress;
-      const jumpHeight = Math.sin(p * Math.PI) * 0.38;
+      bounceLift = Math.sin(p * Math.PI) * 0.38;
       squashY = 1.0 + Math.sin(p * Math.PI * 2) * 0.15;
       squashXZ = 1.0 - Math.sin(p * Math.PI * 2) * 0.1;
       wiggleZ = Math.sin(p * Math.PI * 4) * 0.08;
-      rootGroup.position.y = jumpHeight;
-      shadowMesh.position.y = 0.002 - jumpHeight;
 
       // Playful bounce kick/swing
       const bounceSwing = Math.sin(p * Math.PI) * (0.25 * (1.0 - s * 0.5));
@@ -702,26 +873,72 @@ export function createPeanutModel(): PeanutModelHandle {
       tempBounceQuat.setFromEuler(tempBounceEuler.set(-bounceSwing, 0, -bounceKick));
       rightLeg.quaternion.multiply(tempBounceQuat);
     }
+    squashY *= (1 - 0.16 * crouch) * (1 + 0.1 * stretch) * (1 - 0.14 * land);
+    squashXZ *= (1 + 0.09 * crouch) * (1 - 0.05 * stretch) * (1 + 0.08 * land);
+    rootGroup.position.y = bounceLift + jumpLift + jab * POKE_HOP;
+    shadowMesh.position.y = 0.002 - rootGroup.position.y;
+    shadowMesh.scale.setScalar(1 - jumpLift * 0.3);
+
     bodyContainer.position.set(0, seatPosY, seatPosZ);
     bodyContainer.scale.set(
       breatheScaleXZ * seatSquashXZ * squashXZ,
       breatheScaleY * seatSquashY * squashY,
       breatheScaleXZ * seatSquashXZ * squashXZ,
     );
-    bodyContainer.rotation.z = swayTiltZ + wiggleZ;
-    bodyContainer.rotation.x = seatTiltX + swayTiltX;
+    // Jamming he sways a beat each way and nods on every one; inspecting he
+    // leans back to look up, tilting his head this way and that
+    bodyContainer.rotation.z =
+      swayTiltZ +
+      wiggleZ +
+      Math.sin(beat * Math.PI) * 0.08 * j +
+      Math.sin(time * 1.3) * 0.07 * insp;
+    bodyContainer.rotation.x = seatTiltX + swayTiltX + nod * 0.12 * j - 0.1 * insp;
 
-    // Dynamically compute leg positions attached to hip sockets
-    bodyContainer.updateMatrixWorld(true);
-    tempTargetHipR.copy(HIP_RIGHT_LOCAL).applyMatrix4(bodyContainer.matrixWorld);
-    tempTargetHipL.copy(HIP_LEFT_LOCAL).applyMatrix4(bodyContainer.matrixWorld);
+    // Arms hang loose, swinging opposite the legs when walking, hands in his
+    // lap when perched, flapping when he bounces. Facing the camera, the
+    // x > 0 arm is the one on screen-right.
+    const swing = Math.sin(walkPhase) * 0.45 * w;
+    const flap = bounceProgress > 0 ? Math.sin(bounceProgress * Math.PI) * 0.5 : 0;
+    for (const [arm, side] of arms) {
+      let pitch = lerp(-0.12, -0.5, s) - side * swing;
+      let splay = lerp(0.55, 0.42, s) + flap;
+      // Jamming: one hand holds his headphones, the other pumps the beat
+      if (side === 1) {
+        pitch = lerp(pitch, -0.25, j);
+        splay = lerp(splay, 2.75 + nod * 0.08, j);
+      } else {
+        pitch = lerp(pitch, -1.3 + Math.sin(beat * Math.PI * 2) * 0.35, j);
+        splay = lerp(splay, 0.35, j);
+      }
+      // Inspecting: the screen-left hand to his chin; poking: the other
+      // reaches up and out, jabbing higher at the top of the hop
+      if (side === -1) {
+        pitch = lerp(pitch, -1.9, insp);
+        splay = lerp(splay, 0.6, insp);
+      } else {
+        pitch = lerp(pitch, -0.3, reach);
+        splay = lerp(splay, 2.3 + jab * 0.15, reach);
+      }
+      // Jumping: swung back in the crouch, flung up and waving in the air
+      pitch = lerp(lerp(pitch, 0.55, crouch), -0.2, armsUp);
+      splay = lerp(lerp(splay, 0.3, crouch), 2.5 + Math.sin(time * 18 + side) * 0.15, armsUp);
+      arm.rotation.set(pitch, 0, side * splay);
+      arm.visible = armsOut > 0;
+      arm.scale.setScalar(Math.max(0.001, smoothstep(0, 1, armsOut)));
+    }
+
+    // Dynamically compute leg positions attached to hip sockets, in the root
+    // group's space (the legs' parent), so a lift or turn isn't applied twice
+    bodyContainer.updateMatrix();
+    tempTargetHipR.copy(HIP_RIGHT_LOCAL).applyMatrix4(bodyContainer.matrix);
+    tempTargetHipL.copy(HIP_LEFT_LOCAL).applyMatrix4(bodyContainer.matrix);
     tempLegVecR.copy(LEG_HIP_OFFSET).applyQuaternion(rightLeg.quaternion);
     rightLeg.position.copy(tempTargetHipR).sub(tempLegVecR);
     tempLegVecL.copy(LEG_HIP_OFFSET).applyQuaternion(leftLeg.quaternion);
     leftLeg.position.copy(tempTargetHipL).sub(tempLegVecL);
 
     // Standing feet stay on the floor; perched they hang below it
-    if (bounceProgress <= 0 && s === 0) {
+    if (rootGroup.position.y === 0 && s === 0) {
       if (rightLeg.position.y < 0.002) rightLeg.position.y = 0.002;
       if (leftLeg.position.y < 0.002) leftLeg.position.y = 0.002;
     }
@@ -747,10 +964,25 @@ export function createPeanutModel(): PeanutModelHandle {
     ]) {
       t.dispose();
     }
-    // For the birthday hat's textures; their meshes went with the rest above.
+    // For the hats' own extras (the birthday hat's textures); their meshes
+    // went with the rest above.
     hats.cowboy.dispose();
     hats.birthday.dispose();
+    hats.headphones.dispose();
   }
 
-  return { group: rootGroup, mouth, animate, setSitting, walk, setHat, dispose };
+  return {
+    group: rootGroup,
+    mouth,
+    animate,
+    setSitting,
+    walk,
+    setHat,
+    setJamming,
+    jump,
+    setInspecting,
+    poke,
+    setFacingAway,
+    dispose,
+  };
 }

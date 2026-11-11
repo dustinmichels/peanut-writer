@@ -9,14 +9,17 @@ import { errorText, state, toast } from "@/lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 
-type Key = "autoFormat" | "headingCase" | "syncOnSave" | "syncOnQuit" | "peanut";
+type Key = "autoFormat" | "headingCase" | "syncOnSave" | "syncOnQuit" | "peanut" | "peanutActivity";
 type Value = boolean | string;
-// A field is a checkbox, or a choice among options.
+// A field is a checkbox, or a choice among options: radio buttons, or a
+// segmented toggle. One that needs another checkbox is dimmed while it's off.
 const fields: {
   key: Key;
   label: string;
   hint: string;
   options?: { value: string; label: string }[];
+  toggle?: boolean;
+  needs?: Key;
 }[] = [
   {
     key: "autoFormat",
@@ -32,6 +35,7 @@ const fields: {
       { value: "title", label: "Title Case: “The Lord of the Rings”" },
       { value: "sentence", label: "Sentence case: “The lord of the rings”" },
     ],
+    needs: "autoFormat",
   },
   {
     key: "syncOnSave",
@@ -47,6 +51,17 @@ const fields: {
     key: "peanut",
     label: "Show Peanut",
     hint: "Peanut keeps you company beside the ribbon tabs.",
+  },
+  {
+    key: "peanutActivity",
+    label: "Peanut's activity level",
+    hint: "Chill: he gets up to something every half minute or so. Busy: every few seconds, and more often his tricks: jamming in his headphones, jumping for joy, inspecting the Commands button.",
+    options: [
+      { value: "chill", label: "Chill" },
+      { value: "busy", label: "Busy" },
+    ],
+    toggle: true,
+    needs: "peanut",
   },
 ];
 
@@ -131,6 +146,7 @@ async function submit() {
   const before = effectiveSettings(i);
   const after = effectiveSettings({ ...i, user, document: doc });
   state.showPeanut = after.peanut;
+  state.peanutBusy = after.peanutActivity === "busy";
   state.syncOnSave = after.syncOnSave;
   state.syncOnQuit = after.syncOnQuit;
   emit("close");
@@ -149,7 +165,7 @@ async function submit() {
         placeholder="Filter settings"
         aria-label="Filter settings"
       />
-      <div class="scopes" role="tablist">
+      <div class="segmented" role="tablist">
         <button
           type="button"
           role="tab"
@@ -174,7 +190,7 @@ async function submit() {
         v-for="f in shown"
         :key="f.key"
         class="field"
-        :class="{ off: f.options && !value('autoFormat') }"
+        :class="{ off: f.needs && !value(f.needs) }"
       >
         <div class="head">
           <label v-if="!f.options" class="check"
@@ -196,13 +212,37 @@ async function submit() {
             <RotateCcw :size="14" />
           </button>
         </div>
-        <div v-if="f.options" class="choices" role="radiogroup" :aria-labelledby="`${f.key}-label`">
+        <div
+          v-if="f.toggle"
+          class="segmented toggle"
+          role="radiogroup"
+          :aria-labelledby="`${f.key}-label`"
+        >
+          <button
+            v-for="o in f.options"
+            :key="o.value"
+            type="button"
+            role="radio"
+            :aria-checked="value(f.key) === o.value"
+            :class="{ on: value(f.key) === o.value }"
+            :disabled="f.needs && !value(f.needs)"
+            @click="set(f.key, o.value)"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+        <div
+          v-else-if="f.options"
+          class="choices"
+          role="radiogroup"
+          :aria-labelledby="`${f.key}-label`"
+        >
           <label v-for="o in f.options" :key="o.value" class="check"
             ><input
               type="radio"
               :name="f.key"
               :checked="value(f.key) === o.value"
-              :disabled="!value('autoFormat')"
+              :disabled="f.needs && !value(f.needs)"
               @change="set(f.key, o.value)"
             />
             {{ o.label }}</label
@@ -249,7 +289,7 @@ async function submit() {
 </template>
 
 <style scoped>
-.scopes {
+.segmented {
   display: flex;
   gap: 2px;
   padding: 3px;
@@ -257,7 +297,7 @@ async function submit() {
   background: var(--panel);
   border: 1px solid var(--border);
 }
-.scopes button {
+.segmented button {
   flex: 1;
   height: 28px;
   border: 0;
@@ -265,14 +305,23 @@ async function submit() {
   background: transparent;
   color: var(--muted);
 }
-.scopes button:hover {
+.segmented button:hover:not(:disabled) {
   color: var(--ink);
 }
-.scopes button.on {
+.segmented button.on {
   background: var(--surface);
   color: var(--roast);
   font-weight: 650;
   box-shadow: 0 1px 2px rgba(80, 40, 10, 0.15);
+}
+.segmented.toggle {
+  align-self: flex-start;
+  margin-left: 4px;
+}
+.segmented.toggle button {
+  flex: none;
+  height: 24px;
+  padding: 0 14px;
 }
 .check {
   display: flex;
@@ -292,7 +341,8 @@ async function submit() {
   gap: 4px;
   padding-left: 4px;
 }
-.off .choices {
+.off .choices,
+.off .toggle {
   opacity: 0.55;
 }
 .field > label:not(.check) {

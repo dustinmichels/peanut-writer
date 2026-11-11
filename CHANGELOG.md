@@ -2,6 +2,10 @@
 
 ## 2026-11-11
 
+- **Peanut** has new tricks: he jams in headphones (notes floating up), jumps for joy, walks a few steps to show off
+  his back, and pokes the Commands button crooked and back. Arms sprout only for the moves that need them. A new
+  **Peanut's activity level** setting picks **Chill** (the default, every half minute or so) or **Busy** (every few
+  seconds, never the same thing twice running).
 - Three new built-in templates: **Technical** (docs and specs: numbered headings, code panels, note callouts),
   **Memo** (From / Date / Re / Subject block, summary bar) and **Book** (title page, "Chapter n" openings on new
   pages, running heads).

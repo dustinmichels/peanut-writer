@@ -143,12 +143,13 @@ type appState struct {
 // (settings.json in the app's config folder), and a document's own (Name.settings.json
 // beside its Name.md), which override the user's. nil means not set.
 type Settings struct {
-	AutoFormat  *bool   `json:"autoFormat,omitempty"`  // saving tidies the Markdown with oxfmt
-	HeadingCase *string `json:"headingCase,omitempty"` // ...and puts headings in "title" or "sentence" case; anything else leaves them as written
-	Author      *string `json:"author,omitempty"`      // a new document's author (global only); nil means the computer user's full name
-	Peanut      *bool   `json:"peanut,omitempty"`      // Peanut keeps you company beside the ribbon tabs; nil means on
-	SyncOnSave  *bool   `json:"syncOnSave,omitempty"`  // saving also writes the PDF and Word copies, as Sync Files does; nil means off
-	SyncOnQuit  *bool   `json:"syncOnQuit,omitempty"`  // quitting or opening another document also writes the copies; nil means on
+	AutoFormat     *bool   `json:"autoFormat,omitempty"`     // saving tidies the Markdown with oxfmt
+	HeadingCase    *string `json:"headingCase,omitempty"`    // ...and puts headings in "title" or "sentence" case; anything else leaves them as written
+	Author         *string `json:"author,omitempty"`         // a new document's author (global only); nil means the computer user's full name
+	Peanut         *bool   `json:"peanut,omitempty"`         // Peanut keeps you company beside the ribbon tabs; nil means on
+	PeanutActivity *string `json:"peanutActivity,omitempty"` // how much Peanut gets up to: "busy", or anything else (nil too) for "chill"
+	SyncOnSave     *bool   `json:"syncOnSave,omitempty"`     // saving also writes the PDF and Word copies, as Sync Files does; nil means off
+	SyncOnQuit     *bool   `json:"syncOnQuit,omitempty"`     // quitting or opening another document also writes the copies; nil means on
 }
 
 // SettingsInfo is both sets of settings, and the files they're kept in.

@@ -41,6 +41,7 @@ export async function loadSettings() {
   if (!info || state.path !== path) return undefined;
   const s = effectiveSettings(info);
   state.showPeanut = s.peanut;
+  state.peanutBusy = s.peanutActivity === "busy";
   state.syncOnSave = s.syncOnSave;
   state.syncOnQuit = s.syncOnQuit;
   return s;

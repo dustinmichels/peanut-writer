@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { state } from "@/lib/store";
 import type { HatKind } from "./hats";
+import { JUMP_MS, POKE_MS, POKE_TOUCH_MS } from "./model";
 import { createPeanutStage, LEDGE_DROP_PX, type PeanutStage } from "./stage";
 
 // Peanut keeps you company from beside the ribbon tabs. Mostly he perches on
 // the edge of the tab row with his legs dangling over the ribbon; now and
 // then he stands up, strolls a little way left or right and comes back to
-// his spot, or puts on a cowboy or party hat. He breathes and blinks, and
-// says a word of encouragement only when you click him. What he says fades
-// away slowly.
+// his spot, or puts on a cowboy or party hat. Less often he jams in his
+// headphones, jumps for joy, or goes up to the Commands button for a closer
+// look and knocks it crooked. Busy (Settings), he's up to something every few
+// seconds. He breathes and blinks, and says a word of encouragement only when
+// you click him. What he says fades away slowly.
 
 const CHEERS = [
   "You can do it!",
@@ -27,6 +31,16 @@ const CHEERS = [
 ];
 const SAY_MS = 4000; // from popping out of his mouth to faded away
 const WALK_PX_PER_S = 28;
+// How long he waits between doing things, chill or busy.
+const CHILL_PAUSE_MS: [number, number] = [20_000, 50_000];
+const BUSY_PAUSE_MS: [number, number] = [1_500, 5_000];
+const JAM_MS: [number, number] = [8_000, 14_000];
+const BUSY_JAM_MS: [number, number] = [5_000, 8_000];
+// Inspecting the Commands button, how far his box's right edge goes past its
+// left edge (bringing him in just left of its icon, close enough to reach up
+// and poke it), and how crooked his poke leaves it.
+const INSPECT_OVERLAP = 18;
+const CROOKED_DEG = 14;
 const MIN_STROLL_PX = 40;
 const REST_INSET = 0.2; // share of the open stretch at each end he only strolls through
 const GAP = 10; // kept clear around the title, title bar buttons and tabs
@@ -50,6 +64,8 @@ const tailFrontEl = ref<SVGPathElement>();
 const message = ref("");
 const bubbleSide = ref<"left" | "right">("left");
 const bubbleMax = ref(300);
+const jamming = ref(false); // music notes float up beside him
+const notesEl = ref<HTMLElement>();
 // Offset from where his box sits (px, negative is left) and how long the
 // current walk there takes; 0 moves him at once.
 const x = ref(0);
@@ -65,6 +81,7 @@ function later(ms: number, f: () => void) {
     f();
   }, ms);
   timers.add(t);
+  return t;
 }
 const pause = (ms: number) => new Promise<void>((resolve) => later(ms, resolve));
 
@@ -88,6 +105,11 @@ function onMouth(x: number, y: number) {
   mouthX = x;
   mouthUp = STAGE_ABOVE - y;
   if (message.value) drawTail();
+  // The notes rise from beside his head.
+  if (notesEl.value) {
+    notesEl.value.style.left = `${mouthX + 10}px`;
+    notesEl.value.style.bottom = `${mouthUp + 4}px`;
+  }
 }
 
 // The tail curls from inside the bubble's inner edge to just short of his
@@ -146,14 +168,15 @@ function blinkLoop() {
   });
 }
 
+// The Commands button, first of the title bar buttons.
+const commandsButton = () => document.querySelector<HTMLElement>(".titlebar .right > :first-child");
+
 // Where he may walk, as offsets from his box: standing, his head pokes into
 // the title bar, so he keeps between the centred title and the buttons.
 function strollRange(): [number, number] {
   const home = homeEl.value!.getBoundingClientRect();
   const title = document.querySelector(".titlebar .title")?.getBoundingClientRect();
-  const buttons = document
-    .querySelector(".titlebar .right > :first-child")
-    ?.getBoundingClientRect();
+  const buttons = commandsButton()?.getBoundingClientRect();
   const max = Math.min(0, buttons ? buttons.left - GAP - home.right : 0);
   const min = title ? title.right + GAP - home.left : max;
   return [Math.min(min, max), max];
@@ -182,13 +205,16 @@ async function walkTo(target: number) {
   stage?.walk(0);
 }
 
-// Out to somewhere left or right, a look around, then back to settle
-// somewhere in his resting stretch.
+// Out to somewhere left or right, at least MIN_STROLL_PX away, a look around,
+// then back to settle somewhere in his resting stretch.
 let strolling = false;
 async function stroll() {
   const [min, max] = strollRange();
-  const target = rand(min, max);
-  if (Math.abs(target - x.value) < MIN_STROLL_PX) return;
+  const left = Math.max(0, x.value - MIN_STROLL_PX - min);
+  const right = Math.max(0, max - x.value - MIN_STROLL_PX);
+  if (!left && !right) return; // too little room
+  const roll = Math.random() * (left + right);
+  const target = roll < left ? min + roll : x.value + MIN_STROLL_PX + (roll - left);
   strolling = true;
   if (perched) {
     perch(false);
@@ -213,23 +239,168 @@ function changeHat() {
   stage?.setHat(hat);
 }
 
-// Every so often: stand up or sit back down, stroll out and back, or put on
-// a hat (or take it off).
-function activityLoop() {
-  later(rand(20_000, 50_000), async () => {
-    const roll = Math.random();
-    if (roll < 0.2) changeHat();
-    else if (roll < 0.6) await stroll();
-    else perch(!perched);
-    activityLoop();
-  });
+// Put on headphones (swapping out any hat) and jam for a while, then put the
+// hat back on.
+async function jam() {
+  stage?.setHat("headphones");
+  await pause(500);
+  stage?.setJamming(true);
+  jamming.value = true;
+  await pause(rand(...(state.peanutBusy ? BUSY_JAM_MS : JAM_MS)));
+  stage?.setJamming(false);
+  jamming.value = false;
+  await pause(500);
+  stage?.setHat(hat);
 }
 
+// Two hops for joy, the second with a twirl; perched, he stands up for them
+// and sits back down after.
+async function jumpForJoy() {
+  const wasPerched = perched;
+  if (perched) {
+    perch(false);
+    await pause(700);
+  }
+  stage?.jump(false);
+  await pause(JUMP_MS + 150);
+  stage?.jump(true);
+  await pause(JUMP_MS + 800);
+  if (wasPerched) perch(true);
+}
+
+// A few steps one way, a turn to show off his back a moment, then round
+// again and back to where he was.
+async function showBack() {
+  const [min, max] = strollRange();
+  const start = x.value;
+  const dir = start - min > max - start ? -1 : 1; // toward the roomier side
+  const target = Math.min(max, Math.max(min, start + dir * rand(25, 50)));
+  if (Math.abs(target - start) < 15) return; // too little room
+  strolling = true;
+  const wasPerched = perched;
+  if (perched) {
+    perch(false);
+    await pause(700);
+  }
+  await walkTo(target);
+  await pause(400);
+  stage?.setFacingAway(true);
+  await pause(rand(2000, 3500));
+  stage?.setFacingAway(false);
+  await pause(900);
+  await walkTo(start);
+  strolling = false;
+  await pause(500);
+  if (wasPerched) perch(true);
+}
+
+// The offset from his box that brings him in under the button's icon.
+function inspectX(button: HTMLElement) {
+  const home = homeEl.value!.getBoundingClientRect();
+  return button.getBoundingClientRect().left + INSPECT_OVERLAP - STAGE_W - home.left;
+}
+
+// The button he's visiting, which a resize keeps him beside; null otherwise.
+let visiting: HTMLElement | null = null;
+
+function tilt(button: HTMLElement, deg: number) {
+  button.style.transition = "transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1)";
+  button.style.transform = deg ? `rotate(${deg}deg)` : "";
+}
+
+function straighten(button: HTMLElement) {
+  button.style.transition = "";
+  button.style.transform = "";
+}
+
+// A poke at the button, which leaves it at deg the moment his hand reaches it.
+async function prod(button: HTMLElement, deg: number) {
+  stage?.poke();
+  await pause(POKE_TOUCH_MS);
+  tilt(button, deg);
+  await pause(POKE_MS - POKE_TOUCH_MS);
+}
+
+// Up to the Commands button for a closer look: a poke knocks it crooked, he
+// starts, has another look, pokes it straight, and back to his spot he goes.
+async function inspect() {
+  const button = commandsButton();
+  if (!button) return;
+  strolling = true;
+  if (perched) {
+    perch(false);
+    await pause(700);
+  }
+  await walkTo(inspectX(button));
+  visiting = button;
+  stage?.setInspecting(true);
+  await pause(1500);
+  await prod(button, CROOKED_DEG);
+  stage?.bounce();
+  await pause(1800);
+  await prod(button, 0);
+  await pause(900);
+  straighten(button);
+  visiting = null;
+  stage?.setInspecting(false);
+  await walkTo(restX());
+  strolling = false;
+  await pause(600);
+  perch(true);
+}
+
+// What he gets up to, weighted chill and busy: busy, he's more often up to
+// his tricks.
+const activities: [number, number, () => unknown][] = [
+  [2, 1.5, changeHat],
+  [4, 2.5, stroll],
+  [4, 1.5, () => perch(!perched)],
+  [0.7, 1.5, jam],
+  [0.6, 1.5, jumpForJoy],
+  [0.5, 1.5, inspect],
+  [1.2, 2, showBack],
+];
+
+// Never the same thing twice running, so a busy Peanut keeps changing it up.
+let lastActivity: (typeof activities)[number] | undefined;
+function pickActivity() {
+  const k = state.peanutBusy ? 1 : 0;
+  const options = activities.filter((a) => a !== lastActivity);
+  let roll = Math.random() * options.reduce((sum, a) => sum + a[k], 0);
+  lastActivity = options.find((a) => (roll -= a[k]) < 0) ?? options[0];
+  return lastActivity[2];
+}
+
+// Every so often, one of those, then wait again. Switching between chill and
+// busy restarts the wait, unless he's in the middle of something.
+let nextActivity: ReturnType<typeof setTimeout> | undefined;
+let acting = false;
+function scheduleActivity() {
+  if (nextActivity) {
+    clearTimeout(nextActivity);
+    timers.delete(nextActivity);
+  }
+  nextActivity = later(rand(...(state.peanutBusy ? BUSY_PAUSE_MS : CHILL_PAUSE_MS)), async () => {
+    acting = true;
+    await pickActivity()();
+    acting = false;
+    scheduleActivity();
+  });
+}
+watch(
+  () => state.peanutBusy,
+  () => acting || scheduleActivity(),
+);
+
 // A resized window moves the open stretch: keep him inside it mid-stroll, and
-// inside his resting stretch otherwise.
+// inside his resting stretch otherwise, or beside the button he's visiting.
 function onResize() {
-  const [min, max] = strolling ? strollRange() : restRange();
   walkMs.value = 0;
+  if (visiting) {
+    x.value = inspectX(visiting);
+    return;
+  }
+  const [min, max] = strolling ? strollRange() : restRange();
   x.value = Math.min(max, Math.max(min, x.value));
 }
 
@@ -244,7 +415,7 @@ onMounted(() => {
   window.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("resize", onResize);
   blinkLoop();
-  activityLoop();
+  scheduleActivity();
 });
 
 onBeforeUnmount(() => {
@@ -252,6 +423,7 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", onResize);
   timers.forEach(clearTimeout);
   clearTimeout(hideTimer);
+  if (visiting) straighten(visiting);
   stage?.dispose();
 });
 </script>
@@ -273,6 +445,9 @@ onBeforeUnmount(() => {
         </div>
       </Transition>
       <div ref="stageEl" class="stage" role="img" aria-label="Peanut, your writing buddy" />
+      <div v-if="jamming" ref="notesEl" class="notes" aria-hidden="true">
+        <span>♪</span><span>♫</span><span>♪</span>
+      </div>
     </div>
   </div>
 </template>
@@ -386,5 +561,45 @@ onBeforeUnmount(() => {
 .speech-leave-active {
   animation: none;
   opacity: 0;
+}
+/* Music notes drift up and away beside his head while he jams; onMouth keeps
+   their origin there. */
+.notes {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.notes span {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--roast);
+  opacity: 0;
+  animation: note-float 1.8s ease-out infinite;
+}
+.notes span:nth-child(2) {
+  --drift: -5px;
+  color: var(--accent);
+  animation-delay: 0.6s;
+}
+.notes span:nth-child(3) {
+  --drift: 11px;
+  animation-delay: 1.2s;
+}
+@keyframes note-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(-10deg) scale(0.6);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--drift, 4px), -22px) rotate(12deg) scale(1);
+  }
 }
 </style>

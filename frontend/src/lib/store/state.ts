@@ -75,6 +75,7 @@ export const state = reactive({
   // The editor shows the document's Markdown rather than hiding its marks.
   showMarkdown: localStorage.getItem("showMarkdown") === "1",
   showPeanut: true, // Peanut beside the ribbon tabs (Settings)
+  peanutBusy: false, // Peanut's activity level is "busy", not "chill" (Settings)
   syncOnSave: false, // saving also syncs the PDF and Word copies (Settings)
   syncOnQuit: true, // quitting or opening another document also syncs them (Settings)
   fitZoom: 1,

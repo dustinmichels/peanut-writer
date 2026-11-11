@@ -1,11 +1,12 @@
 // Peanut's hats, from github.com/dustinmichels/peanut: a cowboy hat and a
-// knit party hat. Trimmed to the fleece look, without the jump flutter,
-// countdown or confetti. Each sits on the body container and pops on or off.
+// knit party hat, trimmed to the fleece look, without the jump flutter,
+// countdown or confetti; and a pair of headphones to jam in. Each sits on the
+// body container and pops on or off.
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-export type HatKind = "cowboy" | "birthday";
+export type HatKind = "cowboy" | "birthday" | "headphones";
 
 export interface HatHandle {
   group: THREE.Group;
@@ -545,5 +546,69 @@ export function createBirthdayHat(): HatHandle {
     shadowed(new THREE.Mesh(createRimGeometry(), rim)),
     pomPom,
   );
+  return h;
+}
+
+// ---- Headphones ----
+
+// The band's centre line: half an ellipse from one cup over his top nub to
+// the other, from angle `from` to `to` (0 is the x > 0 cup, π the other).
+function bandCurve(rx: number, ry: number, from: number, to: number): THREE.Curve<THREE.Vector3> {
+  const points: THREE.Vector3[] = [];
+  for (let i = 0; i <= 24; i++) {
+    const t = from + ((to - from) * i) / 24;
+    points.push(new THREE.Vector3(Math.cos(t) * rx, Math.sin(t) * ry, 0));
+  }
+  return new THREE.CatmullRomCurve3(points);
+}
+
+export function createHeadphones(): HatHandle {
+  // Centred on his ears, the band tipped a little back off his face.
+  const h = hat(
+    "Headphones",
+    { y: 2.5, z: 0, rotX: -0.1, rotZ: 0, dropHeight: 0.5, tipX: 0, tipZ: 0.25 },
+    () => {},
+  );
+  const shell = new THREE.MeshPhysicalMaterial({
+    color: 0xd8473f,
+    roughness: 0.32,
+    metalness: 0.05,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.2,
+  });
+  const pad = new THREE.MeshStandardMaterial({ color: 0x2b2522, roughness: 0.9 });
+  // A glossy band, with padding where it rests on his nub.
+  h.group.add(
+    shadowed(
+      new THREE.Mesh(
+        new THREE.TubeGeometry(bandCurve(0.9, 0.78, 0, Math.PI), 48, 0.045, 12),
+        shell,
+      ),
+    ),
+    shadowed(
+      new THREE.Mesh(
+        new THREE.TubeGeometry(
+          bandCurve(0.88, 0.75, Math.PI / 3, (2 * Math.PI) / 3),
+          16,
+          0.065,
+          12,
+        ),
+        pad,
+      ),
+    ),
+  );
+  // A cup over each ear: a soft pad against his head, the shell, a domed cap.
+  for (const side of [1, -1]) {
+    const ear = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.055, 12, 32), pad));
+    ear.rotation.y = Math.PI / 2;
+    ear.position.x = side * 0.85;
+    const cup = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.14, 32), shell));
+    cup.rotation.z = Math.PI / 2;
+    cup.position.x = side * 0.93;
+    const cap = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 16), shell));
+    cap.scale.set(0.35, 1, 1);
+    cap.position.x = side * 1.0;
+    h.group.add(ear, cup, cap);
+  }
   return h;
 }

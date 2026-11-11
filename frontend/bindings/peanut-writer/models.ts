@@ -84,6 +84,11 @@ export interface Settings {
     "peanut"?: boolean | null;
 
     /**
+     * how much Peanut gets up to: "busy", or anything else (nil too) for "chill"
+     */
+    "peanutActivity"?: string | null;
+
+    /**
      * saving also writes the PDF and Word copies, as Sync Files does; nil means off
      */
     "syncOnSave"?: boolean | null;

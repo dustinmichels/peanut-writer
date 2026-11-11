@@ -19,6 +19,11 @@ export interface PeanutStage {
   setSitting: (sitting: boolean) => void;
   walk: (direction: -1 | 0 | 1) => void;
   setHat: (kind: HatKind | null) => void;
+  setJamming: (jamming: boolean) => void;
+  jump: (twirl: boolean) => void;
+  setInspecting: (inspecting: boolean) => void;
+  poke: () => void;
+  setFacingAway: (away: boolean) => void;
   hits: (clientX: number, clientY: number) => boolean;
   dispose: () => void;
 }
@@ -127,6 +132,11 @@ export function createPeanutStage(
     setSitting: peanut.setSitting,
     walk: peanut.walk,
     setHat: peanut.setHat,
+    setJamming: peanut.setJamming,
+    jump: peanut.jump,
+    setInspecting: peanut.setInspecting,
+    poke: peanut.poke,
+    setFacingAway: peanut.setFacingAway,
     hits(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
       if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {
