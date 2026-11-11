@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import wails from "@wailsio/runtime/plugins/vite";
@@ -10,6 +11,12 @@ export default defineConfig({
     strictPort: true,
   },
   plugins: [vue(), wails("./bindings")],
+  resolve: {
+    alias: {
+      "@/": fileURLToPath(new URL("./src/", import.meta.url)),
+      "@bindings/": fileURLToPath(new URL("./bindings/", import.meta.url)),
+    },
+  },
   // Loaded from inside the app, not over a network: one bundle is fine.
   build: { chunkSizeWarningLimit: 1500 },
 });

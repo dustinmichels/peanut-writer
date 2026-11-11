@@ -1,0 +1,35 @@
+/* The ribbon tabs' shared layout: groups of buttons, each labeled beneath, and
+   the popovers some buttons open. Each tab imports it as a scoped style. */
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1px solid var(--border);
+}
+.group:last-child {
+  border-right: 0;
+}
+.group > label {
+  margin-top: auto;
+  padding: 2px 0 4px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pop {
+  position: relative;
+}
+.popover {
+  position: fixed;
+  z-index: 60;
+  margin-top: -4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}

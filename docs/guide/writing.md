@@ -6,15 +6,15 @@ The window has two halves. You type on the left; the typeset pages appear on the
 
 Everything you can do is a button on the ribbon across the top:
 
-| Tab            | What's there                                                                      |
-| -------------- | --------------------------------------------------------------------------------- |
-| **File**       | New, open, save, recent documents, export, settings                               |
-| **Home**       | Bold, italic, strikethrough, code, headings, lists, quotes                        |
-| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break |
-| **References** | Cross-reference, footnote, table of contents                                      |
-| **Design**     | Templates, Customize, Manage Templates, document properties, settings             |
-| **View**       | Markdown view, outline, preview, versions                                         |
-| **Help**       | Welcome guide, Markdown cheat sheet                                               |
+| Tab            | What's there                                                                       |
+| -------------- | ---------------------------------------------------------------------------------- |
+| **File**       | New, open, save, recent documents, export, settings                                |
+| **Home**       | Bold, italic, strikethrough, code, headings, lists, quotes                         |
+| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break  |
+| **References** | Cross-reference, footnote, all notes, table of contents, figure and table previews |
+| **Design**     | Templates, Customize, Manage Templates, document properties, settings              |
+| **View**       | Markdown view, outline, preview, versions                                          |
+| **Help**       | Welcome guide, Markdown cheat sheet                                                |
 
 ## The command palette
 
@@ -24,7 +24,7 @@ per template too, so "acad" switches to _Academic_. Commands that wouldn't do an
 
 ![The command palette, finding the export commands from "ex"](/screenshots/command-palette.png)
 
-_Lorem Ipsum_ (palette only) inserts sample headings, text, math, figures and tables at the cursor, handy for seeing how
+_Lorem Ipsum_ (palette only) inserts sample headings, text, footnotes, math, figures and tables at the cursor, handy for seeing how
 a template looks. Its pictures are saved in the document's `images/` folder.
 
 ## Text that looks like itself
@@ -52,7 +52,10 @@ beside each property in the dialog hides it from the preview, PDF and Word file 
 ## Outline and scrolling
 
 **View → Outline** (or the button beside the zoom controls) lists your headings to the left of the editor and
-highlights the section you're in. Click a heading to jump there in both the editor and the preview.
+highlights the section you're in. Click a heading to jump there in both the editor and the preview. Tick **Focus on
+section** at the top of the outline to have the editor show one section alone: the one you're in, then whichever
+heading you click (or whatever you click in the preview). A section runs from its heading to the next heading of the
+same level or above. Untick it to see the whole document again.
 
 ![The outline beside the editor](/screenshots/outline.png)
 
@@ -71,13 +74,17 @@ template.
 
 - **References → Footnote** asks for the note's text, then adds a numbered mark at the cursor, which stays where it
   was. The note goes with the other notes at the end of the document, in order, under a **Footnotes** rule, and the
-  template places it at the foot of the page; click its number to go back to the text.
-- In the text, a footnote shows as its number. Point at it to read the note, and click it to go to the note. Notes are
+  template places it at the foot of the page; click its number to go back to the text. A note typed or pasted anywhere
+  else (`[^1]: The note.`) moves down to the others once you type outside it.
+- In the text, a footnote shows as its number. Point at it to read the note, and click it to edit the note. Notes are
   numbered in the order they appear, and adding or deleting one renumbers the rest. Deleting a footnote's number deletes
   its note too (cutting it doesn't, so it can be pasted elsewhere).
 - A number with no note shows as a red **?**: click it to write the note. A note nothing points to also shows a red
   **?** and isn't printed. Both are listed in the status bar.
-- **References → Contents** inserts a table of contents built from your headings. It updates by itself.
+- **References → All Notes** lists every footnote beside the sentence its number is in. Click the sentence to go to the
+  number, or the note to go to the note.
+- **References → Contents** inserts a table of contents built from your headings. It updates by itself. In the editor
+  it shows as a **TOC** bar: drag its grip (⠿) to move it, or backspace into it to delete it.
 - **Insert → Page Break** starts a new page. **Insert → Divider** draws a line between sections.
 
 ## Peanut

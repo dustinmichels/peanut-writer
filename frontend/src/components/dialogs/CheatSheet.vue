@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import Modal from "../Modal.vue";
+import Modal from "@/components/ui/Modal.vue";
 
 const emit = defineEmits<{ close: [] }>();
 const rows: [string, string][] = [

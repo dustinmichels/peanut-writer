@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from "vue";
+import { computed, nextTick, reactive, ref, useTemplateRef } from "vue";
 import { RotateCcw } from "lucide-vue-next";
-import Modal from "../Modal.vue";
-import { DocService } from "../../../bindings/peanut-writer";
-import type { Settings, SettingsInfo } from "../../../bindings/peanut-writer/models";
-import { autoFormat, defaultSettings, effectiveSettings } from "../../lib/actions";
-import { errorText, state, toast } from "../../lib/store";
+import Modal from "@/components/ui/Modal.vue";
+import { DocService } from "@bindings/peanut-writer";
+import type { Settings, SettingsInfo } from "@bindings/peanut-writer/models";
+import { autoFormat, defaultSettings, effectiveSettings } from "@/lib/actions";
+import { errorText, state, toast } from "@/lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -60,7 +60,7 @@ const docValues = doc as Record<Key, Value | null | undefined>;
 
 // The filter box is focused once the settings are shown, so typing narrows them.
 const query = ref("");
-const filterInput = ref<HTMLInputElement>();
+const filterInput = useTemplateRef("filterInput");
 // matches says whether every word typed appears in text.
 const matches = (text: string) => {
   const t = text.toLowerCase();

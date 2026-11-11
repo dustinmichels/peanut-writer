@@ -1,0 +1,40 @@
+/* tokens.css holds the theme: palette, fonts, shadow, and root text defaults. */
+
+:root {
+  /* Roasted-peanut palette. */
+  --bg: #f7f1e8;
+  --surface: #fffdf9;
+  --panel: #fbf6ef;
+  --border: #eadccb;
+  --border-strong: #dcc8b1;
+  --ink: #2b2118;
+  --muted: #8a7663;
+  --marks: #c4ab90;
+  --quote: #6e5a48;
+  --shell: #d99e82;
+  --accent: #c1694f;
+  --accent-ink: #9c5b2e;
+  --roast: #8b5528;
+  --math: #4f6b45;
+  --cream: #f6e3cc;
+  --hover: rgba(217, 158, 130, 0.16);
+  --active: rgba(217, 158, 130, 0.3);
+  --canvas: #e8e0d4;
+  --danger: #b4412f;
+  --focus: #3d7bd9; /* the outline's box around the section focused on */
+
+  --ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --rounded: ui-rounded, "SF Pro Rounded", "Nunito", "Avenir Next", var(--ui);
+  --writing: "Iowan Old Style", "Charter", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --shadow: 0 10px 30px -8px rgba(120, 70, 20, 0.22), 0 2px 8px rgba(120, 70, 20, 0.08);
+
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, useTemplateRef, watch } from "vue";
 import {
   AlignCenter,
   AlignLeft,
@@ -12,8 +12,8 @@ import {
   Columns3,
   Rows3,
 } from "lucide-vue-next";
-import Modal from "../Modal.vue";
-import { applyTable, deleteBlock } from "../../lib/actions";
+import Modal from "@/components/ui/Modal.vue";
+import { applyTable, deleteBlock } from "@/lib/actions";
 import {
   type Align,
   emptyTable,
@@ -21,8 +21,8 @@ import {
   parseTable,
   type Table,
   uniqueLabel,
-} from "../../lib/markdown";
-import { state } from "../../lib/store";
+} from "@/lib/markdown";
+import { state } from "@/lib/store";
 
 const props = defineProps<{ item?: Item; cols?: number; rows?: number; table?: Table }>();
 const emit = defineEmits<{ close: [] }>();
@@ -42,7 +42,7 @@ watch(caption, (c) => {
 
 // The cell with focus: row -1 is the header.
 const cur = reactive({ r: -1, c: 0 });
-const grid = ref<HTMLElement>();
+const grid = useTemplateRef("grid");
 const number = computed(
   () => props.item?.number ?? state.items.filter((x) => x.kind === "table").length + 1,
 );

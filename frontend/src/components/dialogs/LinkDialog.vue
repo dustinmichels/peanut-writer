@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import Modal from "../Modal.vue";
-import { insertText } from "../../lib/editor";
-import { editor } from "../../lib/store";
+import { onMounted, ref, useTemplateRef } from "vue";
+import Modal from "@/components/ui/Modal.vue";
+import { insertText } from "@/lib/editor";
+import { editor } from "@/lib/store";
 
 const props = defineProps<{ text: string }>();
 const emit = defineEmits<{ close: [] }>();
 const text = ref(props.text);
 const url = ref(/^https?:\/\//.test(props.text) ? props.text : "");
-const urlInput = ref<HTMLInputElement>();
+const urlInput = useTemplateRef("urlInput");
 onMounted(() => urlInput.value?.focus());
 
 function submit() {

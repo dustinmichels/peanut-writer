@@ -46,6 +46,9 @@ leave its words ("Figure 2") as plain text that no longer updates. A reference t
 A reference to something that no longer exists shows as **??** in the preview, as in LaTeX, and is listed in the status
 bar's notes so you can find it.
 
+**References** previews every figure and table in the document, in order; click one to open its dialog. A figure's
+dialog lists, beside it, each sentence that refers to it. Click one to go there in the text.
+
 ## In Word
 
 The exported Word file keeps all of this working: captions are real Word captions with live numbers, and references

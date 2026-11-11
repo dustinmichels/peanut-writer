@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, useTemplateRef } from "vue";
 import { Browser } from "@wailsio/runtime";
 import { BookOpen, FilePlus, FolderOpen, Github, Sparkles } from "lucide-vue-next";
-import type { RecentFile } from "../../../bindings/peanut-writer/models";
-import Modal from "../Modal.vue";
-import RecentList from "../RecentList.vue";
-import { docsUrl, newDoc, openDoc, openRecent, openWelcome, repoUrl } from "../../lib/actions";
+import type { RecentFile } from "@bindings/peanut-writer/models";
+import Modal from "@/components/ui/Modal.vue";
+import RecentList from "@/components/ui/RecentList.vue";
+import { docsUrl, newDoc, openDoc, openRecent, openWelcome, repoUrl } from "@/lib/actions";
 
 // What the app offers on opening: a new document, a recent one, another one,
 // or the sample (the welcome guide). Closing it leaves a blank, untitled one.
 const props = defineProps<{ files: RecentFile[] }>();
 const emit = defineEmits<{ close: [] }>();
 const files = ref(props.files);
-const create = ref<HTMLButtonElement>();
+const create = useTemplateRef("create");
 
 // The recent list focuses its first document; without one, Create New.
 onMounted(() => {

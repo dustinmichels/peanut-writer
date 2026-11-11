@@ -27,6 +27,8 @@ dev_mode:
       - node_modules
       - frontend
       - bin
+      - docs
+      - todo
     file:
       - .DS_Store
       - .gitignore
@@ -36,6 +38,9 @@ dev_mode:
       - "*.go"
       - "*.js" # Watch for changes to JS/TS files included using the //wails:include directive.
       - "*.ts" # The frontend directory will be excluded entirely by the setting above.
+      - "*.md" # Embedded in the binary: starter/, samples/, template samples.
+      - "*.typ" # Embedded: internal/render, internal/templates/builtin.
+      - "*.svg" # Embedded: starter/images, template previews.
     git_ignore: true
   executes:
     - cmd: wails3 build DEV=true

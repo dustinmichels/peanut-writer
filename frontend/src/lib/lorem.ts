@@ -1,5 +1,5 @@
-// Sample content for trying out a template: headings, text, math, figures and
-// tables, from the command palette's "Lorem Ipsum".
+// Sample content for trying out a template: headings, text, footnotes, math,
+// figures and tables, from the command palette's "Lorem Ipsum".
 
 // The sample pictures, drawn without text so they look the same everywhere.
 export const loremPictures: { name: string; svg: string }[] = [
@@ -74,7 +74,9 @@ export function loremMarkdown(srcs: string[], suffix: string): string {
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. **Sed do eiusmod** tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. As @${l("fig:lorem-chart")} shows, duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
 
-Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Curabitur pretium tincidunt lacus, _nulla gravida orci_ a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris.
+Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.[^${l("lorem-source")}] Curabitur pretium tincidunt lacus, _nulla gravida orci_ a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris.
+
+[^${l("lorem-source")}]: Cicero, _De finibus bonorum et malorum_, 45 BC. Nam libero tempore, cum soluta nobis est eligendi optio.
 
 ![Lorem ipsum dolor sit amet, by quarter.](${chart}){#${l("fig:lorem-chart")} width=70%}
 
@@ -106,8 +108,10 @@ Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vivamus magna justo
 ![Vivamus suscipit tortor eget felis porttitor volutpat.](${landscape}){#${l("fig:lorem-landscape")} width=60%}
 
 1. Nulla porttitor accumsan tincidunt.
-2. Cras ultricies ligula sed magna dictum porta.
+2. Cras ultricies ligula sed magna dictum porta.[^${l("lorem-method")}]
 3. Quisque velit nisi, pretium ut lacinia in, elementum id enim.
+
+[^${l("lorem-method")}]: Temporibus autem quibusdam et aut officiis debitis aut rerum necessitatibus saepe eveniet.
 
 Donec velit neque, auctor sit amet aliquam vel, with $\\alpha \\in [0, 1]$ and $n$ samples $x_1, \\dots, x_n$. Ullamcorper sit amet ligula per @${l("eq:lorem-mean")}:
 
@@ -148,4 +152,6 @@ export const loremLabels = [
   "tbl:lorem-results",
   "tbl:lorem-materials",
   "eq:lorem-mean",
+  "lorem-source",
+  "lorem-method",
 ];

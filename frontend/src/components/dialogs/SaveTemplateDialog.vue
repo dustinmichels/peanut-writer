@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import Modal from "../Modal.vue";
-import { saveCustomTemplate } from "../../lib/actions";
-import { state } from "../../lib/store";
+import { computed, onMounted, ref, useTemplateRef } from "vue";
+import Modal from "@/components/ui/Modal.vue";
+import { saveCustomTemplate } from "@/lib/actions";
+import { state } from "@/lib/store";
 
 // Adds the document's own template (Design → Customize) to the user's
 // templates under a name, for any document to use.
@@ -11,7 +11,7 @@ const emit = defineEmits<{ close: [] }>();
 const name = ref("");
 const description = ref("");
 const saving = ref(false);
-const nameInput = ref<HTMLInputElement>();
+const nameInput = useTemplateRef("nameInput");
 onMounted(() => nameInput.value?.focus());
 
 const base = computed(() => state.templates.find((t) => t.id === state.custom?.base)?.name);

@@ -41,9 +41,9 @@ func numbered(d *Document) string {
 }
 
 // The editor numbers figures, tables and equations as you type with its own
-// reading of the Markdown (frontend/src/lib/markdown.ts, scan). Each
+// reading of the Markdown (frontend/src/lib/markdown/items.ts, scan). Each
 // testdata/numbering/NAME.md is read by both: NAME.want is what Parse
-// numbers, and markdown.test.ts checks scan against the same file.
+// numbers, and markdown/markdown.test.ts checks scan against the same file.
 func TestNumberingSamples(t *testing.T) {
 	samples, err := filepath.Glob(filepath.Join("testdata", "numbering", "*.md"))
 	if err != nil || len(samples) == 0 {

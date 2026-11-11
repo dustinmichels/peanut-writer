@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Browser } from "@wailsio/runtime";
-import Modal from "../Modal.vue";
-import { state } from "../../lib/store";
-import { docsUrl, repoUrl } from "../../lib/actions";
+import Modal from "@/components/ui/Modal.vue";
+import { state } from "@/lib/store";
+import { docsUrl, repoUrl } from "@/lib/actions";
 
 const emit = defineEmits<{ close: [] }>();
 const links = [

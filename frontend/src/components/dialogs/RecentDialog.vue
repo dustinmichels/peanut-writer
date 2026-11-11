@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { RecentFile } from "../../../bindings/peanut-writer/models";
-import Modal from "../Modal.vue";
-import RecentList from "../RecentList.vue";
-import { newDoc, openDoc, openRecent } from "../../lib/actions";
+import type { RecentFile } from "@bindings/peanut-writer/models";
+import Modal from "@/components/ui/Modal.vue";
+import RecentList from "@/components/ui/RecentList.vue";
+import { newDoc, openDoc, openRecent } from "@/lib/actions";
 
 const props = defineProps<{ files: RecentFile[] }>();
 const emit = defineEmits<{ close: [] }>();

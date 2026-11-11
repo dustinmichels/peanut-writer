@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import Modal from "../Modal.vue";
-import { parseDelimited } from "../../lib/markdown";
-import { state } from "../../lib/store";
+import { computed, onMounted, ref, useTemplateRef } from "vue";
+import Modal from "@/components/ui/Modal.vue";
+import { parseDelimited } from "@/lib/markdown";
+import { state } from "@/lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 const text = ref("");
-const box = ref<HTMLTextAreaElement>();
+const box = useTemplateRef("box");
 onMounted(() => box.value?.focus());
 
 const table = computed(() => parseDelimited(text.value));

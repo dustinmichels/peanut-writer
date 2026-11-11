@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { Check, Image, Sigma, Table, Unlink } from "lucide-vue-next";
-import Modal from "../Modal.vue";
-import { insertCrossRef, unlinkCrossRef } from "../../lib/actions";
-import { type Item, type Kind, kindName, plain, type RefAt } from "../../lib/markdown";
-import { state } from "../../lib/store";
+import Modal from "@/components/ui/Modal.vue";
+import { insertCrossRef, unlinkCrossRef } from "@/lib/actions";
+import { type Item, type Kind, kindName, plain, type RefAt } from "@/lib/markdown";
+import { state } from "@/lib/store";
 
 // With `at`, the dialog changes the reference there instead of inserting one.
 const props = defineProps<{ at?: RefAt }>();
@@ -23,7 +23,7 @@ const list = computed(() =>
 // The item the reference being changed points to now, if any.
 const isCurrent = (x: Item) => !!props.at?.label && x.label === props.at.label;
 const picked = ref(Math.max(0, list.value.findIndex(isCurrent)));
-const listEl = ref<HTMLElement>();
+const listEl = useTemplateRef("listEl");
 
 function insert(item: Item | undefined) {
   if (!item) return;

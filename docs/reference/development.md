@@ -79,7 +79,7 @@ Name.md ──► internal/doc ──► document model ──┬──► inter
 ```
 
 The document model is the single source of truth for numbering and references, which is why the PDF and the Word file
-always agree. The editor mirrors the same numbering rules while you type (`frontend/src/lib/markdown.ts`); the samples in
+always agree. The editor mirrors the same numbering rules while you type (`frontend/src/lib/markdown/`); the samples in
 `internal/doc/testdata/numbering/` check both number them alike.
 
 ## Layout
@@ -96,6 +96,13 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
 - `starter/`: the welcome guide.
-- `frontend/`: the editor. `src/lib/editor.ts` is CodeMirror with the figure, table, reference and properties widgets;
-  `src/peanut/` is the three.js Peanut.
+- `frontend/`: the editor. Under `src/`:
+  - `lib/editor/`: CodeMirror, with the figure, table, reference and properties widgets in `widgets/`.
+  - `lib/markdown/`: reading and writing the Markdown (front matter, figures, tables, footnotes, numbering).
+  - `lib/actions/`: what the menus, ribbon and dialogs do; `lib/store/`: shared state, toasts, preview rendering.
+  - `components/`: `layout/`, `ribbon/` (a component per tab), `panes/`, `dialogs/` and shared `ui/` pieces;
+    `composables/` holds App's wiring (splitter, scroll sync, events, startup).
+  - `styles/`: the global CSS; `peanut/`: the three.js Peanut.
+  - Each `lib/` folder's `index.ts` is its API: import `@/lib/editor`, not its files. `@/` is `src/`, `@bindings/`
+    the generated Wails bindings.
 - `docs/`: this site ([VitePress](https://vitepress.dev)).

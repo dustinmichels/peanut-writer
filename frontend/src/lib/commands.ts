@@ -17,7 +17,9 @@ import {
   setTemplate,
   showInFolder,
   showPackageContents,
-} from "./actions";
+  restoreView,
+  toggleFocusSection,
+} from "@/lib/actions";
 import {
   type BlockStyle,
   clearFormatting,
@@ -28,8 +30,8 @@ import {
   toggleCodeBlock,
   toggleList,
   toggleMark,
-} from "./editor";
-import { canSave, canSync, docTemplates, editor, state } from "./store";
+} from "@/lib/editor";
+import { canSave, canSync, docTemplates, editor, state } from "@/lib/store";
 
 export interface Command {
   id: string;
@@ -211,6 +213,12 @@ const fixed: Command[] = [
   },
   { id: "link", group: "Insert", label: "Link…", run: editLink },
   { id: "footnote", group: "Insert", label: "Footnote…", run: newFootnote },
+  {
+    id: "footnotes",
+    group: "View",
+    label: "All Footnotes",
+    run: () => (state.dialog = { kind: "footnotes" }),
+  },
   { id: "equation", group: "Insert", label: "Equation", run: inEditor(insertEquation) },
   { id: "codeBlock", group: "Insert", label: "Code Block", run: inEditor(toggleCodeBlock) },
   { id: "divider", group: "Insert", label: "Divider", run: inEditor(insertDivider) },
@@ -264,8 +272,16 @@ const fixed: Command[] = [
     run: () => menu("markdown"),
   },
   { id: "outline", group: "View", label: "Toggle Outline", run: () => menu("outline") },
-  { id: "preview", group: "View", label: "Toggle Preview", run: () => menu("preview") },
+  {
+    id: "focusSection",
+    group: "View",
+    label: "Toggle Focus on Section",
+    run: toggleFocusSection,
+    enabled: () => state.outline.length > 0,
+  },
   { id: "versions", group: "View", label: "Toggle Versions", run: () => menu("versions") },
+  { id: "preview", group: "View", label: "Toggle Preview", run: () => menu("preview") },
+  { id: "restoreView", group: "View", label: "Restore Default View", run: restoreView },
   { id: "zoomIn", group: "View", label: "Zoom In", shortcut: "⌘=", run: () => menu("zoomIn") },
   { id: "zoomOut", group: "View", label: "Zoom Out", shortcut: "⌘-", run: () => menu("zoomOut") },
   {

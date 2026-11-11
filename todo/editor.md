@@ -16,7 +16,6 @@ a label from the cross-reference dialog keeps their list or quote markers.
 Other gaps:
 
 - `FigureDialog.vue` reference count counts `@fig:a` inside `@fig:ab` (only used in a hint).
-- Footnotes (`scanFootnotes`): renumbering on paste or drop relabels notes in place, so their order in the Markdown can
-  differ from their numbers (the output is unaffected). A note within a note is shown as written, unnumbered. Deleting
-  a note's `[^1]: ` with Backspace leaves its text as a paragraph and its mark as `?`. A note's second paragraph
-  (indented 4 spaces) is styled as a code block, since CodeMirror's parser doesn't know footnotes.
+- Footnotes (`scanFootnotes`): a note within a note is shown as written, unnumbered. Deleting a note's `[^1]: ` with
+  Backspace leaves its text as a paragraph and its mark as `?`. A note's second paragraph (indented 4 spaces) is styled
+  as a code block, since CodeMirror's parser doesn't know footnotes.

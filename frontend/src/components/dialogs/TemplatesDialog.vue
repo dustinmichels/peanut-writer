@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref } from "vue";
 import { Check, FileCode, FolderOpen, Import, Pencil, Share, Trash2 } from "lucide-vue-next";
-import Modal from "../Modal.vue";
+import Modal from "@/components/ui/Modal.vue";
 import {
   deleteTemplate,
   editTemplate,
@@ -10,8 +10,8 @@ import {
   renameTemplate,
   setTemplate,
   shareTemplate,
-} from "../../lib/actions";
-import { state } from "../../lib/store";
+} from "@/lib/actions";
+import { state } from "@/lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 

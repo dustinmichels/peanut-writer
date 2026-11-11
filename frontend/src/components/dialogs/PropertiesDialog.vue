@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import Modal from "../Modal.vue";
-import EyeToggle from "./EyeToggle.vue";
-import { setMeta } from "../../lib/actions";
-import { readFrontMatter } from "../../lib/markdown";
-import { state } from "../../lib/store";
+import { onMounted, reactive, useTemplateRef } from "vue";
+import Modal from "@/components/ui/Modal.vue";
+import EyeToggle from "@/components/ui/EyeToggle.vue";
+import { setMeta } from "@/lib/actions";
+import { readFrontMatter } from "@/lib/markdown";
+import { state } from "@/lib/store";
 
 // The properties the document can show; `hide` names those it doesn't.
 const showable: readonly string[] = [
@@ -27,7 +27,7 @@ const hideNames = meta.hide
 const hidden = reactive(new Set(hideNames.filter((k) => showable.includes(k))));
 // Names this dialog doesn't know are kept as they are.
 const otherHidden = hideNames.filter((k) => !showable.includes(k));
-const first = ref<HTMLInputElement>();
+const first = useTemplateRef("first");
 onMounted(() => first.value?.focus());
 
 function toggle(k: string) {

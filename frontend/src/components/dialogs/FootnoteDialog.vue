@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import Modal from "../Modal.vue";
-import { insertFootnote, writeNote } from "../../lib/editor";
-import { editor } from "../../lib/store";
+import { onMounted, ref, useTemplateRef } from "vue";
+import Modal from "@/components/ui/Modal.vue";
+import { insertFootnote, noteText, writeNote } from "@/lib/editor";
+import { editor } from "@/lib/store";
 
-// label: the mark, already in the text, whose note this writes; without it,
-// a new footnote goes at the cursor.
+// label: the mark, already in the text, whose note this writes (or rewrites,
+// if it has one); without it, a new footnote goes at the cursor.
 const props = defineProps<{ label?: string }>();
 const emit = defineEmits<{ close: [] }>();
-const text = ref("");
-const input = ref<HTMLTextAreaElement>();
+const existing = props.label && editor.value ? noteText(editor.value, props.label) : "";
+const text = ref(existing);
+const input = useTemplateRef("input");
 onMounted(() => input.value?.focus());
 
 function submit() {
@@ -46,7 +47,7 @@ function key(e: KeyboardEvent) {
     <template #footer>
       <button type="button" class="btn" @click="emit('close')">Cancel</button>
       <button type="submit" class="btn primary" :disabled="!text.trim()">
-        {{ label ? "Add Note" : "Insert" }}
+        {{ existing ? "Save" : label ? "Add Note" : "Insert" }}
       </button>
     </template>
   </Modal>

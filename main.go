@@ -153,8 +153,8 @@ func menu(app *application.App, docs *DocService, updates *updates) *application
 	view.AddSeparator()
 	view.Add("Show Markdown").SetAccelerator("CmdOrCtrl+/").OnClick(send("markdown"))
 	view.Add("Outline").OnClick(send("outline"))
-	view.Add("Preview").OnClick(send("preview"))
 	view.Add("Versions").OnClick(send("versions"))
+	view.Add("Preview").OnClick(send("preview"))
 	view.AddSeparator()
 	view.Add("Command Palette…").SetAccelerator("CmdOrCtrl+Shift+P").OnClick(send("commands"))
 

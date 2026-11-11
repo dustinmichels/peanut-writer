@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, useTemplateRef, watch } from "vue";
+import { ensureSyntaxTree } from "@codemirror/language";
 import {
   AlignCenter,
   AlignLeft,
@@ -11,11 +12,19 @@ import {
   Trash2,
   X,
 } from "lucide-vue-next";
-import Modal from "../Modal.vue";
-import { DocService } from "../../../bindings/peanut-writer";
-import { addPictures, applyFigure, deleteBlock, replacePicture } from "../../lib/actions";
-import { type Item, type Picture, type Position, uniqueLabel } from "../../lib/markdown";
-import { state } from "../../lib/store";
+import Modal from "@/components/ui/Modal.vue";
+import Excerpt from "@/components/ui/Excerpt.vue";
+import { DocService } from "@bindings/peanut-writer";
+import { addPictures, applyFigure, deleteBlock, replacePicture } from "@/lib/actions";
+import { crossRefs, goTo } from "@/lib/editor";
+import {
+  type Item,
+  type Picture,
+  type Position,
+  sentenceAround,
+  uniqueLabel,
+} from "@/lib/markdown";
+import { editor, state } from "@/lib/store";
 
 const props = defineProps<{ item: Item }>();
 const emit = defineEmits<{ close: [] }>();
@@ -55,12 +64,24 @@ watch(
   },
 );
 
-const refs = computed(() => {
-  if (!props.item.label) return 0;
-  return state.content.split("@" + props.item.label).length - 1;
+// Where the text refers to the figure, each in its sentence.
+const mentions = computed(() => {
+  const v = editor.value;
+  if (!v || !props.item.label) return [];
+  const s = v.state;
+  const text = state.content;
+  return crossRefs(s, ensureSyntaxTree(s, s.doc.length, 200) ?? undefined)
+    .filter((r) => r.label === props.item.label)
+    .map((r) => ({ from: r.from, ...sentenceAround(text, r.from, r.to) }));
 });
 
-const captionInput = ref<HTMLInputElement>();
+// jump leaves the figure as it was and goes to a reference to it.
+function jump(pos: number) {
+  emit("close");
+  if (editor.value) goTo(editor.value, pos);
+}
+
+const captionInput = useTemplateRef("captionInput");
 onMounted(() => captionInput.value?.focus());
 
 async function replace(i: number) {
@@ -97,122 +118,155 @@ function remove() {
 </script>
 
 <template>
-  <Modal :title="`Figure ${item.number}`" @close="emit('close')" @submit="submit">
-    <div class="pic" :class="position">
-      <div class="frame" :style="{ width: autoWidth ? (grid ? '100%' : 'auto') : `${width}%` }">
-        <div
-          v-if="grid"
-          class="grid"
-          :style="{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }"
-        >
-          <div v-for="(p, i) in pictures" :key="i" class="cell">
-            <img v-if="previews.get(p.src)" :src="previews.get(p.src)" :alt="p.alt" />
-            <div v-else class="missing">Not found: {{ p.src }}</div>
-            <div class="cell-tools">
-              <button type="button" title="Move earlier" :disabled="i === 0" @click="move(i, -1)">
-                <ChevronLeft :size="14" />
+  <Modal :title="`Figure ${item.number}`" wide @close="emit('close')" @submit="submit">
+    <div class="split">
+      <div class="main">
+        <div class="pic" :class="position">
+          <div class="frame" :style="{ width: autoWidth ? (grid ? '100%' : 'auto') : `${width}%` }">
+            <div
+              v-if="grid"
+              class="grid"
+              :style="{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }"
+            >
+              <div v-for="(p, i) in pictures" :key="i" class="cell">
+                <img v-if="previews.get(p.src)" :src="previews.get(p.src)" :alt="p.alt" />
+                <div v-else class="missing">Not found: {{ p.src }}</div>
+                <div class="cell-tools">
+                  <button
+                    type="button"
+                    title="Move earlier"
+                    :disabled="i === 0"
+                    @click="move(i, -1)"
+                  >
+                    <ChevronLeft :size="14" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Move later"
+                    :disabled="i === pictures.length - 1"
+                    @click="move(i, 1)"
+                  >
+                    <ChevronRight :size="14" />
+                  </button>
+                  <button type="button" title="Replace picture" @click="replace(i)">
+                    <ImageUp :size="14" />
+                  </button>
+                  <button type="button" title="Remove from the grid" @click="pictures.splice(i, 1)">
+                    <X :size="14" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <template v-else>
+              <img
+                v-if="previews.get(pictures[0].src)"
+                :src="previews.get(pictures[0].src)"
+                alt=""
+              />
+              <div v-else class="missing">Picture not found: {{ pictures[0].src }}</div>
+            </template>
+          </div>
+        </div>
+        <label class="field">
+          Caption
+          <input ref="captionInput" v-model="caption" placeholder="Describe the picture" />
+          <span class="hint"
+            >Shown under the {{ grid ? "pictures" : "picture" }} as “Figure {{ item.number }}: …”.
+            *Italic* and **bold** work here.</span
+          >
+        </label>
+        <div class="cols">
+          <label class="field">
+            Reference name
+            <input v-model="label" placeholder="fig:name" @input="labelTouched = true" />
+            <span class="hint">
+              {{
+                mentions.length
+                  ? `Referenced ${mentions.length} ${mentions.length === 1 ? "time" : "times"}; renaming updates them.`
+                  : "Used by cross-references."
+              }}
+            </span>
+          </label>
+          <div class="field">
+            Size
+            <div class="size">
+              <label class="check"
+                ><input v-model="autoWidth" type="checkbox" />
+                {{ grid ? "Full width" : "Natural" }}</label
+              >
+              <input
+                v-model.number="width"
+                type="range"
+                min="10"
+                max="100"
+                step="5"
+                :disabled="autoWidth"
+              />
+              <span class="pct">{{ autoWidth ? "" : `${width}%` }}</span>
+            </div>
+            <span class="hint"
+              >Of the text width. You can also drag the {{ grid ? "grid's" : "picture's" }} corner
+              in the editor.</span
+            >
+          </div>
+        </div>
+        <div class="cols">
+          <div class="field">
+            Position
+            <span class="group">
+              <button
+                type="button"
+                :class="{ on: position === 'left' }"
+                title="Left"
+                @click="position = 'left'"
+              >
+                <AlignLeft :size="15" />
               </button>
               <button
                 type="button"
-                title="Move later"
-                :disabled="i === pictures.length - 1"
-                @click="move(i, 1)"
+                :class="{ on: position === '' }"
+                title="Centered"
+                @click="position = ''"
               >
-                <ChevronRight :size="14" />
+                <AlignCenter :size="15" />
               </button>
-              <button type="button" title="Replace picture" @click="replace(i)">
-                <ImageUp :size="14" />
+              <button
+                type="button"
+                :class="{ on: position === 'right' }"
+                title="Right"
+                @click="position = 'right'"
+              >
+                <AlignRight :size="15" />
               </button>
-              <button type="button" title="Remove from the grid" @click="pictures.splice(i, 1)">
-                <X :size="14" />
-              </button>
-            </div>
+            </span>
           </div>
+          <label v-if="grid" class="field">
+            Columns
+            <input v-model.number="columns" type="number" min="1" :max="pictures.length" />
+            <span class="hint">Pictures to a row.</span>
+          </label>
         </div>
-        <template v-else>
-          <img v-if="previews.get(pictures[0].src)" :src="previews.get(pictures[0].src)" alt="" />
-          <div v-else class="missing">Picture not found: {{ pictures[0].src }}</div>
-        </template>
       </div>
-    </div>
-    <label class="field">
-      Caption
-      <input ref="captionInput" v-model="caption" placeholder="Describe the picture" />
-      <span class="hint"
-        >Shown under the {{ grid ? "pictures" : "picture" }} as “Figure {{ item.number }}: …”.
-        *Italic* and **bold** work here.</span
-      >
-    </label>
-    <div class="cols">
-      <label class="field">
-        Reference name
-        <input v-model="label" placeholder="fig:name" @input="labelTouched = true" />
-        <span class="hint">
-          {{
-            refs
-              ? `Referenced ${refs} ${refs === 1 ? "time" : "times"}; renaming updates them.`
-              : "Used by cross-references."
-          }}
-        </span>
-      </label>
-      <div class="field">
-        Size
-        <div class="size">
-          <label class="check"
-            ><input v-model="autoWidth" type="checkbox" />
-            {{ grid ? "Full width" : "Natural" }}</label
-          >
-          <input
-            v-model.number="width"
-            type="range"
-            min="10"
-            max="100"
-            step="5"
-            :disabled="autoWidth"
-          />
-          <span class="pct">{{ autoWidth ? "" : `${width}%` }}</span>
-        </div>
-        <span class="hint"
-          >Of the text width. You can also drag the {{ grid ? "grid's" : "picture's" }} corner in
-          the editor.</span
+      <aside class="mentions">
+        <h3>Referenced in the text</h3>
+        <button
+          v-for="m in mentions"
+          :key="m.from"
+          type="button"
+          class="mention"
+          title="Go to this reference"
+          @click="jump(m.from)"
         >
-      </div>
-    </div>
-    <div class="cols">
-      <div class="field">
-        Position
-        <span class="group">
-          <button
-            type="button"
-            :class="{ on: position === 'left' }"
-            title="Left"
-            @click="position = 'left'"
-          >
-            <AlignLeft :size="15" />
-          </button>
-          <button
-            type="button"
-            :class="{ on: position === '' }"
-            title="Centered"
-            @click="position = ''"
-          >
-            <AlignCenter :size="15" />
-          </button>
-          <button
-            type="button"
-            :class="{ on: position === 'right' }"
-            title="Right"
-            @click="position = 'right'"
-          >
-            <AlignRight :size="15" />
-          </button>
-        </span>
-      </div>
-      <label v-if="grid" class="field">
-        Columns
-        <input v-model.number="columns" type="number" min="1" :max="pictures.length" />
-        <span class="hint">Pictures to a row.</span>
-      </label>
+          <Excerpt :before="m.before" :after="m.after">Figure {{ item.number }}</Excerpt>
+        </button>
+        <p v-if="!mentions.length" class="none">
+          {{
+            item.label
+              ? `Nothing in the text refers to Figure ${item.number} yet.`
+              : "Give the figure a reference name, then add cross-references to it (References → Cross-reference)."
+          }}
+        </p>
+      </aside>
     </div>
     <template #footer>
       <button type="button" class="btn danger icon" title="Delete figure" @click="remove">
@@ -238,6 +292,48 @@ function remove() {
 </template>
 
 <style scoped>
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: 18px;
+}
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.mentions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 460px;
+  padding-left: 18px;
+  border-left: 1px solid var(--border);
+  overflow: auto;
+}
+.mentions h3 {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.mention {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  text-align: left;
+}
+.mention:hover {
+  border-color: var(--shell);
+}
+.none {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
 .pic {
   display: flex;
   justify-content: center;

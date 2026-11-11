@@ -81,7 +81,7 @@ Work in the order below: each step has a check that proves it, and later steps a
 - Check: with the installed app, type for a minute with the preview open — no console window appears; turn on auto format
   with Node and `npm i -g oxfmt` installed and save.
 
-### 3. Documents, files and paths (`service.go`, `main.go`, `frontend/src/lib/actions.ts`)
+### 3. Documents, files and paths (`service.go`, `main.go`, `frontend/src/lib/actions/`)
 
 - Open dialog: `AddFilter("Documents", "*.peanut;*.md;…")` can't select a `.peanut` folder on Windows; double-clicking
   it navigates in. `OpenPath` already accepts the package's `Name.md` (`docFile`), so: on Windows, filter `*.md;*.markdown;*.txt`
@@ -119,11 +119,11 @@ Work in the order below: each step has a check that proves it, and later steps a
   keep it (simplest) or hide it and handle the shortcuts in the page. The Mac app-menu roles (`AppMenu`, `ServicesMenu`,
   `Hide`, `HideOthers`, `UnHide`) and `WindowMenu` don't belong there: on Windows put Exit in File, About and Check for
   Updates in Help.
-- Shortcut labels: tooltips, the command palette and the cheat sheet hard-code `⌘ ⇧ ⌥` (`Ribbon.vue`, `TitleBar.vue`,
+- Shortcut labels: tooltips, the command palette and the cheat sheet hard-code `⌘ ⇧ ⌥` (`ribbon/Ribbon*.vue`, `TitleBar.vue`,
   `StatusBar.vue`, `EditorPane.vue`, `commands.ts`, `CheatSheet.vue`, `SettingsDialog.vue`). Add one formatter
   (`⌘S` on Mac, `Ctrl+S` elsewhere) and write shortcuts once in a neutral form. CodeMirror keymaps using `Mod-` already
   map to Ctrl; check the `⌥⌘1`-style heading shortcuts don't collide with AltGr on European keyboards (Ctrl+Alt = AltGr).
-- Words: "Finder" appears in toasts, tooltips and the command palette ("Show in Finder", `actions.ts`, `TitleBar.vue`,
+- Words: "Finder" appears in toasts, tooltips and the command palette ("Show in Finder", `lib/actions/`, `TitleBar.vue`,
   `VersionsPane.vue`, `TemplatesDialog.vue`); say "Show in Explorer" on Windows (one helper with the shortcut formatter).
 - Spellcheck: `spellcheck_other.go` assumes WebView2 checks spelling where `spellcheck="true"`; confirm in the editor.
 - Fonts in the UI: check the CSS font stacks have a Windows face (Segoe UI) before falling back to a serif default.

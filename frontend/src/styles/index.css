@@ -1,0 +1,8 @@
+/* index.css gathers the global styles, in cascade order. */
+
+@import "./tokens.css";
+@import "./base.css";
+@import "./controls.css";
+@import "./editor.css";
+@import "./editor-widgets.css";
+@import "./codemirror.css";

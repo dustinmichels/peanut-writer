@@ -9,7 +9,7 @@ abstract: Peanut Writer feels like a word processor but keeps your words in plai
 
 # Writing
 
-Type on the left; the page on the right updates as you go. Use the **Home** tab for _emphasis_, headings and lists, or type Markdown directly — whatever you prefer. Everything you see here is plain text underneath: switch to **View → Markdown** (⌘/) to peek.
+Type on the left; the page on the right updates as you go. Use the **Home** tab for _emphasis_, headings and lists, or type Markdown directly — whatever you prefer.[^1] Everything you see here is plain text underneath: switch to **View → Markdown** (⌘/) to peek.
 
 Paragraphs are separated by a blank line. Headings come in three sizes, and the ones you use become the document's outline.
 
@@ -30,7 +30,7 @@ Numbered lists count for you, so you can reorder steps freely:
 
 ## Quotations
 
-> A blank page is just a document that hasn't met its first peanut yet.
+> A blank page is just a document that hasn't met its first peanut yet.[^2]
 
 Quotations come from `>` at the start of a line, or the quote button on the Home tab.
 
@@ -87,12 +87,16 @@ Only named equations are numbered, and they can be referenced like figures and t
 
 # Cross-references
 
-**References → Cross-reference** inserts a reference to any figure, table or equation. Move @fig:peanut below @tbl:snacks and both numbers update, everywhere.[^1] A reference to a name that doesn't exist shows as **??** and is listed in the status bar.
-
-[^1]: Footnotes come from **References → Footnote**.
+**References → Cross-reference** inserts a reference to any figure, table or equation. Move @fig:peanut below @tbl:snacks and both numbers update, everywhere.[^3] A reference to a name that doesn't exist shows as **??** and is listed in the status bar.
 
 # Make it yours
 
 Pick a look on the **Design** tab, fill in the title, author and abstract under **Design → Properties**, then **Export** as PDF or Word. Each template sets its own fonts, spacing and headings, but your words stay the same.
 
 > Tip: open the command palette and choose **Lorem Ipsum** to drop sample content into any document and see how a template handles it.
+
+[^1]: The Markdown is the document. Any text editor can open it, and it will still read fine in fifty years.
+
+[^2]: Peanut, in conversation. Peanut has not been asked to explain this.
+
+[^3]: Footnotes come from **References → Footnote**. They number themselves too, and land at the bottom of the page in a PDF.

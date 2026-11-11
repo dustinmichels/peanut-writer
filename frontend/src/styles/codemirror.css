@@ -1,0 +1,28 @@
+/* codemirror.css restyles CodeMirror's own completion list and search panel. */
+
+/* CodeMirror's completion list and search panel, in our colors. */
+.cm-tooltip.cm-tooltip-autocomplete {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  font-family: var(--ui);
+}
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--cream) !important;
+  color: var(--ink) !important;
+}
+.cm-completionDetail {
+  color: var(--roast);
+  font-style: normal !important;
+  font-weight: 600;
+}
+.cm-panel.cm-search {
+  font-family: var(--ui);
+  padding: 8px 12px !important;
+}
+.cm-panel.cm-search input,
+.cm-panel.cm-search button {
+  border-radius: 6px;
+}

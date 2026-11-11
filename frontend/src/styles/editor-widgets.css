@@ -1,0 +1,360 @@
+/* editor-widgets.css styles block widgets and footnotes inside the editor. */
+
+/* Block widgets: CodeMirror measures them without margins, so their spacing
+   is padding (on a wrapper when the widget has a background). */
+.pw-props-block {
+  padding-bottom: 18px;
+}
+.pw-figure-block {
+  padding: 4px 0 14px;
+}
+.pw-table {
+  padding: 10px 0 14px;
+}
+.pw-toc-block {
+  padding: 4px 0 10px;
+}
+.pw-table table {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+.pw-table th,
+.pw-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.pw-table th {
+  font-weight: 650;
+  border-bottom: 1.5px solid var(--border-strong);
+}
+.pw-figure {
+  margin: 0;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.pw-figure.left {
+  text-align: left;
+}
+.pw-figure.right {
+  text-align: right;
+}
+.pw-figure-frame {
+  position: relative;
+  display: inline-block;
+  vertical-align: top;
+  max-width: 100%;
+  min-width: 80px;
+}
+.pw-figure-frame img {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  border-radius: 6px;
+}
+.pw-figure-tools {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+}
+.pw-figure-tool {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--accent-ink);
+}
+.pw-figure-tool:hover {
+  background: var(--hover);
+}
+.pw-figure-tool.on {
+  background: var(--active);
+}
+.pw-figure-grip {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border);
+  border-radius: 6px 0 0 6px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.pw-figure-grip:hover {
+  background: var(--hover);
+  color: var(--accent-ink);
+}
+.pw-figure.moving,
+.pw-table.moving,
+.pw-tablebar.moving {
+  opacity: 0.45;
+}
+.pw-figure.moving .pw-figure-grip {
+  cursor: grabbing;
+}
+.pw-figure.moving .pw-figure-tools {
+  opacity: 1;
+}
+.pw-drop-line {
+  position: absolute;
+  z-index: 10;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.pw-figure-handle {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--surface);
+  border: 2px solid var(--accent);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.pw-figure.right .pw-figure-handle {
+  right: auto;
+  left: -5px;
+  cursor: nesw-resize;
+}
+.pw-figure-size {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--surface);
+  font-family: var(--ui);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.pw-figure-tools,
+.pw-figure-handle,
+.pw-figure-size {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.pw-figure-frame:hover .pw-figure-tools,
+.pw-figure-frame:hover .pw-figure-handle,
+.pw-figure.resizing .pw-figure-handle,
+.pw-figure.resizing .pw-figure-size {
+  opacity: 1;
+}
+.pw-figure.resizing .pw-figure-tools {
+  opacity: 0;
+}
+.pw-figure.resizing .pw-figure-frame {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.pw-figure-frame.missing,
+.pw-figure-cell.missing {
+  padding: 24px;
+  border: 1.5px dashed var(--marks);
+  border-radius: 8px;
+  color: var(--muted);
+  font-family: var(--ui);
+  font-size: 12px;
+}
+.pw-figure-grid {
+  display: grid;
+  gap: 8px;
+  align-items: center;
+}
+.pw-figure-grid img {
+  max-height: 240px;
+}
+.pw-figure-cell.missing {
+  padding: 16px 6px;
+  word-break: break-all;
+}
+.pw-figure-caption,
+.pw-tablebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ui);
+  font-size: 12.5px;
+  color: var(--quote);
+  margin-top: 8px;
+}
+.pw-figure-caption {
+  justify-content: center;
+}
+.pw-figure.left .pw-figure-caption {
+  justify-content: flex-start;
+}
+.pw-figure.right .pw-figure-caption {
+  justify-content: flex-end;
+}
+.pw-tablebar {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pw-tablebar-caption {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pw-tablebar-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 22px;
+  margin: -2px -2px -2px -4px;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: grab;
+  touch-action: none;
+}
+.pw-tablebar-grip:hover {
+  background: var(--hover);
+  color: var(--accent-ink);
+}
+.moving .pw-tablebar-grip {
+  cursor: grabbing;
+}
+.pw-badge {
+  flex: none;
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--roast);
+  background: var(--cream);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.pw-widget-btn {
+  flex: none;
+  font-family: var(--ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--accent-ink);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.pw-widget-btn:hover {
+  background: var(--cream);
+}
+.pw-ref {
+  font-family: var(--ui);
+  font-size: 0.82em;
+  font-weight: 650;
+  color: var(--roast);
+  background: var(--cream);
+  border-radius: 6px;
+  padding: 1px 6px;
+  margin: 0 1px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.pw-ref:hover {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.pw-ref.broken {
+  color: var(--danger);
+  background: #fbe3dc;
+}
+.cm-editor .pw-footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  color: var(--accent);
+  font-family: var(--ui);
+  font-weight: 650;
+}
+.cm-editor .pw-footnote-mark {
+  padding: 0 1px;
+  cursor: pointer;
+}
+.cm-editor .pw-footnote-mark:hover {
+  text-decoration: underline;
+}
+.cm-editor .pw-footnote-ref.broken,
+.cm-editor .pw-note-head.orphan {
+  color: var(--danger);
+}
+.cm-editor .pw-note-line {
+  font-size: 0.88em;
+}
+/* Over the notes, as over a page's footnotes: a rule, labelled. Padding,
+   not margin, so CodeMirror measures the line's height. */
+.cm-editor .pw-notes-start::before {
+  content: "Footnotes";
+  display: block;
+  padding: 1.6em 0 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-strong);
+  font: 600 10.5px var(--ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  pointer-events: none;
+}
+.cm-editor .pw-note-head {
+  display: inline-block;
+  min-width: 1.6em;
+  font-family: var(--ui);
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+}
+.cm-editor .pw-note-head:hover {
+  text-decoration: underline;
+}
+.pw-props {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff8ee, #fbebd8);
+  border: 1px solid var(--border);
+  font-family: var(--ui);
+}
+.pw-props > div {
+  flex: 1;
+  min-width: 0;
+}
+.pw-props-title {
+  font-family: var(--writing);
+  font-size: 1.35em;
+  font-weight: 700;
+  color: var(--roast);
+}
+.pw-props-by {
+  font-size: 12px;
+  color: var(--muted);
+}

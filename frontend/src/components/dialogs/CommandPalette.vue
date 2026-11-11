@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from "vue";
 import { Search } from "lucide-vue-next";
-import { type Command, commands, matches } from "../../lib/commands";
+import { type Command, commands, matches } from "@/lib/commands";
 
 const emit = defineEmits<{ close: [] }>();
 
 const query = ref("");
 const selected = ref(0);
-const input = ref<HTMLInputElement>();
-const list = ref<HTMLElement>();
+const input = useTemplateRef("input");
+const list = useTemplateRef("list");
 onMounted(() => input.value?.focus());
 
 const shown = computed(() => commands().filter((c) => matches(c, query.value)));

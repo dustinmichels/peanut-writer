@@ -6,8 +6,8 @@
 
 import { watch } from "vue";
 import type { EditorView } from "@codemirror/view";
-import { lineScrollTop } from "./editor";
-import { state } from "./store";
+import { focusedLines, lineScrollTop } from "@/lib/editor";
+import { state } from "@/lib/store";
 
 type Anchor = [editor: number, preview: number]; // scrollTops showing the same place
 
@@ -27,14 +27,29 @@ export function syncScroll(
   let previewUntil = 0; // preview scroll events before this are echoes
   let editorUntil = 0; // editor scroll events before this are echoes
 
+  // headings are the outline's headings the editor shows: those in the
+  // focused section, if there is one.
+  function headings() {
+    const f = focusedLines(view.state);
+    return f ? state.outline.filter((h) => h.line >= f.first && h.line <= f.last) : state.outline;
+  }
+
   // anchors pairs the panes' positions at the start, at each heading both
-  // can scroll to, and at the end; strictly increasing in both.
+  // can scroll to, and at the end; strictly increasing in both. Focused on a
+  // section, the editor's start and end are the section's in the preview.
   function anchors(): Anchor[] {
     const eMax = Math.max(0, ed.scrollHeight - ed.clientHeight);
-    const pMax = Math.max(0, preview.scrollHeight - preview.clientHeight);
+    let pMax = Math.max(0, preview.scrollHeight - preview.clientHeight);
     const tops = headingTops();
-    const out: Anchor[] = [[0, 0]];
-    for (const h of state.outline) {
+    let p0 = 0;
+    const f = focusedLines(view.state);
+    if (f) {
+      p0 = Math.min(pMax, tops.get(f.first) ?? 0);
+      const next = state.outline.find((h) => h.line > f.last);
+      pMax = Math.max(p0, Math.min(pMax, (next && tops.get(next.line)) ?? pMax));
+    }
+    const out: Anchor[] = [[0, p0]];
+    for (const h of headings()) {
       const p = tops.get(h.line);
       const e = lineScrollTop(view, h.line);
       if (p === undefined || e === undefined) continue;
@@ -61,7 +76,7 @@ export function syncScroll(
     const eMax = ed.scrollHeight - ed.clientHeight;
     const limit = eMax > 0 && top >= eMax - 2 ? top + ed.clientHeight - 48 : top + 1;
     let line = 0;
-    for (const h of state.outline) {
+    for (const h of headings()) {
       const e = lineScrollTop(view, h.line);
       if (e === undefined || e > limit) break;
       line = h.line;
