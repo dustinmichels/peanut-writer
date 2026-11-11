@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
-import { AlertTriangle } from "lucide-vue-next";
+import { AlertTriangle, PanelRightClose } from "lucide-vue-next";
+import { togglePreview } from "@/lib/actions";
 import { state } from "@/lib/store";
 
 interface Page {
@@ -157,41 +158,83 @@ defineExpose({ scroller, headingTops });
 </script>
 
 <template>
-  <section ref="scroller" class="preview">
-    <div v-if="state.typstError" class="banner error">
-      <AlertTriangle :size="16" />
-      <div>
-        <b>The preview needs Typst.</b>
-        <div>{{ state.typstError }}</div>
+  <section class="pane" aria-label="Preview">
+    <header>
+      <span>Preview</span>
+      <!-- Customizing needs the preview, so it can't be hidden then. -->
+      <button v-if="!state.customizing" title="Hide preview" @click="togglePreview">
+        <PanelRightClose :size="14" />
+      </button>
+    </header>
+    <div ref="scroller" class="preview">
+      <div v-if="state.typstError" class="banner error">
+        <AlertTriangle :size="16" />
+        <div>
+          <b>The preview needs Typst.</b>
+          <div>{{ state.typstError }}</div>
+        </div>
       </div>
-    </div>
-    <div v-else-if="state.renderError" class="banner">
-      <AlertTriangle :size="16" />
-      <div>
-        <b>Peanut couldn't typeset the latest changes.</b>
-        <pre>{{ state.renderError }}</pre>
+      <div v-else-if="state.renderError" class="banner">
+        <AlertTriangle :size="16" />
+        <div>
+          <b>Peanut couldn't typeset the latest changes.</b>
+          <pre>{{ state.renderError }}</pre>
+        </div>
       </div>
-    </div>
-    <div class="pages" :class="{ pickable }">
-      <div
-        v-for="(p, i) in pages"
-        :key="i"
-        class="page"
-        :style="{ width: `${p.width * PX * zoom}px`, height: `${p.height * PX * zoom}px` }"
-        @click="clicked($event, i)"
-      >
-        <img :src="p.url" :alt="`Page ${i + 1}`" draggable="false" />
-      </div>
-      <div v-if="!pages.length && !state.renderError && !state.typstError" class="empty">
-        <img src="/peanut.svg" alt="" />
-        <span>Typesetting…</span>
+      <div class="pages" :class="{ pickable }">
+        <div
+          v-for="(p, i) in pages"
+          :key="i"
+          class="page"
+          :style="{ width: `${p.width * PX * zoom}px`, height: `${p.height * PX * zoom}px` }"
+          @click="clicked($event, i)"
+        >
+          <img :src="p.url" :alt="`Page ${i + 1}`" draggable="false" />
+        </div>
+        <div v-if="!pages.length && !state.renderError && !state.typstError" class="empty">
+          <img src="/peanut.svg" alt="" />
+          <span>Typesetting…</span>
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  padding: 0 6px 0 12px;
+  font-family: var(--rounded);
+  font-weight: 650;
+  color: var(--roast);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+header button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--quote);
+}
+header button:hover {
+  background: var(--hover);
+}
 .preview {
+  flex: 1;
   position: relative;
   min-width: 0;
   overflow: auto;

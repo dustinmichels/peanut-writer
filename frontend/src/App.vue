@@ -4,6 +4,7 @@
 import { computed, useTemplateRef, watch } from "vue";
 import { Link, Unlink } from "lucide-vue-next";
 import DialogHost from "@/components/dialogs/DialogHost.vue";
+import PaneRail from "@/components/layout/PaneRail.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import TitleBar from "@/components/layout/TitleBar.vue";
 import Toasts from "@/components/layout/Toasts.vue";
@@ -17,7 +18,7 @@ import { useAppEvents } from "@/composables/useAppEvents";
 import { useScrollSync } from "@/composables/useScrollSync";
 import { useSplitter } from "@/composables/useSplitter";
 import { useStartup } from "@/composables/useStartup";
-import { focusCurrentSection, sectionOf } from "@/lib/actions";
+import { focusCurrentSection, sectionOf, toggleOutline, togglePreview } from "@/lib/actions";
 import { focusedLines, focusSection, revealLine, revealSource } from "@/lib/editor";
 import { editor, state } from "@/lib/store";
 
@@ -28,11 +29,13 @@ const { startResize } = useSplitter(main);
 // The customize pane needs the preview to show its changes, so it stays open then.
 const previewShown = computed(() => state.previewOpen || state.customizing);
 
+// A hidden outline or preview leaves a thin rail to show it again.
 const side = "clamp(150px, 16%, 240px) ";
+const rail = "26px ";
 const columns = computed(
   () =>
-    `${state.outlineOpen ? side : ""}${state.versionsOpen ? side : ""}` +
-    (previewShown.value ? `${state.split}fr 6px ${1 - state.split}fr` : "1fr"),
+    `${state.outlineOpen ? side : rail}${state.versionsOpen ? side : ""}` +
+    (previewShown.value ? `${state.split}fr 6px ${1 - state.split}fr` : `1fr ${rail}`),
 );
 
 const sync = useScrollSync(preview, previewShown);
@@ -72,6 +75,7 @@ watch(() => state.outline, focusCurrentSection);
     <Ribbon />
     <main ref="main" class="main" :style="{ gridTemplateColumns: columns }">
       <OutlinePane v-if="state.outlineOpen" @jump="jump" />
+      <PaneRail v-else label="Outline" side="left" @open="toggleOutline" />
       <VersionsPane v-if="state.versionsOpen" />
       <!-- The editor stays mounted (hidden) while the template is customized. -->
       <EditorPane v-show="!state.customizing" />
@@ -96,6 +100,7 @@ watch(() => state.outline, focusCurrentSection);
         <span v-else />
       </div>
       <PreviewPane v-show="previewShown" ref="preview" @pick="pick" />
+      <PaneRail v-if="!previewShown" label="Preview" side="right" @open="togglePreview" />
     </main>
     <StatusBar />
     <DialogHost />

@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ImagePlus,
   ImageUp,
+  LocateFixed,
   Trash2,
   X,
 } from "lucide-vue-next";
@@ -75,7 +76,7 @@ const mentions = computed(() => {
     .map((r) => ({ from: r.from, ...sentenceAround(text, r.from, r.to) }));
 });
 
-// jump leaves the figure as it was and goes to a reference to it.
+// jump leaves the figure as it was and goes to it, or a reference to it.
 function jump(pos: number) {
   emit("close");
   if (editor.value) goTo(editor.value, pos);
@@ -282,6 +283,14 @@ function remove() {
         @click="add"
       >
         <ImagePlus :size="14" /> Add more…
+      </button>
+      <button
+        type="button"
+        class="btn"
+        title="Go to the figure in the text"
+        @click="jump(item.from)"
+      >
+        <LocateFixed :size="14" /> Go to
       </button>
       <button type="button" class="btn" style="margin-left: auto" @click="emit('close')">
         Cancel

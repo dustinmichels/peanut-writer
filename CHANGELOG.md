@@ -2,6 +2,9 @@
 
 ## 2026-11-11
 
+- Three new built-in templates: **Technical** (docs and specs: numbered headings, code panels, note callouts),
+  **Memo** (From / Date / Re / Subject block, summary bar) and **Book** (title page, "Chapter n" openings on new
+  pages, running heads).
 - **Equations are blocks** in the editor, like figures and tables: drawn by Typst, numbered when named, moved by their
   grip, and edited (LaTeX and reference name, with a live drawing and buttons for fractions, roots, sums, Greek
   letters and symbols) in a dialog from **Edit equation** or a double click. **Insert → Equation** opens that dialog
@@ -11,6 +14,9 @@
   **Restore Defaults** (also in the command palette) hides the Markdown and versions, shows the outline and preview
   at an even split, leaves section focus and fits the preview's zoom.
 - **Auto format** on save is on by default.
+- Figure dialog: **Go to** closes it and puts the cursor on the figure in the text.
+- The preview gets a header with a hide button, like the outline's. A hidden outline or preview leaves a thin
+  labelled rail at its edge; click it to show the pane again.
 
 ## 2026-11-10
 
