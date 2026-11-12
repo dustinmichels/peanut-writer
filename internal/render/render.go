@@ -138,8 +138,8 @@ func isFile(p string) bool {
 	return err == nil && !fi.IsDir()
 }
 
-// Preview renders d with tpl to one SVG per page.
-func (t *Typst) Preview(ctx context.Context, d *doc.Document, tpl templates.Template) (pages []string, warnings []string, err error) {
+// Preview renders d with tpl to SVG pages, their marks taken out (see readPage).
+func (t *Typst) Preview(ctx context.Context, d *doc.Document, tpl templates.Template) (pages []Page, warnings []string, err error) {
 	dir, warnings, err := t.render(ctx, d, tpl, "page-{0p}.svg", "--input", "peanut-preview=1")
 	if err != nil {
 		return nil, nil, err
@@ -154,7 +154,7 @@ func (t *Typst) Preview(ctx context.Context, d *doc.Document, tpl templates.Temp
 		if err != nil {
 			return nil, nil, err
 		}
-		pages = append(pages, string(b))
+		pages = append(pages, readPage(string(b)))
 	}
 	return pages, warnings, nil
 }

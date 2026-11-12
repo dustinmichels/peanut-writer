@@ -25,7 +25,7 @@
 }
 
 // In the preview, blocks carry an invisible `peanut:<line>` link to their
-// source line, which the app finds in the SVG: to keep the editor and
+// source line, which the app takes out of the SVG (render.readPage): to keep the editor and
 // preview scrolled together, and to show where a click on a page is in the
 // source. _mark puts it where a block (or a heading's text) starts, without
 // moving anything; lists and quotes have their blocks marked instead.

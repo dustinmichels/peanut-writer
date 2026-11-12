@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-12
+
+- **Smoother on long documents**: adding or removing lines no longer redraws every later page of the preview (on a
+  19-page document, each update froze the editor for about half a second); only pages that look different are sent
+  and redrawn. Peanut is drawn a third as often while he only breathes, without real-time shadows, and not at all
+  while the window is hidden.
+
 ## 2026-11-11
 
 - **Peanut** has new tricks: he jams in headphones (notes floating up), jumps for joy, walks a few steps to show off

@@ -9,6 +9,7 @@ import type { Template } from "@bindings/peanut-writer/internal/templates/models
 import type { Heading } from "@bindings/peanut-writer/internal/doc/models";
 import type { Version } from "@bindings/peanut-writer/internal/versions/models";
 import type { Backup } from "@bindings/peanut-writer/internal/backup/models";
+import type { Page } from "@bindings/peanut-writer/internal/render/models";
 import type { BlockStyle, Mark } from "@/lib/editor";
 import type { DisplayEquation, Item, RefAt, Table } from "@/lib/markdown";
 import type { Toast } from "./toasts";
@@ -43,7 +44,7 @@ export const state = reactive({
   opened: null as string | null, // the content as opened; null once saved to another file
   autosaved: false, // an autosave just ran (shown briefly in the title bar)
 
-  pages: [] as string[],
+  pages: [] as Page[], // the latest render's, each with its SVG
   renderError: "",
   warnings: [] as string[],
   rendering: false,

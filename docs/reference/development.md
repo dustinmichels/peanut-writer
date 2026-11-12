@@ -92,7 +92,8 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `service.go`: `DocService`, bound to the editor: open, save, backups, render, export, pictures, templates.
 - `internal/doc`: Markdown → document model (figures, captions, numbering, references).
 - `internal/render`: the model → Typst → SVG pages and PDF. Finds `typst` beside the executable, on `PATH`, or where
-  Homebrew and mise install it.
+  Homebrew and mise install it. Preview pages come with their blocks' positions (for scroll sync) taken out of the SVG,
+  and a key: the editor gets and redraws only pages whose key it doesn't have.
 - `internal/docx`: the model → .docx, written directly (no Word or pandoc needed).
 - `internal/html`: the model → a single self-contained .html page, styled from the template's Word style.
 - `internal/templates`: built-in and user templates, and per-document customization.

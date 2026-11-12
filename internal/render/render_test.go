@@ -100,7 +100,7 @@ func TestEveryTemplateRendersEverything(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s preview: %v", tpl.ID, err)
 		}
-		if len(pages) < 2 || !strings.HasPrefix(pages[0], "<svg") {
+		if len(pages) < 2 || !strings.HasPrefix(pages[0].SVG, "<svg") {
 			t.Errorf("%s: %d pages, want a page break to make two or more", tpl.ID, len(pages))
 		}
 		pdf, err := ty.PDF(ctx, d, tpl)
@@ -174,6 +174,39 @@ func TestHalfTypedRenders(t *testing.T) {
 		if _, _, err := ty.Preview(context.Background(), d, templates.List()[0]); err != nil {
 			t.Errorf("%q: %v", src, err)
 		}
+	}
+}
+
+// A page the editor already has keeps its key when lines are added above
+// it, so it isn't drawn again; only its marks, which hold the source lines
+// and are taken out of the SVG, move.
+func TestPageKeyIgnoresLinesAbove(t *testing.T) {
+	ty, err := Find()
+	if err != nil {
+		t.Skip(err)
+	}
+	preview := func(src string) []Page {
+		pages, _, err := ty.Preview(context.Background(), doc.Parse(src, t.TempDir()), templates.List()[0])
+		if err != nil || len(pages) != 2 {
+			t.Fatalf("%d pages, %v", len(pages), err)
+		}
+		return pages
+	}
+	rest := "\\pagebreak\n\n# Two\n\nMore.\n"
+	a := preview("# One\n\nText.\n\n" + rest)
+	b := preview("# One\n\nText.\n\nAdded.\n\n" + rest)
+	if a[0].Key == b[0].Key || a[1].Key != b[1].Key {
+		t.Errorf("keys %q, %q; want only the first page's changed", a[0].Key, a[1].Key)
+	}
+	if strings.Contains(a[1].SVG, "peanut:") {
+		t.Error("marks left in the SVG")
+	}
+	ma, mb := a[1].Marks, b[1].Marks
+	if len(ma) == 0 || ma[0].Line != 7 || len(mb) == 0 || mb[0].Line != 9 {
+		t.Fatalf("marks %v and %v; want the heading's, at lines 7 and 9", ma, mb)
+	}
+	if m := ma[0]; m.X <= 0 || m.X > a[1].Width/2 || m.Y <= 0 || m.Y > a[1].Height/2 {
+		t.Errorf("heading mark at (%g, %g); want it in the page's top left", m.X, m.Y)
 	}
 }
 

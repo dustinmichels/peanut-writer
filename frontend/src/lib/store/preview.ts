@@ -36,13 +36,15 @@ async function renderNow() {
   inFlight = true;
   state.rendering = true;
   const gen = generation;
+  // The pages shown, by key: one still the same comes back without its SVG.
+  const had = new Map(state.pages.map((p) => [p.key, p.svg]));
   try {
-    const res = await DocService.Render(state.content);
+    const res = await DocService.Render(state.content, [...had.keys()]);
     if (res.error === "canceled" || gen !== generation) return;
     state.outline = res.outline ?? [];
     if (res.error) state.renderError = res.error;
     else {
-      state.pages = res.pages ?? [];
+      state.pages = (res.pages ?? []).map((p) => (p.svg ? p : { ...p, svg: had.get(p.key) ?? "" }));
       state.renderError = "";
     }
     state.warnings = res.warnings ?? [];
