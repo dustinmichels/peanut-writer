@@ -4,15 +4,16 @@ You type on the left; the typeset pages appear on the right, updating as you go.
 
 ## The ribbon
 
-| Tab            | What's there                                                                                                                   |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **File**       | New, open, save, recent documents, export, settings                                                                            |
-| **Home**       | Bold, italic, strikethrough, highlight, code, headings, lists, quotes                                                          |
-| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break                                              |
-| **References** | Cross-reference, footnote, all notes, table of contents, figure and table previews, and Zotero citations (once on in Settings) |
-| **Design**     | Templates, Customize, Manage Templates, document properties, settings                                                          |
-| **View**       | Markdown view, outline, preview, versions                                                                                      |
-| **Help**       | Welcome guide, Markdown cheat sheet                                                                                            |
+| Tab                       | What's there                                                                                                          |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| **File**                  | New, open, save, recent documents, export, settings                                                                   |
+| **Home**                  | Bold, italic, strikethrough, highlight, code, headings, lists, quotes                                                 |
+| **Insert**                | Picture, picture grid, table, link, footnote, equation, contents, code, divider, page break                           |
+| **Figures & Tables**      | Picture, picture grid, table, equation, cross-reference, and figure and table previews                                |
+| **Citations & Footnotes** | Citation, all sources, import, reference list, footnote, all notes, and Update (with Zotero citations on in Settings) |
+| **Design**                | Templates, Customize, Manage Templates, document properties, settings                                                 |
+| **View**                  | Markdown view, outline, preview, versions                                                                             |
+| **Help**                  | Welcome guide, Markdown cheat sheet                                                                                   |
 
 ## The command palette
 
@@ -59,13 +60,13 @@ preview puts the cursor there in the editor.
 
 ## Footnotes, contents and page breaks
 
-- **References → Footnote** asks for the note, then adds a numbered mark at the cursor. In the text the mark shows as
-  its number: point at it to read the note, click it to edit. Notes are numbered in order and renumber as you add or
-  delete them; deleting a mark deletes its note (cutting it doesn't). The notes are kept together at the end of the
-  Markdown, and the template places each at the foot of its page.
+- **Citations & Footnotes → Footnote** asks for the note, then adds a numbered mark at the cursor. In the text the mark
+  shows as its number: point at it to read the note, click it to edit. Notes are numbered in order and renumber as you
+  add or delete them; deleting a mark deletes its note (cutting it doesn't). The notes are kept together at the end of
+  the Markdown, and the template places each at the foot of its page.
 - A mark with no note, or a note nothing points to, shows a red **?** and is listed in the status bar. Unused notes
   aren't printed.
-- **References → All Notes** lists every note beside its sentence; click either to go there.
-- **References → Contents** inserts a table of contents that updates itself. In the editor it's a **TOC** bar: drag its
+- **Citations & Footnotes → All Notes** lists every note beside its sentence; click either to go there.
+- **Insert → Contents** inserts a table of contents that updates itself. In the editor it's a **TOC** bar: drag its
   grip (⠿) to move it, or backspace into it to delete it.
 - **Insert → Page Break** starts a new page; **Insert → Divider** draws a line.

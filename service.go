@@ -150,7 +150,7 @@ type Settings struct {
 	PeanutActivity *string `json:"peanutActivity,omitempty"` // how much Peanut gets up to: "busy", or anything else (nil too) for "chill"
 	SyncOnSave     *bool   `json:"syncOnSave,omitempty"`     // saving also writes the PDF and Word copies, as Sync Files does; nil means off
 	SyncOnQuit     *bool   `json:"syncOnQuit,omitempty"`     // quitting or opening another document also writes the copies; nil means on
-	Zotero         *bool   `json:"zotero,omitempty"`         // the References tab cites sources from Zotero (with Better BibTeX); nil means off
+	Zotero         *bool   `json:"zotero,omitempty"`         // the citation dialog also cites sources from Zotero (with Better BibTeX); nil means off
 }
 
 // SettingsInfo is both sets of settings, and the files they're kept in.

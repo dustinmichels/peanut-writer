@@ -34,16 +34,16 @@ a line, it makes that text math in the sentence instead. In the editor an equati
 
 ## Cross-references
 
-**References → Cross-reference**, or typing `@`, lists every figure and table with its current number; pick one to
-insert a reference. It reads "Figure 2" and updates when things are added, removed or moved. Renaming a reference name,
-in its dialog or in the Markdown, updates the references to it, unless the new name is already taken.
+**Figures & Tables → Cross-reference**, or typing `@`, lists every figure and table with its current number; pick one
+to insert a reference. It reads "Figure 2" and updates when things are added, removed or moved. Renaming a reference
+name, in its dialog or in the Markdown, updates the references to it, unless the new name is already taken.
 
 Click a reference to point it somewhere else, or **Unlink** it to keep "Figure 2" as plain text. A reference to
 something that no longer exists shows as **??** in the preview and is listed in the status bar's notes; clicking it
 offers **Remove**.
 
-**References** previews every figure and table in order; click one to open its dialog, which lists each sentence that
-refers to it. Click a sentence to go there.
+**Figures & Tables** previews every figure and table in order; click one to open its dialog, which lists each sentence
+that refers to it. Click a sentence to go there.
 
 ## In Word
 

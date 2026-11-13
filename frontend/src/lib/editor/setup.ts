@@ -1,6 +1,6 @@
 // Setting up the editor, and swapping in a new document.
 
-import { autocompletion } from "@codemirror/autocomplete";
+import { autocompletion, type CompletionSource } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
@@ -34,11 +34,19 @@ import { showExtension, showSlot, theme } from "./theme";
 import type { Handlers } from "./types";
 import { imageCache } from "./widgets/figure";
 
+// An add-on to the editor (a feature such as the citation manager): its
+// completions, offered beside the cross-references', and its extensions.
+export interface EditorAddon {
+  completions: CompletionSource[];
+  extensions: Extension[];
+}
+
 export function createEditor(
   parent: HTMLElement,
   doc: string,
   handlers: Handlers,
   show: boolean,
+  addon: EditorAddon = { completions: [], extensions: [] },
 ): EditorView {
   const formatting = keymap.of([
     { key: "Mod-b", run: (v) => toggleMark(v, "strong") },
@@ -82,7 +90,8 @@ export function createEditor(
       ...historyKeymap,
       ...searchKeymap,
     ]),
-    autocompletion({ override: [refCompletions], icons: false }),
+    autocompletion({ override: [refCompletions, ...addon.completions], icons: false }),
+    ...addon.extensions,
     decorations(handlers),
     lineStyles,
     hiddenMarks,

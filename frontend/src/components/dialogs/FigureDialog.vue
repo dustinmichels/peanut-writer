@@ -264,7 +264,7 @@ function remove() {
           {{
             item.label
               ? `Nothing in the text refers to Figure ${item.number} yet.`
-              : "Give the figure a reference name, then add cross-references to it (References → Cross-reference)."
+              : "Give the figure a reference name, then add cross-references to it (Figures & Tables → Cross-reference)."
           }}
         </p>
       </aside>

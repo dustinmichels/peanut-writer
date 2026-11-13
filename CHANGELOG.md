@@ -2,11 +2,18 @@
 
 ## 2026-11-13
 
-- **Zotero citations**, optional (Settings → Zotero citations; needs Zotero's free Better BibTeX add-on, and the
-  Citation dialog walks through installing it): `[@key]`, `[@key, p. 4]` and `[@a; @b]` cite sources kept in
-  `Name.bib` beside the document, in the `citation-style` front matter names (APA by default), with the reference list
-  at the end or at a `[References]` line; Typst writes them for the PDF, Word and web page alike. New guide page:
-  Citations with Zotero.
+- **Citations**: `[@key]`, `[@key, p. 4]` and `[@a; @b]` cite sources kept in `Name.bib` beside the document, in the
+  `citation-style` front matter names (APA, Chicago author-date and others), with the reference list at the end or at
+  a `[References]` line; Typst writes them for the PDF, Word and web page alike.
+
+- **Citation manager**, without Zotero (Citations & Footnotes → Citation): add or edit references in a form, filled
+  from a DOI or ISBN if you like; import BibTeX or RIS (duplicates spotted); **All Sources** lists every reference
+  beside the editor with how often it's cited; typing `[@` offers keys, and hovering a citation shows its reference.
+  Optional **Zotero** tab (Settings → Zotero citations) copies the sources you cite into the same file. It's a
+  self-contained module (`internal/citations`, `frontend/src/features/citations`). New guide page: Citations.
+
+- The References tab is now two: **Figures & Tables** (pictures, tables, equations, cross-references, previews) and
+  **Citations & Footnotes**.
 
 ## 2026-11-11
 

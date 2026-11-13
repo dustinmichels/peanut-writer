@@ -79,7 +79,7 @@ export const state = reactive({
   peanutBusy: false, // Peanut's activity level is "busy", not "chill" (Settings)
   syncOnSave: false, // saving also syncs the PDF and Word copies (Settings)
   syncOnQuit: true, // quitting or opening another document also syncs them (Settings)
-  zotero: false, // the References tab cites sources from Zotero (Settings)
+  zotero: false, // the citation dialog also cites sources from Zotero (Settings)
   fitZoom: 1,
   dialog: null as Dialog | null,
   cheatSheet: false, // the Markdown cheat sheet, shown over any dialog

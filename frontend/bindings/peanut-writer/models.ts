@@ -99,7 +99,7 @@ export interface Settings {
     "syncOnQuit"?: boolean | null;
 
     /**
-     * the References tab cites sources from Zotero (with Better BibTeX); nil means off
+     * the citation dialog also cites sources from Zotero (with Better BibTeX); nil means off
      */
     "zotero"?: boolean | null;
 }
@@ -116,21 +116,6 @@ export interface SettingsInfo {
      * "" until the document is saved
      */
     "documentFile": string;
-}
-
-/**
- * SourcesUpdate is what UpdateSources did.
- */
-export interface SourcesUpdate {
-    /**
-     * how many the document's references hold
-     */
-    "sources": number;
-
-    /**
-     * cited keys Zotero's library (My Library) has no source for
-     */
-    "notFound": string[] | null;
 }
 
 /**

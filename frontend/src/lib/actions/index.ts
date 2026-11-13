@@ -1,6 +1,5 @@
 // The actions: what the menus, the ribbon and the dialogs do to the document.
 
-export { insertCitation, updateSources } from "./citations";
 export { insertCrossRef, refLabel, unlinkCrossRef } from "./crossrefs";
 export {
   contentChanged,

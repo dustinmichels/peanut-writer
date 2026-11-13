@@ -81,8 +81,8 @@ and several sources go together, apart by semicolons:
 Peanuts are legumes [@smith2020, p. 4], not nuts [@lee2019; @smith2020].
 ```
 
-- Keys are the ones [Better BibTeX](https://retorque.re/zotero-better-bibtex/) gives your Zotero sources. The sources
-  cited are kept in `Name.bib` beside the document. Setting it up: [Citations with Zotero](../guide/citations).
+- Keys are those of the document's references, kept in `Name.bib` beside it: add them with **Citations & Footnotes →
+  Citation**, by importing BibTeX or RIS, or from Zotero (Better BibTeX's keys). See [Citations](../guide/citations).
 - The reference list goes at the end under a **References** heading, or where a line holds just `[References]` (then
   under whatever heading you write above it).
 - A key `Name.bib` doesn't have shows as `[key?]` in bold, and is listed in the status bar's notes.

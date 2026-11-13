@@ -68,7 +68,9 @@ function jump(pos: number) {
         </button>
       </template>
     </div>
-    <p v-else class="none">No footnotes yet. Add one at the cursor with References → Footnote.</p>
+    <p v-else class="none">
+      No footnotes yet. Add one at the cursor with Citations &amp; Footnotes → Footnote.
+    </p>
     <template #footer>
       <button type="button" class="btn" title="Add a footnote at the cursor" @click="newFootnote">
         <Footprints :size="14" /> New footnote…

@@ -41,7 +41,7 @@ export default defineConfig({
         items: [
           { text: "Writing", link: "/guide/writing" },
           { text: "Figures, tables and references", link: "/guide/figures-and-tables" },
-          { text: "Citations with Zotero", link: "/guide/citations" },
+          { text: "Citations", link: "/guide/citations" },
           { text: "Templates", link: "/guide/templates" },
           { text: "Documents, saving and export", link: "/guide/documents" },
           { text: "Settings", link: "/guide/settings" },

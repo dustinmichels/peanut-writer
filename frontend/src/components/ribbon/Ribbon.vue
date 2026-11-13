@@ -5,8 +5,9 @@ import { defineAsyncComponent, ref } from "vue";
 import RibbonDesign from "./RibbonDesign.vue";
 import RibbonFile from "./RibbonFile.vue";
 import RibbonHome from "./RibbonHome.vue";
+import RibbonFigures from "./RibbonFigures.vue";
 import RibbonInsert from "./RibbonInsert.vue";
-import RibbonReferences from "./RibbonReferences.vue";
+import RibbonNotes from "./RibbonNotes.vue";
 import RibbonVersions from "./RibbonVersions.vue";
 import RibbonView from "./RibbonView.vue";
 import { versionDraft } from "./versionDraft";
@@ -16,7 +17,8 @@ const tabs = [
   { id: "file", label: "File" },
   { id: "home", label: "Home" },
   { id: "insert", label: "Insert" },
-  { id: "references", label: "References" },
+  { id: "figures", label: "Figures & Tables" },
+  { id: "notes", label: "Citations & Footnotes" },
   { id: "design", label: "Design" },
   { id: "versions", label: "Versions" },
   { id: "view", label: "View" },
@@ -58,7 +60,8 @@ const PeanutBuddy = defineAsyncComponent(() => import("@/peanut/PeanutBuddy.vue"
       <RibbonFile v-if="tab === 'file'" />
       <RibbonHome v-if="tab === 'home'" />
       <RibbonInsert v-if="tab === 'insert'" />
-      <RibbonReferences v-if="tab === 'references'" />
+      <RibbonFigures v-if="tab === 'figures'" />
+      <RibbonNotes v-if="tab === 'notes'" />
       <RibbonDesign v-if="tab === 'design'" />
       <RibbonVersions v-if="tab === 'versions'" />
       <RibbonView v-if="tab === 'view'" />

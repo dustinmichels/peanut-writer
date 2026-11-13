@@ -11,6 +11,7 @@ import {
   openRecent,
   toggleMarkdown,
 } from "@/lib/actions";
+import { citationEditor } from "@/features/citations";
 import { activeMarks, blockStyleAt, createEditor, focusedLines } from "@/lib/editor";
 import { editor, state } from "@/lib/store";
 
@@ -60,6 +61,7 @@ onMounted(() => {
       },
     },
     state.showMarkdown,
+    citationEditor,
   );
   editor.value.focus();
   offDrop = Events.On("filesDropped", filesDropped);

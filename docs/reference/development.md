@@ -89,6 +89,10 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 ## Layout
 
 - `main.go`: the window and the menu bar (menu commands reach the editor as `menu` events).
+- `bibliography.go`: the document's `Name.bib` path, carried along on Save As and read for rendering.
+- `internal/citations`: the citation manager's own Wails service, beside `DocService`.
+- `internal/refs`: references as the citation manager edits them: field mapping, keys, BibTeX/RIS import, DOI/ISBN
+  lookup.
 - `service.go`: `DocService`, bound to the editor: open, save, backups, render, export, pictures, templates.
 - `internal/doc`: Markdown → document model (figures, captions, numbering, references).
 - `internal/render`: the model → Typst → SVG pages and PDF. Finds `typst` beside the executable, on `PATH`, or where
@@ -99,7 +103,7 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/backup`: `.md` backups in timestamped `backups/<datetime>/` folders.
 - `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
-- `internal/bib`: reads and merges the BibLaTeX file (`Name.bib`) a document's citations are of.
+- `internal/bib`: reads, edits and merges the BibLaTeX file (`Name.bib`) a document's citations are of.
 - `internal/zotero`: searches Zotero and exports sources through Better BibTeX's JSON-RPC (`localhost:23119`).
 - `starter/`: the welcome guide.
 - `frontend/`: the editor. Under `src/`:
@@ -109,6 +113,8 @@ always agree. The editor mirrors the same numbering rules while you type (`front
   - `components/`: `layout/`, `ribbon/` (a component per tab), `panes/`, `dialogs/` and shared `ui/` pieces;
     `composables/` holds App's wiring (splitter, scroll sync, events, startup).
   - `styles/`: the global CSS; `peanut/`: the three.js Peanut.
+  - `features/citations/`: the citation manager: dialog, form, import, References pane, editor hints. Its `index.ts`
+    lists the five places it is mounted, so it can be taken out.
   - Each `lib/` folder's `index.ts` is its API: import `@/lib/editor`, not its files. `@/` is `src/`, `@bindings/`
     the generated Wails bindings.
 - `docs/`: this site ([VitePress](https://vitepress.dev)).

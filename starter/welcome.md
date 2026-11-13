@@ -87,7 +87,7 @@ Only named equations are numbered, and they can be referenced like figures and t
 
 # Cross-references
 
-**References → Cross-reference** inserts a reference to any figure, table or equation. Move @fig:peanut below @tbl:snacks and both numbers update, everywhere.[^3] A reference to a name that doesn't exist shows as **??** and is listed in the status bar.
+**Figures & Tables → Cross-reference** inserts a reference to any figure, table or equation. Move @fig:peanut below @tbl:snacks and both numbers update, everywhere.[^3] A reference to a name that doesn't exist shows as **??** and is listed in the status bar.
 
 # Make it yours
 
@@ -99,4 +99,4 @@ Pick a look on the **Design** tab, fill in the title, author and abstract under 
 
 [^2]: Peanut, in conversation. Peanut has not been asked to explain this.
 
-[^3]: Footnotes come from **References → Footnote**. They number themselves too, and land at the bottom of the page in a PDF.
+[^3]: Footnotes come from **Citations & Footnotes → Footnote**. They number themselves too, and land at the bottom of the page in a PDF.

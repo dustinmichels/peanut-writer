@@ -27,6 +27,11 @@ var (
 	refKeyRe = regexp.MustCompile(`^(?:fig|tbl|eq):`)
 )
 
+var wholeKeyRe = regexp.MustCompile(`^` + citeKey + `$`)
+
+// IsCiteKey says whether `[@s]` cites s.
+func IsCiteKey(s string) bool { return wholeKeyRe.MatchString(s) && !refKeyRe.MatchString(s) }
+
 // splitCites turns `[@a]`, `[@a, p. 4]` and `[@a; @b]` in text runs into
 // citations.
 func splitCites(in []Inline) []Inline {

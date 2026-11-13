@@ -9,6 +9,8 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/updater"
+
+	"peanut-writer/internal/citations"
 )
 
 const appName = "Peanut Writer"
@@ -34,9 +36,14 @@ func main() {
 	app := application.New(application.Options{
 		Name:        appName,
 		Description: "A friendly writer for documents with figures, tables and cross-references",
-		Services:    []application.Service{application.NewService(docs)},
-		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
-		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		Services: []application.Service{
+			application.NewService(docs),
+			// The citation manager: delete this line (and its frontend, see
+			// frontend/src/features/citations) to go without it.
+			application.NewService(citations.New(docs.bibFile)),
+		},
+		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
+		Mac:    application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		// Documents opened from the file manager or the command line.
 		FileAssociations: []string{packageExt},
 		ShouldQuit:       docs.shouldClose,

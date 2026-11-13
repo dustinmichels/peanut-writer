@@ -1,5 +1,6 @@
-// Package bib reads and merges BibLaTeX files: the `Name.bib` a document
-// keeps its cited sources in, filled from Zotero (see internal/zotero).
+// Package bib reads, edits and merges BibLaTeX files: the `Name.bib` a
+// document keeps its cited sources in, written by the citation dialog or
+// filled from Zotero (see internal/zotero).
 package bib
 
 import (
@@ -123,4 +124,110 @@ func Sorted(keys map[string]bool) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// Field is one `name = value` of an entry. Value is the text inside its
+// braces or quotes; Raw, when set, is the value as written (a number, a
+// macro, a `#` concatenation) and is written back as it was.
+type Field struct {
+	Name  string
+	Value string
+	Raw   string
+}
+
+// Fields are e's type (lower case) and its fields in order.
+func Fields(e Entry) (typ string, fields []Field) {
+	src := e.Text
+	open := bytes.IndexAny(src, "{(")
+	if open < 0 {
+		return "", nil
+	}
+	typ = strings.ToLower(strings.TrimSpace(string(bytes.TrimPrefix(src[:open], []byte("@")))))
+	end := closing(src, open)
+	body := src[open+1 : max(end-1, open+1)]
+	comma := bytes.IndexByte(body, ',')
+	if comma < 0 {
+		return typ, nil
+	}
+	for i := comma + 1; i < len(body); {
+		eq := bytes.IndexByte(body[i:], '=')
+		if eq < 0 {
+			break
+		}
+		name := strings.ToLower(strings.TrimSpace(strings.Trim(string(body[i:i+eq]), ",")))
+		j := i + eq + 1
+		start := j
+		// The value runs to the next comma outside braces and quotes.
+		depth, quoted := 0, false
+		for ; j < len(body); j++ {
+			switch c := body[j]; {
+			case c == '\\':
+				j++
+			case c == '{':
+				depth++
+			case c == '}' && depth > 0:
+				depth--
+			case c == '"' && depth == 0:
+				quoted = !quoted
+			case c == ',' && depth == 0 && !quoted:
+				goto done
+			}
+		}
+	done:
+		raw := strings.TrimSpace(string(body[start:min(j, len(body))]))
+		i = j + 1
+		if name == "" {
+			continue
+		}
+		f := Field{Name: name, Raw: raw}
+		if v, ok := delimited(raw); ok {
+			f = Field{Name: name, Value: v}
+		}
+		fields = append(fields, f)
+	}
+	return typ, fields
+}
+
+// delimited is the text inside raw's one pair of braces or quotes.
+func delimited(raw string) (string, bool) {
+	if len(raw) < 2 {
+		return "", false
+	}
+	if raw[0] == '{' && closing([]byte(raw), 0) == len(raw) || raw[0] == '"' && raw[len(raw)-1] == '"' && !strings.Contains(raw[1:len(raw)-1], `"`) {
+		return raw[1 : len(raw)-1], true
+	}
+	return "", false
+}
+
+// Format writes an entry of type typ and key, its fields' values in braces.
+func Format(typ, key string, fields []Field) []byte {
+	var b bytes.Buffer
+	b.WriteString("@" + typ + "{" + key + ",\n")
+	for _, f := range fields {
+		v := f.Raw
+		if v == "" {
+			v = "{" + f.Value + "}"
+		}
+		b.WriteString("  " + f.Name + " = " + v + ",\n")
+	}
+	b.WriteString("}")
+	return b.Bytes()
+}
+
+// Balanced says whether s's braces pair up, as a value in braces needs.
+func Balanced(s string) bool {
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '{':
+			depth++
+		case '}':
+			if depth--; depth < 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
 }

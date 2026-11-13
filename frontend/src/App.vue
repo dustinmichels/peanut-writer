@@ -14,6 +14,7 @@ import OutlinePane from "@/components/panes/OutlinePane.vue";
 import PreviewPane from "@/components/panes/PreviewPane.vue";
 import VersionsPane from "@/components/panes/VersionsPane.vue";
 import Ribbon from "@/components/ribbon/Ribbon.vue";
+import { citationState, ReferencesPane } from "@/features/citations";
 import { useAppEvents } from "@/composables/useAppEvents";
 import { useScrollSync } from "@/composables/useScrollSync";
 import { useSplitter } from "@/composables/useSplitter";
@@ -35,6 +36,7 @@ const rail = "26px ";
 const columns = computed(
   () =>
     `${state.outlineOpen ? side : rail}${state.versionsOpen ? side : ""}` +
+    (citationState.paneOpen ? side : "") +
     (previewShown.value ? `${state.split}fr 6px ${1 - state.split}fr` : `1fr ${rail}`),
 );
 
@@ -77,6 +79,7 @@ watch(() => state.outline, focusCurrentSection);
       <OutlinePane v-if="state.outlineOpen" @jump="jump" />
       <PaneRail v-else label="Outline" side="left" @open="toggleOutline" />
       <VersionsPane v-if="state.versionsOpen" />
+      <ReferencesPane v-if="citationState.paneOpen" />
       <!-- The editor stays mounted (hidden) while the template is customized. -->
       <EditorPane v-show="!state.customizing" />
       <CustomizePane v-if="state.customizing" />
