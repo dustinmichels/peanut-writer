@@ -20,6 +20,7 @@ export type Dialog =
   | { kind: "equation"; eq?: DisplayEquation; tex?: string; replace?: { from: number; to: number } }
   | { kind: "pasteTable" }
   | { kind: "crossref"; at?: RefAt }
+  | { kind: "citation" }
   | { kind: "link"; text: string }
   // A new footnote, or (label) the note of a mark that has none.
   | { kind: "footnote"; label?: string }
@@ -78,6 +79,7 @@ export const state = reactive({
   peanutBusy: false, // Peanut's activity level is "busy", not "chill" (Settings)
   syncOnSave: false, // saving also syncs the PDF and Word copies (Settings)
   syncOnQuit: true, // quitting or opening another document also syncs them (Settings)
+  zotero: false, // the References tab cites sources from Zotero (Settings)
   fitZoom: 1,
   dialog: null as Dialog | null,
   cheatSheet: false, // the Markdown cheat sheet, shown over any dialog

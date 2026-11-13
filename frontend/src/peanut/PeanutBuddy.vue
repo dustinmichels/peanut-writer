@@ -31,11 +31,13 @@ const CHEERS = [
   "Shell yeah! Keep writing!",
   "You're on a roll!",
   "Tough nuts crack eventually. Keep at it!",
-  "Every draft counts.",
-  "Done is better than perfect.",
-  "Deep breath. You've got this.",
-  "Proud of you for showing up!",
-  "Write the messy version first.",
+  "Peanut loves your work!",
+  "Turns out you're a super star?",
+  // "Every draft counts.",
+  // "Done is better than perfect.",
+  // "Deep breath. You've got this.",
+  // "Proud of you for showing up!",
+  // "Write the messy version first.",
   "Look at you go!",
 ];
 const SAY_MS = 4000; // from popping out of his mouth to faded away

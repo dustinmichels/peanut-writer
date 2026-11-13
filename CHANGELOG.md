@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-13
+
+- **Zotero citations**, optional (Settings → Zotero citations; needs Zotero's free Better BibTeX add-on, and the
+  Citation dialog walks through installing it): `[@key]`, `[@key, p. 4]` and `[@a; @b]` cite sources kept in
+  `Name.bib` beside the document, in the `citation-style` front matter names (APA by default), with the reference list
+  at the end or at a `[References]` line; Typst writes them for the PDF, Word and web page alike. New guide page:
+  Citations with Zotero.
+
 ## 2026-11-11
 
 - **Peanut** has new tricks: he jams in headphones (notes floating up), jumps for joy, walks a few steps to show off

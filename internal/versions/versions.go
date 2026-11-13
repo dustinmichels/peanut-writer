@@ -1,6 +1,6 @@
 // Package versions keeps named versions of a document in "versions/<name>/"
-// folders beside it: a copy of its Markdown and of its JSON sidecar files (its
-// own template and settings), with Word and PDF copies made from it.
+// folders beside it: a copy of its Markdown and of its sidecar files (its own
+// template, settings and references), with Word and PDF copies made from it.
 package versions
 
 import (

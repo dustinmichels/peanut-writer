@@ -18,6 +18,7 @@ import {
   type ViewUpdate,
 } from "@codemirror/view";
 import {
+  citations,
   type FootnoteMark,
   type Item,
   kindName,
@@ -163,6 +164,11 @@ function buildDecorations(state: EditorState, handlers: Handlers): Decos {
       }),
       atomic: true,
     });
+  }
+  // Citations, marked as such: Typst writes them as the style has it.
+  for (const c of citations(text)) {
+    if (c.from < fm.to || out(c.from)) continue;
+    ranges.push({ from: c.from, to: c.to, deco: Decoration.mark({ class: "pw-cite" }) });
   }
   const { marks, notes } = state.field(footnotesField);
   const noteText = new Map<string, string>();

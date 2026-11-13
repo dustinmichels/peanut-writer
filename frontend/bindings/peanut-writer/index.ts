@@ -12,5 +12,6 @@ export type {
     RenderResult,
     Settings,
     SettingsInfo,
+    SourcesUpdate,
     StartupInfo
 } from "./models.js";

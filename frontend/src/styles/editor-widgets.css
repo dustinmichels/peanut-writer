@@ -315,6 +315,11 @@
   color: var(--danger);
   background: #fbe3dc;
 }
+.cm-editor .pw-cite {
+  color: var(--roast);
+  background: var(--cream);
+  border-radius: 4px;
+}
 .cm-editor .pw-footnote-ref {
   font-size: 0.75em;
   vertical-align: super;

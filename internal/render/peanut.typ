@@ -117,6 +117,15 @@
   else if t == "ref" {
     if n.at("kind", default: "") != "" { ref(label(n.label)) } else { text(weight: "bold")[??] }
   }
+  else if t == "cite" {
+    // Citations side by side are one group, "(Lee, 2019; Smith, 2020)". A
+    // source the references lack is its key, as LaTeX shows one.
+    for c in n.cites {
+      if c.at("missing", default: false) { text(weight: "bold", "[" + c.key + "?]") }
+      else if c.at("locator", default: "") != "" { cite(label(c.key), supplement: c.locator) }
+      else { cite(label(c.key)) }
+    }
+  }
   else if t == "footnote" {
     // A note whose text isn't typed yet ("[^1]: ") has no blocks.
     let bs = n.at("blocks", default: ())
@@ -153,6 +162,11 @@
   else if t == "rule" { block(above: 1.2em, below: 1.2em, line(length: 100%, stroke: 0.6pt + luma(160))) }
   else if t == "pagebreak" { pagebreak(weak: true) }
   else if t == "toc" { outline(depth: 3) } // levels 1–3, as in Word and the web page
+  else if t == "bibliography" {
+    // The style is set only when a citation is of a source refs.bib has.
+    let style = n.at("text", default: "")
+    if style != "" { bibliography("/refs.bib", title: none, style: style) }
+  }
   else if t == "equation" {
     // Only a labelled equation is numbered (doc.json leaves the label out
     // when an earlier block has it).

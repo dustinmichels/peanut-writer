@@ -129,6 +129,12 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline, p runProps) {
 			w.footnote(sb, x, p)
 		case doc.InlineMath:
 			sb.WriteString(w.math(x, p))
+		case doc.InlineCite:
+			if len(x.Children) == 0 {
+				sb.WriteString(w.run(doc.CiteSource(x), p))
+			} else {
+				w.inline(sb, x.Children, p)
+			}
 		}
 	}
 }

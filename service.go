@@ -150,6 +150,7 @@ type Settings struct {
 	PeanutActivity *string `json:"peanutActivity,omitempty"` // how much Peanut gets up to: "busy", or anything else (nil too) for "chill"
 	SyncOnSave     *bool   `json:"syncOnSave,omitempty"`     // saving also writes the PDF and Word copies, as Sync Files does; nil means off
 	SyncOnQuit     *bool   `json:"syncOnQuit,omitempty"`     // quitting or opening another document also writes the copies; nil means on
+	Zotero         *bool   `json:"zotero,omitempty"`         // the References tab cites sources from Zotero (with Better BibTeX); nil means off
 }
 
 // SettingsInfo is both sets of settings, and the files they're kept in.
@@ -221,6 +222,7 @@ func (s *DocService) NewDocument() (DocInfo, error) {
 	}
 	os.Remove(documentSettingsPath(p)) // a replaced document's
 	os.Remove(customTemplatePath(p))
+	os.Remove(bibPath(p, ""))
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
 	return DocInfo{Path: p, Name: name, Content: content}, nil
@@ -569,6 +571,9 @@ func (s *DocService) SaveAs(content string) (DocInfo, error) {
 	}
 	if err := s.carryTemplate(oldPath, p); err != nil {
 		return DocInfo{}, fmt.Errorf("copying the document's template: %w", err)
+	}
+	if err := carryBib(oldPath, oldDir, p); err != nil {
+		return DocInfo{}, fmt.Errorf("copying the document's references: %w", err)
 	}
 	s.setOpen(p, filepath.Dir(p))
 	s.remember(p)
@@ -983,7 +988,7 @@ func (s *DocService) Render(content string) RenderResult {
 	s.mu.Unlock()
 	defer cancel()
 
-	d := doc.Parse(content, dir)
+	d := parseDoc(content, dir, cur)
 	if s.typstErr != nil {
 		return RenderResult{Outline: d.Outline(), Error: s.typstErr.Error()}
 	}
@@ -1050,6 +1055,9 @@ func (s *DocService) ExportHTML(content string) (string, error) {
 			pics, _ := s.typst.Equations(context.Background(), ms, sizePt, "svg")
 			return pics
 		}
+		if err := s.typst.Citations(context.Background(), d); err != nil {
+			return "", err
+		}
 	}
 	return p, atomicfile.Write(p, html.Write(d, tpl.Docx, opt), 0o644)
 }
@@ -1067,7 +1075,7 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if cur == "" {
 		return nil, errors.New("save the document first")
 	}
-	d := doc.Parse(content, dir)
+	d := parseDoc(content, dir, cur)
 	tpl, err := s.templateFor(cur, d.Meta.Template)
 	if err != nil {
 		return nil, err
@@ -1100,6 +1108,9 @@ func (s *DocService) docxBytes(d *doc.Document, tpl templates.Template) ([]byte,
 			pics, _ := s.typst.Equations(context.Background(), ms, sizePt, "png")
 			return pics
 		}
+		if err := s.typst.Citations(context.Background(), d); err != nil {
+			return nil, err
+		}
 	}
 	return docx.Write(d, tpl.Docx, opt)
 }
@@ -1108,7 +1119,7 @@ func (s *DocService) exportTarget(content, ext, kind, pattern string) (*doc.Docu
 	s.mu.Lock()
 	dir, cur := s.dir, s.path
 	s.mu.Unlock()
-	d := doc.Parse(content, dir)
+	d := parseDoc(content, dir, cur)
 	tpl, err := s.templateFor(cur, d.Meta.Template)
 	if err != nil {
 		return nil, tpl, "", err
@@ -1163,9 +1174,9 @@ func (s *DocService) Reveal(p string) error {
 // --- Versions ----------------------------------------------------------------
 
 // docSidecars are the files beside the document at p that belong to it: its
-// own template and its settings.
+// own template, its settings and its references.
 func docSidecars(p string) []string {
-	return []string{customTemplatePath(p), documentSettingsPath(p)}
+	return []string{customTemplatePath(p), documentSettingsPath(p), bibPath(p, "")}
 }
 
 // SaveVersion keeps the saved document, with its own template and settings,
@@ -1186,7 +1197,7 @@ func (s *DocService) SaveVersion(name string) (versions.Version, error) {
 	if err != nil {
 		return versions.Version{}, err
 	}
-	d := doc.Parse(withoutBOM(string(b)), filepath.Dir(p))
+	d := parseDoc(withoutBOM(string(b)), filepath.Dir(p), p)
 	tpl, err := s.templateFor(p, d.Meta.Template)
 	if err != nil {
 		return versions.Version{}, err

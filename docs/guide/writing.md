@@ -4,15 +4,15 @@ You type on the left; the typeset pages appear on the right, updating as you go.
 
 ## The ribbon
 
-| Tab            | What's there                                                                       |
-| -------------- | ---------------------------------------------------------------------------------- |
-| **File**       | New, open, save, recent documents, export, settings                                |
-| **Home**       | Bold, italic, strikethrough, highlight, code, headings, lists, quotes              |
-| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break  |
-| **References** | Cross-reference, footnote, all notes, table of contents, figure and table previews |
-| **Design**     | Templates, Customize, Manage Templates, document properties, settings              |
-| **View**       | Markdown view, outline, preview, versions                                          |
-| **Help**       | Welcome guide, Markdown cheat sheet                                                |
+| Tab            | What's there                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **File**       | New, open, save, recent documents, export, settings                                                                            |
+| **Home**       | Bold, italic, strikethrough, highlight, code, headings, lists, quotes                                                          |
+| **Insert**     | Picture, picture grid, table, link, footnote, equation, code, divider, page break                                              |
+| **References** | Cross-reference, footnote, all notes, table of contents, figure and table previews, and Zotero citations (once on in Settings) |
+| **Design**     | Templates, Customize, Manage Templates, document properties, settings                                                          |
+| **View**       | Markdown view, outline, preview, versions                                                                                      |
+| **Help**       | Welcome guide, Markdown cheat sheet                                                                                            |
 
 ## The command palette
 

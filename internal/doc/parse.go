@@ -194,6 +194,8 @@ func splitFrontMatter(s string) (Meta, string) {
 			m.Abstract = value
 		case "template":
 			m.Template = value
+		case "citation-style":
+			m.CitationStyle = value
 		case "hide":
 			m.Hide = nil
 			for _, k := range strings.Split(value, ",") {
@@ -434,6 +436,8 @@ func (p *parser) paragraph(n ast.Node) Block {
 	switch raw := p.raw(n); raw {
 	case "[TOC]", "[toc]":
 		return Block{Type: BlockTOC}
+	case "[References]", "[references]":
+		return Block{Type: BlockBibliography}
 	case `\pagebreak`, `\newpage`:
 		return Block{Type: BlockPageBreak}
 	}
@@ -728,7 +732,7 @@ func (p *parser) inlines(parent ast.Node) []Inline {
 	for n := parent.FirstChild(); n != nil; n = n.NextSibling() {
 		out = p.inline(out, n)
 	}
-	return splitRefs(mergeText(out))
+	return splitRefs(splitCites(mergeText(out)))
 }
 
 func (p *parser) inline(out []Inline, n ast.Node) []Inline {

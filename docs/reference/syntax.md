@@ -72,6 +72,22 @@ as **??** and is listed in the status bar's notes.
 As @fig:chart shows, sales went up (@tbl:sales).
 ```
 
+## Citations
+
+`[@key]` cites a source from the document's references, by its citation key. A page or section goes after a comma,
+and several sources go together, apart by semicolons:
+
+```markdown
+Peanuts are legumes [@smith2020, p. 4], not nuts [@lee2019; @smith2020].
+```
+
+- Keys are the ones [Better BibTeX](https://retorque.re/zotero-better-bibtex/) gives your Zotero sources. The sources
+  cited are kept in `Name.bib` beside the document. Setting it up: [Citations with Zotero](../guide/citations).
+- The reference list goes at the end under a **References** heading, or where a line holds just `[References]` (then
+  under whatever heading you write above it).
+- A key `Name.bib` doesn't have shows as `[key?]` in bold, and is listed in the status bar's notes.
+- `[@fig:a]` is a cross-reference in brackets, not a citation.
+
 ## Math
 
 Math is written in [LaTeX](https://en.wikibooks.org/wiki/LaTeX/Mathematics) between dollar signs. `$…$` puts it in a
@@ -110,6 +126,7 @@ header: HIST 101
 abstract: One paragraph.
 template: report
 hide: subtitle, date
+citation-style: ieee
 ---
 ```
 
@@ -123,6 +140,9 @@ default), `custom` for a [customized document](../guide/templates#customizing-on
 
 `hide` lists properties (`title`, `subtitle`, `author`, `topic`, `date`, `header`, `abstract`), separated by commas, that
 the document keeps but doesn't show.
+
+`citation-style` is how citations and the reference list are written: `apa` (the default), `chicago-author-date`,
+`harvard-cite-them-right`, `ieee`, `mla`, `nature` or `vancouver`.
 
 ## Everything else
 

@@ -1,12 +1,20 @@
 <script setup lang="ts">
-// The ribbon's References tab: cross-references, notes and contents, and the
-// document's figures and tables in order.
+// The ribbon's References tab: cross-references, citations, notes and
+// contents, and the document's figures and tables in order.
 import { computed } from "vue";
-import { Footprints, Link2, ListTree, NotebookText } from "lucide-vue-next";
+import {
+  BookMarked,
+  Footprints,
+  Link2,
+  ListTree,
+  NotebookText,
+  Quote,
+  RefreshCw,
+} from "lucide-vue-next";
 import RibbonButton from "./RibbonButton.vue";
 import { withView } from "./withView";
 import ItemThumb from "@/components/ui/ItemThumb.vue";
-import { newFootnote } from "@/lib/actions";
+import { newFootnote, updateSources } from "@/lib/actions";
 import { insertBlock } from "@/lib/editor";
 import { state } from "@/lib/store";
 
@@ -35,6 +43,32 @@ const tables = computed(() => previews.value.length - figures.value);
       />
     </div>
     <label>Insert</label>
+  </div>
+  <div v-if="state.zotero" class="group">
+    <div class="row">
+      <RibbonButton
+        big
+        :icon="Quote"
+        label="Citation"
+        title="Cite a source from Zotero"
+        @click="state.dialog = { kind: 'citation' }"
+      />
+      <RibbonButton
+        big
+        :icon="BookMarked"
+        label="References"
+        title="Put the reference list here (it's at the end otherwise)"
+        @click="withView((v) => insertBlock(v, '[References]'))"
+      />
+      <RibbonButton
+        big
+        :icon="RefreshCw"
+        label="Update"
+        title="Fetch the cited sources from Zotero again, with any changes made there"
+        @click="updateSources"
+      />
+    </div>
+    <label>Citations</label>
   </div>
   <div class="group">
     <div class="row">

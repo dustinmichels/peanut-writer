@@ -139,6 +139,7 @@ export const defaultSettings = {
   peanutActivity: "chill",
   syncOnSave: false,
   syncOnQuit: true,
+  zotero: false,
 };
 
 // effectiveSettings is what the settings come to: the document's where it
@@ -152,6 +153,7 @@ export function effectiveSettings(s: SettingsInfo) {
       s.document.peanutActivity ?? s.user.peanutActivity ?? defaultSettings.peanutActivity,
     syncOnSave: s.document.syncOnSave ?? s.user.syncOnSave ?? defaultSettings.syncOnSave,
     syncOnQuit: s.document.syncOnQuit ?? s.user.syncOnQuit ?? defaultSettings.syncOnQuit,
+    zotero: s.document.zotero ?? s.user.zotero ?? defaultSettings.zotero,
   };
 }
 

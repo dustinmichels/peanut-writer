@@ -252,6 +252,12 @@ func (w *writer) block(b *doc.Block) {
 		w.tocBlock()
 	case doc.BlockEquation:
 		w.equation(b)
+	case doc.BlockBibliography:
+		if len(b.Children) > 0 {
+			w.out.WriteString("<div class=\"references\">\n")
+			w.blocks(b.Children)
+			w.out.WriteString("</div>\n")
+		}
 	}
 }
 
@@ -592,6 +598,12 @@ func (w *writer) inline(sb *strings.Builder, xs []doc.Inline) {
 			w.footnote(sb, x)
 		case doc.InlineMath:
 			w.inlineMath(sb, x)
+		case doc.InlineCite:
+			if len(x.Children) == 0 {
+				sb.WriteString(esc(doc.CiteSource(x)))
+			} else {
+				w.inline(sb, x.Children)
+			}
 		}
 	}
 }
@@ -971,6 +983,7 @@ func (w *writer) css() string {
 	p(".footnotes hr { width: 30%%; margin-left: 0; }")
 	p(".footnotes p { text-indent: 0; }")
 	p(".pagebreak { break-after: page; }")
+	p(".references p { padding-left: 2em; text-indent: -2em; }")
 	p("@media print { article { max-width: none; padding: 0; } a { color: inherit; } }")
 	return c.String()
 }

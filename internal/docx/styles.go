@@ -171,6 +171,8 @@ func (w *writer) styles() string {
 			ppr: `<w:ind w:left="720" w:firstLine="0"/><w:contextualSpacing/>`},
 		styleDef{typ: "paragraph", id: "TableText", name: "Table Text", basedOn: "Normal", quick: true,
 			ppr: `<w:spacing w:before="0" w:after="0"/>` + noIndent + jc("left")},
+		styleDef{typ: "paragraph", id: "Bibliography", name: "Bibliography", basedOn: "Normal", next: "Normal", quick: true, priority: 37,
+			ppr: `<w:ind w:left="720" w:hanging="720"/>` + jc("left")},
 		styleDef{typ: "paragraph", id: "TOCHeading", name: "TOC Heading", basedOn: "Normal", next: "Normal", quick: true, priority: 39, hidden: true,
 			ppr: `<w:keepNext/><w:keepLines/>` + spacing(w.headingSize(1)*0.9, 6) + noIndent + jc("left") + `<w:outlineLvl w:val="9"/>`,
 			rpr: rpr(st.HeadingFont, st.HeadingBold, false, st.HeadingColor, w.headingSize(1))},

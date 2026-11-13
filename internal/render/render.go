@@ -495,6 +495,12 @@ func (t *Typst) workspace(d *doc.Document, tpl templates.Template, bad unreadabl
 		"main.typ": []byte(mainTyp), "peanut.typ": renderer, "template.typ": src,
 		"style.typ": styleTyp, "style.json": style, "doc.json": data,
 	}
+	if d.Bibliography != "" {
+		if files["refs.bib"], err = os.ReadFile(d.Bibliography); err != nil {
+			os.RemoveAll(dir)
+			return "", nil, err
+		}
+	}
 	for name, b := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
 			os.RemoveAll(dir)
@@ -586,6 +592,13 @@ func docJSON(d *doc.Document, dir string, bad unreadable) ([]byte, map[string]st
 		place(&x.Src, nil)
 		if x.Type == doc.InlineMath && x.Error == "" {
 			x.Error = why[x.Text]
+		}
+		// Without references (see doc.UseBibliography), a citation would
+		// stop Typst.
+		if d.Bibliography == "" {
+			for i := range x.Cites {
+				x.Cites[i].Missing = true
+			}
 		}
 	})
 	// A note made text (see maxDepth) loses its figures, and their labels:

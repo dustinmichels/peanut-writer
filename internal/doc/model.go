@@ -17,6 +17,10 @@
 //     an optional attribute block: `Table: Sales by year {#tbl:sales}`.
 //   - Cross-references: `@fig:a`, `@tbl:sales`, `@eq:e`. Numbers follow
 //     document order.
+//   - Citations: `[@smith2020]`, `[@smith2020, p. 4]`, `[@a; @b]`, of
+//     sources in the document's BibLaTeX file (see UseBibliography), in the
+//     style front matter names (`citation-style: ieee`). The reference list
+//     goes where a `[References]` line stands, or at the end.
 //   - LaTeX math: `$x^2$` in text (`$$…$$` for display math in text), and
 //     equations: a block from a line starting `$$` to one ending `$$`,
 //     optionally followed by `{#eq:name}`, which numbers it.
@@ -39,6 +43,9 @@ type Document struct {
 	// Dir is the folder relative paths (pictures, links to files) are
 	// relative to: the document's own; "" when it has none.
 	Dir string `json:"-"`
+	// Bibliography is the BibLaTeX file the citations are of, "" when no
+	// citation is of a source it has (see UseBibliography).
+	Bibliography string `json:"-"`
 }
 
 // Meta is the front matter.
@@ -55,6 +62,9 @@ type Meta struct {
 	Header   string `json:"header,omitempty"`
 	Abstract string `json:"abstract,omitempty"`
 	Template string `json:"template,omitempty"`
+	// CitationStyle is the style citations are written in, as front matter
+	// names it (`citation-style`); see UseBibliography.
+	CitationStyle string `json:"-"`
 	// Hide names the fields above (lowercase) kept out of the output; see
 	// Shown.
 	Hide []string `json:"-"`
@@ -97,6 +107,9 @@ const (
 	BlockPageBreak = "pagebreak"
 	BlockTOC       = "toc"
 	BlockEquation  = "equation"
+	// The reference list: Text is the citation style, "" when nothing cited
+	// is known (then it shows nothing).
+	BlockBibliography = "bibliography"
 )
 
 // Block is a block-level element. Which fields are set depends on Type.
@@ -119,7 +132,8 @@ type Block struct {
 	Tight   bool      `json:"tight,omitempty"` // no blank lines between items
 	Items   [][]Block `json:"items,omitempty"`
 
-	// quote.
+	// quote: its blocks. bibliography: its entries, one paragraph each, as
+	// the style writes them (see render.Citations).
 	Children []Block `json:"children,omitempty"`
 
 	// code: the text, with its language ("" when not given). equation: the
@@ -183,6 +197,7 @@ const (
 	InlineFootnote  = "footnote"
 	InlineLineBreak = "linebreak"
 	InlineMath      = "math"
+	InlineCite      = "cite"
 )
 
 // Inline is an inline element. Which fields are set depends on Type.
@@ -197,7 +212,7 @@ type Inline struct {
 	Display bool   `json:"display,omitempty"`
 	Error   string `json:"error,omitempty"`
 
-	// strong, emph, strike, highlight, link: the content.
+	// strong, emph, strike, highlight, link, cite: the content.
 	Children []Inline `json:"children,omitempty"`
 
 	// link: the target. image: the absolute path ("" when missing).
@@ -213,6 +228,19 @@ type Inline struct {
 
 	// footnote: the note's content.
 	Blocks []Block `json:"blocks,omitempty"`
+
+	// cite: the sources cited together, in order. Word and the web page
+	// show Children, the citation as the style writes it (see
+	// render.Citations).
+	Cites []Cite `json:"cites,omitempty"`
+}
+
+// Cite is one source of a citation.
+type Cite struct {
+	Key     string `json:"key"`
+	Locator string `json:"locator,omitempty"` // "p. 4"
+	// Missing: the document's BibLaTeX file has no entry with the key.
+	Missing bool `json:"missing,omitempty"`
 }
 
 // Kinds of numbered, referable things.

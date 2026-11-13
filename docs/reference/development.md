@@ -99,6 +99,8 @@ always agree. The editor mirrors the same numbering rules while you type (`front
 - `internal/backup`: `.md` backups in timestamped `backups/<datetime>/` folders.
 - `internal/versions`: named versions in `versions/<name>/` folders (Markdown, JSON sidecars, Word and PDF).
 - `internal/mdfmt`: Auto format: runs `oxfmt` and title-cases headings.
+- `internal/bib`: reads and merges the BibLaTeX file (`Name.bib`) a document's citations are of.
+- `internal/zotero`: searches Zotero and exports sources through Better BibTeX's JSON-RPC (`localhost:23119`).
 - `starter/`: the welcome guide.
 - `frontend/`: the editor. Under `src/`:
   - `lib/editor/`: CodeMirror, with the figure, table, equation, reference and properties widgets in `widgets/`.

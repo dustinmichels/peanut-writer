@@ -12,6 +12,7 @@ export interface Meta {
   header: string; // a class, team, project or company, for page headers and footers
   abstract: string;
   template: string;
+  "citation-style": string; // the style citations are written in; "" for the default (apa)
   hide: string; // the fields kept out of the output, comma-separated
   "peanut-version": string; // the app's version that last saved it
 }
@@ -25,6 +26,7 @@ const metaKeys: (keyof Meta)[] = [
   "header",
   "abstract",
   "template",
+  "citation-style",
   "hide",
   "peanut-version",
 ];
@@ -48,6 +50,7 @@ function emptyMeta(): Meta {
     header: "",
     abstract: "",
     template: "",
+    "citation-style": "",
     hide: "",
     "peanut-version": "",
   };

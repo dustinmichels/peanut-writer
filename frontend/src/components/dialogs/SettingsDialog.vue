@@ -9,9 +9,16 @@ import { errorText, state, toast } from "@/lib/store";
 
 const emit = defineEmits<{ close: [] }>();
 
-type Key = "autoFormat" | "headingCase" | "syncOnSave" | "syncOnQuit" | "peanut" | "peanutActivity";
+type Key =
+  | "autoFormat"
+  | "headingCase"
+  | "syncOnSave"
+  | "syncOnQuit"
+  | "peanut"
+  | "peanutActivity"
+  | "zotero";
 type Value = boolean | string;
-type Section = "Auto format" | "Sync files" | "Peanut";
+type Section = "Auto format" | "Sync files" | "Peanut" | "Citations";
 // The fields are shown under these headings, in this order, after the hint
 // their fields share; the default author, set only globally, comes last
 // under "Other".
@@ -22,6 +29,7 @@ const sections: { name: Section; hint?: string }[] = [
     hint: "Writes the PDF and Word copies beside the document, as Sync Files does, if it changed since they were last written.",
   },
   { name: "Peanut" },
+  { name: "Citations" },
 ];
 // A field is a checkbox, or a choice among options: radio buttons, or a
 // segmented toggle. One that needs another checkbox is dimmed while it's off.
@@ -81,6 +89,12 @@ const fields: {
     ],
     toggle: true,
     needs: "peanut",
+  },
+  {
+    key: "zotero",
+    section: "Citations",
+    label: "Zotero citations",
+    hint: "References → Citation cites sources from your Zotero library. Needs Zotero and its free Better BibTeX add-on; the Citation dialog shows how to set them up. Citations already in a document show either way.",
   },
 ];
 
@@ -183,7 +197,10 @@ async function submit() {
   state.peanutBusy = after.peanutActivity === "busy";
   state.syncOnSave = after.syncOnSave;
   state.syncOnQuit = after.syncOnQuit;
+  state.zotero = after.zotero;
   emit("close");
+  if (after.zotero && !before.zotero)
+    toast("Zotero citations are on: find them under References → Citation.", "success");
   if (after.autoFormat && (!before.autoFormat || after.headingCase !== before.headingCase))
     autoFormat();
 }

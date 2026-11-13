@@ -4,6 +4,7 @@
 // enough to number things the same way while typing.
 
 export type { Position } from "./attrs";
+export { type Citation, citationMarkdown, citations } from "./cites";
 export { displayMathClose } from "./fences";
 export {
   type FootnoteMark,

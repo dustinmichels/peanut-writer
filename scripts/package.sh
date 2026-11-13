@@ -2,7 +2,7 @@
 # Build the release files into bin/release: a universal (arm64 + x86_64)
 # "Peanut Writer.app" with Typst inside, signed with the Developer ID
 # Application identity in the Keychain, notarized and stapled, as
-#   Peanut-Writer.dmg   to install (the styled Wails disk image)
+#   Peanut-Writer.dmg   to install (the styled disk image)
 #   Peanut-Writer.zip   the app alone, which the app downloads to update itself (update.go)
 #   checksums.txt       SHA-256 of both, which the updater checks
 # Names carry no version, so
@@ -121,7 +121,7 @@ echo "==> Peanut-Writer.dmg"
 wails3 tool package --format dmg --name "$name" --out "$work" \
   --background build/darwin/dmg-background.png \
   --volume-icon build/darwin/icons.icns \
-  --file-icon build/darwin/dmg-file-icon.icns
+  --file-icon build/darwin/icons.icns
 mv "$work/$name.dmg" "$dmg"
 
 if [ -n "$identity" ]; then

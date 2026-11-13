@@ -20,6 +20,9 @@ import * as templates$0 from "./internal/templates/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as versions$0 from "./internal/versions/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as zotero$0 from "./internal/zotero/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
@@ -39,6 +42,14 @@ export function AddImage(name: string, data: string): $CancellablePromise<string
  */
 export function AddImageFile(path: string): $CancellablePromise<string> {
     return $Call.ByID(1382889653, path);
+}
+
+/**
+ * AddSources fetches sources from Zotero into the open document's BibLaTeX
+ * file, replacing older copies of them.
+ */
+export function AddSources(sources: zotero$0.Source[] | null): $CancellablePromise<void> {
+    return $Call.ByID(1101239992, sources);
 }
 
 /**
@@ -63,6 +74,14 @@ export function ChooseImage(): $CancellablePromise<string> {
  */
 export function ChooseImages(): $CancellablePromise<string[] | null> {
     return $Call.ByID(1968189592);
+}
+
+/**
+ * CitationStyles are the styles front matter can name (`citation-style`),
+ * the default first.
+ */
+export function CitationStyles(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(2939745160);
 }
 
 /**
@@ -321,6 +340,14 @@ export function SaveVersion(name: string): $CancellablePromise<versions$0.Versio
 }
 
 /**
+ * SearchSources searches the Zotero library for sources whose title, authors
+ * or year contain query.
+ */
+export function SearchSources(query: string): $CancellablePromise<zotero$0.Source[] | null> {
+    return $Call.ByID(3759652775, query);
+}
+
+/**
  * SetDirty records whether the document has unsaved changes.
  */
 export function SetDirty(dirty: boolean): $CancellablePromise<void> {
@@ -419,9 +446,27 @@ export function Templates(): $CancellablePromise<templates$0.Template[] | null> 
 }
 
 /**
+ * UpdateSources fetches every source content cites from Zotero afresh into
+ * the open document's BibLaTeX file, which then holds only those: changes
+ * made in Zotero show, and sources no longer cited go. A source Zotero's
+ * library lacks (deleted, or in a group library) keeps the copy it has.
+ */
+export function UpdateSources(content: string): $CancellablePromise<$models.SourcesUpdate> {
+    return $Call.ByID(2996525396, content);
+}
+
+/**
  * Versions lists the open document's versions, newest first; none while
  * it's untitled.
  */
 export function Versions(): $CancellablePromise<versions$0.Version[] | null> {
     return $Call.ByID(2503097242);
+}
+
+/**
+ * ZoteroStatus says whether Zotero is open with Better BibTeX, which citing
+ * needs.
+ */
+export function ZoteroStatus(): $CancellablePromise<zotero$0.Status> {
+    return $Call.ByID(2871518258);
 }

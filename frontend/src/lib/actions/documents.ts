@@ -33,7 +33,7 @@ export function loadDoc(info: DocInfo) {
 }
 
 // loadSettings applies the settings that take effect without saving (Peanut,
-// Sync on save and quit) for the open document and returns what they come to, unless
+// Sync on save and quit, Zotero citations) for the open document and returns what they come to, unless
 // another document is opened meanwhile.
 export async function loadSettings() {
   const path = state.path;
@@ -44,6 +44,7 @@ export async function loadSettings() {
   state.peanutBusy = s.peanutActivity === "busy";
   state.syncOnSave = s.syncOnSave;
   state.syncOnQuit = s.syncOnQuit;
+  state.zotero = s.zotero;
   return s;
 }
 

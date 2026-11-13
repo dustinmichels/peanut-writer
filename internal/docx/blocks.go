@@ -143,6 +143,10 @@ func (w *writer) block(b *doc.Block) {
 		w.toc()
 	case doc.BlockEquation:
 		w.equation(b)
+	case doc.BlockBibliography:
+		for _, e := range b.Children {
+			w.para("Bibliography", "", w.inlines(e.Inlines, runProps{}))
+		}
 	}
 }
 
