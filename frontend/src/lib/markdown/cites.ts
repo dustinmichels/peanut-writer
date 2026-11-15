@@ -10,6 +10,7 @@ export interface Citation {
   from: number;
   to: number;
   keys: string[];
+  locators: string[]; // each key's ("p. 4"), "" for none
 }
 
 // citations finds the citations in text.
@@ -17,15 +18,20 @@ export function citations(text: string): Citation[] {
   const out: Citation[] = [];
   if (!text.includes("[@")) return out;
   for (const m of text.matchAll(citeRe)) {
-    const keys = m[1].split(";").map((s) => itemRe.exec(s.trim())?.[1] ?? "");
+    const items = m[1].split(";").map((s) => s.trim());
+    const keys = items.map((s) => itemRe.exec(s)?.[1] ?? "");
     if (keys.some((k) => !k || /^(?:fig|tbl|eq):/.test(k))) continue;
-    out.push({ from: m.index, to: m.index + m[0].length, keys });
+    const locators = items.map((s, i) => s.slice(keys[i].length + 1).replace(/^\s*,?\s*/, ""));
+    out.push({ from: m.index, to: m.index + m[0].length, keys, locators });
   }
   return out;
 }
 
-// citationMarkdown is a citation of keys, the locator ("p. 4") after the last.
-export function citationMarkdown(keys: string[], locator = ""): string {
-  const loc = locator.trim();
-  return `[${keys.map((k) => "@" + k).join("; ")}${loc ? ", " + loc : ""}]`;
+// citationMarkdown is a citation of keys, each with its locator ("p. 4").
+export function citationMarkdown(keys: string[], locators: string[] = []): string {
+  const item = (k: string, i: number) => {
+    const loc = locators[i]?.trim();
+    return "@" + k + (loc ? ", " + loc : "");
+  };
+  return `[${keys.map(item).join("; ")}]`;
 }

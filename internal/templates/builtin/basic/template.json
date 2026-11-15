@@ -1,0 +1,31 @@
+{
+  "name": "Basic",
+  "description": "Plain and compact: Times New Roman 11pt, single spaced, bold body-size headings, black throughout.",
+  "docx": {
+    "paper": "letter",
+    "margin": 1,
+    "bodyFont": "Times New Roman",
+    "headingFont": "Times New Roman",
+    "monoFont": "Courier New",
+    "fontSize": 11,
+    "lineSpacing": 1,
+    "spaceAfter": 6,
+    "firstLineIndent": 0,
+    "justify": false,
+    "textColor": "000000",
+    "headingColor": "000000",
+    "headingSizes": [12, 11, 11],
+    "headingBold": true,
+    "numberedHeadings": false,
+    "titleSize": 14,
+    "titleColor": "000000",
+    "titleAlign": "left",
+    "titleRule": false,
+    "captionSize": 10,
+    "captionColor": "000000",
+    "captionItalic": false,
+    "accentColor": "000000",
+    "tableHeaderFill": "",
+    "pageNumbers": true
+  }
+}

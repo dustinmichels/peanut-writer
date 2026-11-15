@@ -45,12 +45,19 @@ Click a reference to jump to its next citation in the text; click again for the 
 In the Citation dialog, search the references by author, title, year or key. Pick one or more (Enter, or a click),
 add a page or section if you like ("p. 4"), and **Insert** (⌘↩). The citation goes in the text as `[@key]`, and the
 preview shows it as the style writes it: "(Smith and Doe 2021, p. 4)" in Chicago author-date, "[1, p. 4]" in IEEE.
-The dialog's **Citation style** sets the style for the whole document.
+**Citations & Footnotes → Style** sets the style for the whole document: APA, Chicago author-date, Harvard (Cite Them
+Right), IEEE, MLA, Nature or Vancouver, each shown with how a citation reads in it. Footnote styles (Chicago notes and
+bibliography) aren't offered.
 
 You can also type citations: `[@smith2021dna]`, `[@smith2021dna, p. 4]`, or several together,
 `[@lee2019; @smith2021dna]` (see [the syntax](../reference/syntax#citations)).
 
 ### In the editor
+
+In the editor a citation reads as who and when it cites, "(Smith & Doe 2021, p. 4)", whatever the style (the
+preview has it as the style writes it); one of a key the document doesn't have shows red, as its key. Click it to
+change it: the Citation dialog opens with its sources picked and its page filled in, to pick others, change the page,
+and **Change**, or **Remove** the citation. **View → Markdown** shows it as typed.
 
 Type `[@` and the editor offers the document's reference keys, each with its author, year and title; keep typing to
 narrow them, and Enter to pick one. Point at a citation to see its reference, with **Edit** to change it. A citation
@@ -61,7 +68,8 @@ with that key filled in.
 
 The list of works cited goes at the end of the document, under a **References** heading. **Citations & Footnotes →
 Reference List** puts a `[References]` line at the cursor instead, to place the list before an appendix or under a
-heading of your own. It lists the sources cited, not every reference the document keeps.
+heading of your own. **Style** moves the list too: to the end, or to the cursor. It lists the sources cited, not every
+reference the document keeps.
 
 A citation of a key the references don't have shows as `[key?]` in bold, and is listed in the status bar's notes.
 
@@ -73,9 +81,10 @@ the form doesn't show (an abstract, say) are kept when you edit a reference.
 
 ## From Zotero
 
-Turn on **Settings → Zotero citations** and the Citation dialog gets a **Zotero** tab that searches your Zotero library,
-much as Zotero's plugin for Word does. A source you cite from it is copied into the document's references. It's
-optional, and off until you turn it on.
+Turn on **Settings → Zotero citations** and the Citations & Footnotes tab gets a **Zotero** group of its own.
+**Cite from Zotero** opens the Citation dialog at its **Zotero** tab, which searches your Zotero library, much as
+Zotero's plugin for Word does. A source you cite from it is copied into the document's references. It's optional, and
+off until you turn it on.
 
 ### Why it needs Better BibTeX
 
@@ -108,7 +117,7 @@ off what's done, with a **Check again** button. Zotero needs to be open while yo
 
 ### Keeping sources up to date
 
-Changed a source in Zotero, say fixed a title? **Citations & Footnotes → Update** fetches every cited source again. References
+Changed a source in Zotero, say fixed a title? **Citations & Footnotes → Zotero → Update** fetches every cited source again. References
 Zotero doesn't have (ones you entered yourself, or from a group library) and those not cited stay as they are.
 
 Citations and the reference list are text in Word, written by the same typesetter as the PDF. They aren't Zotero

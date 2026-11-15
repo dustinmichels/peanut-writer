@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// The citation manager's group on the ribbon's Citations & Footnotes tab:
-// cite, see every reference, import, and update from Zotero.
-import { FileUp, Library, Quote, RefreshCw } from "lucide-vue-next";
+// The citation manager's groups on the ribbon's Citations & Footnotes tab:
+// cite, see every reference, import, and set the style; and, with Zotero
+// citations on, a group of its own to cite from Zotero and update from it.
+import { BookSearch, FileUp, Library, Quote, RefreshCw, Settings2 } from "lucide-vue-next";
 import RibbonButton from "@/components/ribbon/RibbonButton.vue";
 import { openCitations, toggleReferencesPane, updateSources } from "./actions";
 import { refs } from "./store";
@@ -34,7 +35,25 @@ import { state } from "@/lib/store";
         @click="openCitations({ import: true })"
       />
       <RibbonButton
-        v-if="state.zotero"
+        big
+        :icon="Settings2"
+        label="Style"
+        title="Citation style (APA, Chicago, IEEE…) and where the reference list goes"
+        @click="state.dialog = { kind: 'referenceSettings' }"
+      />
+    </div>
+    <label>Citations</label>
+  </div>
+  <div v-if="state.zotero" class="group">
+    <div class="row">
+      <RibbonButton
+        big
+        :icon="BookSearch"
+        label="Cite from Zotero"
+        title="Search your Zotero library and cite a source; it's copied into the document's references"
+        @click="openCitations({ zotero: true })"
+      />
+      <RibbonButton
         big
         :icon="RefreshCw"
         label="Update"
@@ -42,7 +61,7 @@ import { state } from "@/lib/store";
         @click="updateSources"
       />
     </div>
-    <label>Citations</label>
+    <label>Zotero</label>
   </div>
 </template>
 

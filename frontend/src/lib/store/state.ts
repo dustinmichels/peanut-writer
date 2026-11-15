@@ -21,6 +21,7 @@ export type Dialog =
   | { kind: "pasteTable" }
   | { kind: "crossref"; at?: RefAt }
   | { kind: "citation" }
+  | { kind: "referenceSettings" }
   | { kind: "link"; text: string }
   // A new footnote, or (label) the note of a mark that has none.
   | { kind: "footnote"; label?: string }

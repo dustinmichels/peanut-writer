@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build the release files into bin/release: a universal (arm64 + x86_64)
-# "Peanut Writer.app" with Typst inside, signed with the Developer ID
+# "Peanut Writer.app" with Typst and oxfmt inside, signed with the Developer ID
 # Application identity in the Keychain, notarized and stapled, as
 #   Peanut-Writer.dmg   to install (the styled disk image)
 #   Peanut-Writer.zip   the app alone, which the app downloads to update itself (update.go)
@@ -32,7 +32,7 @@ name="Peanut Writer"
 exe=peanut-writer # CFBundleExecutable in build/darwin/Info.plist
 out=bin/release
 work=bin/macos
-cache=bin/typst # downloaded typst archives, kept between runs
+cache=bin/downloads # downloaded typst and oxfmt archives, kept between runs
 app="$work/$name.app"
 dmg=$out/Peanut-Writer.dmg
 zip=$out/Peanut-Writer.zip
@@ -44,6 +44,8 @@ identity=${CODESIGN_IDENTITY:-$(security find-identity -v -p codesigning |
 
 typst_version=$(mise current typst) || die "can't read the typst version from mise"
 [[ "$typst_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "unexpected typst version '$typst_version'"
+oxfmt_version=$(mise current aqua:oxc-project/oxc/oxfmt) || die "can't read the oxfmt version from mise"
+[[ "$oxfmt_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "unexpected oxfmt version '$oxfmt_version'"
 
 # CFBundleShortVersionString must be numeric: v1.2.3 → 1.2.3, dev → 0.0.0.
 bundle_version=${version#v}
@@ -51,7 +53,7 @@ bundle_version=${version#v}
 min_macos=$(plutil -extract LSMinimumSystemVersion raw "$plist")
 
 rm -rf "$out" "$work"
-mkdir -p "$out" "$app/Contents/MacOS" "$app/Contents/Resources/licenses/typst" "$cache"
+mkdir -p "$out" "$app/Contents/MacOS" "$app/Contents/Resources/licenses/typst" "$app/Contents/Resources/licenses/oxfmt" "$cache"
 
 echo "==> Building the editor"
 # Removing dist makes the task rebuild it for production even after `mise run dev`.
@@ -84,7 +86,23 @@ cp "$work/typst-aarch64-apple-darwin/LICENSE" "$work/typst-aarch64-apple-darwin/
   "$app/Contents/Resources/licenses/typst/"
 rm -rf "$work"/typst-*
 
-for bin in "$exe" typst; do
+# oxfmt, for Auto format, found beside the executable first (internal/mdfmt).
+# Its archives hold the bare binary.
+for triple in aarch64-apple-darwin x86_64-apple-darwin; do
+  archive=$cache/$oxfmt_version-oxfmt-$triple.tar.gz
+  if [ ! -f "$archive" ]; then
+    curl -fsSL -o "$archive.part" "https://github.com/oxc-project/oxc/releases/download/oxfmt_v$oxfmt_version/oxfmt-$triple.tar.gz"
+    mv "$archive.part" "$archive"
+  fi
+  tar -xzf "$archive" -C "$work"
+done
+lipo -create -output "$app/Contents/MacOS/oxfmt" \
+  "$work/oxfmt-aarch64-apple-darwin" "$work/oxfmt-x86_64-apple-darwin"
+curl -fsSL -o "$app/Contents/Resources/licenses/oxfmt/LICENSE" \
+  "https://raw.githubusercontent.com/oxc-project/oxc/oxfmt_v$oxfmt_version/LICENSE"
+rm -f "$work"/oxfmt-*
+
+for bin in "$exe" typst oxfmt; do
   archs=$(lipo -archs "$app/Contents/MacOS/$bin")
   [[ " $archs " == *" x86_64 "* && " $archs " == *" arm64 "* ]] || die "$bin is not universal: $archs"
   # Each must run on every macOS the app claims to. The minimum is "minos" in
@@ -105,7 +123,7 @@ plutil -replace CFBundleVersion -string "$bundle_version" "$app/Contents/Info.pl
 plutil -lint -s "$app/Contents/Info.plist"
 xattr -cr "$app"
 
-# Inside-out: typst, then the app (which seals the main executable and resources).
+# Inside-out: typst and oxfmt, then the app (which seals the main executable and resources).
 if [ -n "$identity" ]; then
   echo "==> Signing as $identity"
   sign=(codesign --force --options runtime --timestamp --sign "$identity")
@@ -114,6 +132,7 @@ else
   sign=(codesign --force --options runtime --sign -)
 fi
 "${sign[@]}" "$app/Contents/MacOS/typst"
+"${sign[@]}" "$app/Contents/MacOS/oxfmt"
 "${sign[@]}" "$app"
 codesign --verify --deep --strict --verbose=2 "$app"
 

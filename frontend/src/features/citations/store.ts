@@ -5,11 +5,18 @@
 import { computed, reactive, watch } from "vue";
 import { Service } from "@bindings/peanut-writer/internal/citations";
 import type { Reference } from "@bindings/peanut-writer/internal/refs/models";
+import type { Citation } from "@/lib/markdown";
 import { errorText, scheduleRender, state } from "@/lib/store";
 
 // What the citation dialog opens to, besides its list: a reference to edit
-// (by key), a new one, or the import.
-export type Intent = { edit: string } | { add: true; key?: string } | { import: true };
+// (by key), a new one, the import, a citation in the text to change, or the
+// Zotero library.
+export type Intent =
+  | { edit: string }
+  | { add: true; key?: string }
+  | { import: true }
+  | { cite: Citation }
+  | { zotero: true };
 
 export const refs = reactive({
   list: [] as Reference[],

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// CitationDialog cites sources at the cursor, in the document's citation
-// style. They come from the document's references (Name.bib), which it adds
-// to, edits (ReferenceForm) and imports into (ImportPanel), or, with Zotero
+// CitationDialog cites sources at the cursor. They come from the document's
+// references (Name.bib), which it adds to, edits (ReferenceForm) and imports
+// into (ImportPanel), or, with Zotero
 // citations on, from the Zotero library through Better BibTeX, copied into
 // those references when cited. Until Zotero is open with Better BibTeX, its
 // tab shows how to set them up.
 import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
-import { BookOpen, Check, FileUp, Pencil, Plus } from "lucide-vue-next";
+import { BookOpen, Check, FileUp, Pencil, Plus, Trash2 } from "lucide-vue-next";
 import { Service } from "@bindings/peanut-writer/internal/citations";
 import type { Reference } from "@bindings/peanut-writer/internal/refs/models";
 import type { Source, Status } from "@bindings/peanut-writer/internal/zotero/models";
@@ -14,12 +14,11 @@ import Modal from "@/components/ui/Modal.vue";
 import ImportPanel from "./ImportPanel.vue";
 import ReferenceForm from "./ReferenceForm.vue";
 import ZoteroSetup from "./ZoteroSetup.vue";
-import { insertCitation } from "./actions";
+import { insertCitation, removeCitation } from "./actions";
 import { byKey, referencesChanged, refs } from "./store";
 import { authorsShort, blank, plain } from "./text";
-import { setMeta } from "@/lib/actions";
-import { readFrontMatter } from "@/lib/markdown";
 import { errorText, state, toast } from "@/lib/store";
+import type { Citation } from "@/lib/markdown";
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -43,8 +42,6 @@ const locator = ref("");
 const error = ref("");
 const searching = ref(false);
 const busy = ref(false);
-const styles = ref<string[]>([]);
-const style = ref(readFrontMatter(state.content).meta["citation-style"].trim().toLowerCase());
 const search = useTemplateRef("search");
 const listEl = useTemplateRef("listEl");
 
@@ -52,6 +49,8 @@ const listEl = useTemplateRef("listEl");
 // the import, while it shows.
 const editing = ref<{ reference: Reference; old: string } | null>(null);
 const importing = ref(false);
+// The citation in the text being changed, when opened from one.
+const changing = ref<Citation | null>(null);
 const form = useTemplateRef("form");
 const importer = useTemplateRef("importer");
 
@@ -211,9 +210,13 @@ async function submit() {
       await Service.AddSources(fromZotero);
       referencesChanged();
     }
+    // A key kept keeps its locator; the field's is the last one's.
+    const was = new Map(changing.value?.keys.map((k, i) => [k, changing.value!.locators[i]]));
+    const keys = picked.value.map((p) => p.key);
     insertCitation(
-      picked.value.map((p) => p.key),
-      locator.value,
+      keys,
+      keys.map((k, i) => (i === keys.length - 1 ? locator.value : (was.get(k) ?? ""))),
+      changing.value ?? undefined,
     );
     emit("close");
   } catch (e) {
@@ -224,9 +227,9 @@ async function submit() {
   }
 }
 
-function setStyle(s: string) {
-  style.value = s;
-  setMeta({ "citation-style": s === styles.value[0] ? "" : s });
+function remove() {
+  removeCitation(changing.value!);
+  emit("close");
 }
 
 function key(e: KeyboardEvent) {
@@ -245,10 +248,14 @@ function key(e: KeyboardEvent) {
 const title = computed(() => {
   if (editing.value) return editing.value.old ? "Edit reference" : "New reference";
   if (importing.value) return "Import references";
-  return setup.value && status.value ? "Set up Zotero citations" : "Citation";
+  return setup.value && status.value
+    ? "Set up Zotero citations"
+    : changing.value
+      ? "Change citation"
+      : "Citation";
 });
 
-onMounted(async () => {
+onMounted(() => {
   window.addEventListener("keydown", key);
   // Opened to a reference's form or the import (from the References pane or
   // a citation's hint).
@@ -260,9 +267,26 @@ onMounted(async () => {
   } else if (intent && "add" in intent)
     editing.value = { reference: { ...blank(), key: intent.key ?? "" }, old: "" };
   else if (intent && "import" in intent) importing.value = true;
-  else nextTick(() => search.value?.focus());
-  styles.value = (await Service.CitationStyles()) ?? [];
-  if (!styles.value.includes(style.value)) style.value = styles.value[0] ?? "";
+  else if (intent && "zotero" in intent) show("zotero");
+  else {
+    if (intent && "cite" in intent) {
+      // The sources it cites start picked, those not in the references too.
+      const c = intent.cite;
+      changing.value = c;
+      picked.value = c.keys.map(
+        (k) =>
+          docRows.value.find((r) => r.key === k) ?? {
+            key: k,
+            who: "",
+            year: "",
+            title: "",
+            container: "",
+          },
+      );
+      locator.value = c.locators.at(-1) ?? "";
+    }
+    nextTick(() => search.value?.focus());
+  }
 });
 onUnmounted(() => {
   window.removeEventListener("keydown", key);
@@ -382,22 +406,15 @@ onUnmounted(() => {
                   : "No references yet: add one with New reference, or Import some."
           }}
         </div>
-        <div class="row-fields">
-          <label class="field">
-            Page or section <span v-if="locatorFor" class="for">for @{{ locatorFor }}</span>
-            <input v-model="locator" placeholder="e.g. p. 4" :disabled="!picked.length" />
-          </label>
-          <label class="field">
-            Citation style
-            <select :value="style" @change="setStyle(($event.target as HTMLSelectElement).value)">
-              <option v-for="s in styles" :key="s" :value="s">{{ s }}</option>
-            </select>
-          </label>
-        </div>
+        <label class="field">
+          Page or section <span v-if="locatorFor" class="for">for @{{ locatorFor }}</span>
+          <input v-model="locator" placeholder="e.g. p. 4" :disabled="!picked.length" />
+        </label>
         <p class="hint">
           Enter picks a source; pick several to cite them together. Citations read
           <code>[@key]</code> in the text, and the reference list goes at the end, or where a line
-          holds <code>[References]</code>.
+          holds <code>[References]</code>. The citation style (APA, Chicago…) is under Style on the
+          ribbon.
           <template v-if="!state.zotero">
             To cite from Zotero, turn on Settings → Zotero citations.
           </template>
@@ -416,6 +433,9 @@ onUnmounted(() => {
         </button>
       </template>
       <template v-else>
+        <button v-if="changing" type="button" class="btn" @click="remove">
+          <Trash2 :size="14" /> Remove
+        </button>
         <span v-if="picked.length" class="count">{{ picked.length }} picked</span>
         <span style="flex: 1" />
         <button type="button" class="btn" @click="emit('close')">Cancel</button>
@@ -425,7 +445,7 @@ onUnmounted(() => {
           class="btn primary"
           :disabled="busy || (!picked.length && !rows[cursor])"
         >
-          Insert
+          {{ changing ? "Change" : "Insert" }}
         </button>
       </template>
     </template>
@@ -539,11 +559,6 @@ code {
 }
 .none img {
   width: 22px;
-}
-.row-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
 }
 .for {
   color: var(--muted);

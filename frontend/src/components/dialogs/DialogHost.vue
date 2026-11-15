@@ -6,7 +6,7 @@ import TableDialog from "./TableDialog.vue";
 import EquationDialog from "./EquationDialog.vue";
 import PasteTableDialog from "./PasteTableDialog.vue";
 import CrossRefDialog from "./CrossRefDialog.vue";
-import { CitationDialog } from "@/features/citations";
+import { CitationDialog, ReferenceSettingsDialog } from "@/features/citations";
 import LinkDialog from "./LinkDialog.vue";
 import FootnoteDialog from "./FootnoteDialog.vue";
 import FootnotesDialog from "./FootnotesDialog.vue";
@@ -61,6 +61,7 @@ function closeCheatSheet() {
     />
     <PasteTableDialog v-else-if="state.dialog.kind === 'pasteTable'" @close="close" />
     <CitationDialog v-else-if="state.dialog.kind === 'citation'" @close="close" />
+    <ReferenceSettingsDialog v-else-if="state.dialog.kind === 'referenceSettings'" @close="close" />
     <CrossRefDialog
       v-else-if="state.dialog.kind === 'crossref'"
       :key="state.dialog.at?.from ?? -1"

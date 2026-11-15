@@ -75,8 +75,7 @@ type DocService struct {
 	unsynced  bool // Sync on quit is on and the PDF and Word copies are behind the document
 	quitting  bool // the user chose to quit, so closing mustn't ask again
 	cancel    context.CancelFunc
-	previews  map[string]preview // each template's latest preview, by id
-	fonts     []string           // the fonts Typst can use, listed on first use
+	fonts     []string // the fonts Typst can use, listed on first use
 	typst     *render.Typst
 	typstErr  error
 	oxfmt     *mdfmt.Oxfmt // found on first use
@@ -162,7 +161,7 @@ type SettingsInfo struct {
 }
 
 func newDocService() *DocService {
-	s := &DocService{previews: map[string]preview{}}
+	s := &DocService{}
 	s.typst, s.typstErr = render.Find()
 	s.loadState()
 	return s
@@ -1332,8 +1331,8 @@ func (s *DocService) Format(content, headingCase string) (string, error) {
 	}
 	out, err := o.Format(context.Background(), content)
 	if err != nil {
-		// Looked for again next time: updating oxfmt or Node (with mise or
-		// nvm, say) may have moved it.
+		// Looked for again next time: updating oxfmt (with mise, say) may
+		// have moved it.
 		s.mu.Lock()
 		s.oxfmt = nil
 		s.mu.Unlock()
@@ -1354,7 +1353,9 @@ func (s *DocService) Format(content, headingCase string) (string, error) {
 func (s *DocService) Templates() []templates.Template { return templates.List() }
 
 // TemplatePreview is the first page of a sample document (see sampleFor) in a
-// template (the open document's own for templates.CustomID), as SVG.
+// template (the open document's own for templates.CustomID), as SVG. Each is
+// kept in the user's cache folder (see previewPath), so Typst draws it only
+// when the template, its sample, Typst or the app has changed.
 func (s *DocService) TemplatePreview(id string) (string, error) {
 	if s.typstErr != nil {
 		return "", s.typstErr
@@ -1374,17 +1375,16 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name, content, err := sampleFor(tpl)
+	_, content, err := sampleFor(tpl)
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(append(src, style...))
-	key := name + ":" + hex.EncodeToString(sum[:8])
-	s.mu.Lock()
-	cached, ok := s.previews[tpl.ID]
-	s.mu.Unlock()
-	if ok && cached.key == key {
-		return cached.svg, nil
+	// Without a cache path it's just drawn each time.
+	path, _ := s.previewPath(tpl.ID, src, style, content)
+	if path != "" {
+		if b, err := os.ReadFile(path); err == nil {
+			return string(b), nil
+		}
 	}
 	// The samples have no pictures, so they need no folder.
 	pages, _, err := s.typst.Preview(context.Background(), doc.Parse(content, ""), tpl)
@@ -1395,17 +1395,46 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 		return "", errors.New("no pages")
 	}
 	// Only the latest preview of each template is kept: restyling the
-	// document's own template, or another document's, replaces it.
-	s.mu.Lock()
-	s.previews[tpl.ID] = preview{key, pages[0]}
-	s.mu.Unlock()
+	// document's own template, or another document's, replaces it. A failed
+	// write only means drawing it again next time.
+	if path != "" {
+		prefix := strings.SplitN(filepath.Base(path), "-", 2)[0]
+		old, _ := filepath.Glob(filepath.Join(filepath.Dir(path), prefix+"-*.svg"))
+		for _, p := range old {
+			os.Remove(p)
+		}
+		if os.MkdirAll(filepath.Dir(path), 0o755) == nil {
+			os.WriteFile(path, []byte(pages[0]), 0o644)
+		}
+	}
 	return pages[0], nil
 }
 
-// preview is a template preview, and the sample and template source it shows.
-type preview struct {
-	key string // the sample's name and a hash of the template's source and style
-	svg string
+// previewPath is where the preview of template id, with source src, style
+// and sample content, is cached: named by a hash of id, then a hash of all
+// that drew it and the Typst and app binaries (the app's embeds the rest of
+// what's rendered), which change on upgrade or rebuild.
+func (s *DocService) previewPath(id string, src, style []byte, content string) (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	h := sha256.New()
+	for _, b := range [][]byte{src, style, []byte(content)} {
+		h.Write(b)
+		h.Write([]byte{0})
+	}
+	exe, _ := os.Executable()
+	for _, bin := range []string{s.typst.Bin, exe} {
+		fi, err := os.Stat(bin)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintln(h, bin, fi.ModTime().UnixNano(), fi.Size())
+	}
+	idSum := sha256.Sum256([]byte(id))
+	name := hex.EncodeToString(idSum[:8]) + "-" + hex.EncodeToString(h.Sum(nil)[:16]) + ".svg"
+	return filepath.Join(dir, "Peanut Writer", "previews", name), nil
 }
 
 // customTemplatePath is where the document at p keeps its own template

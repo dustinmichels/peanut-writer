@@ -405,7 +405,9 @@ export function SyncFiles(content: string): $CancellablePromise<string[] | null>
 
 /**
  * TemplatePreview is the first page of a sample document (see sampleFor) in a
- * template (the open document's own for templates.CustomID), as SVG.
+ * template (the open document's own for templates.CustomID), as SVG. Each is
+ * kept in the user's cache folder (see previewPath), so Typst draws it only
+ * when the template, its sample, Typst or the app has changed.
  */
 export function TemplatePreview(id: string): $CancellablePromise<string> {
     return $Call.ByID(3553919739, id);

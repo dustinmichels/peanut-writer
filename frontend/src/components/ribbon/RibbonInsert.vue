@@ -12,6 +12,7 @@ import {
   Link2,
   ListTree,
   Minus,
+  Quote,
   Sigma,
   SquareSplitVertical,
   Table,
@@ -19,6 +20,7 @@ import {
 import RibbonButton from "./RibbonButton.vue";
 import TableGridPicker from "./TableGridPicker.vue";
 import { withView } from "./withView";
+import { openCitations } from "@/features/citations";
 import {
   choosePicture,
   choosePictureGrid,
@@ -72,6 +74,13 @@ function pickTable(cols: number, rows: number) {
     <div class="row">
       <RibbonButton big :icon="Link" label="Link" @click="editLink" />
       <RibbonButton big :icon="Footprints" label="Footnote" @click="newFootnote" />
+      <RibbonButton
+        big
+        :icon="Quote"
+        label="Citation"
+        title="Cite a source, or add one to the document's references"
+        @click="openCitations()"
+      />
       <RibbonButton
         big
         :icon="Link2"

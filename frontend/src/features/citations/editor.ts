@@ -1,15 +1,26 @@
-// The citation manager's hints in the editor: `[@` (or `; @` inside the
-// brackets) completes the document's reference keys, and hovering a citation
-// says what it cites. Not in code, math or the front matter, where `@` cites
+// The citation manager in the editor: `[@` (or `; @` inside the brackets)
+// completes the document's reference keys, a citation reads as who and when
+// it cites ("(Smith 2020, p. 4)"), changed with a click, and hovering it says
+// what it cites. Not in code, math or the front matter, where `@` cites
 // nothing.
 
 import type { Completion, CompletionContext, CompletionSource } from "@codemirror/autocomplete";
 import { syntaxTree } from "@codemirror/language";
-import type { EditorState, Extension } from "@codemirror/state";
-import { EditorView, hoverTooltip } from "@codemirror/view";
+import { type EditorState, type Extension, RangeSetBuilder, StateEffect } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  hoverTooltip,
+  ViewPlugin,
+  type ViewUpdate,
+  WidgetType,
+} from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { codeNodes, frontMatterEnd } from "@/lib/editor/fields";
-import { citations } from "@/lib/markdown";
+import { watch } from "vue";
+import { codeNodes, frontMatterEnd, showMarkdown, textOf } from "@/lib/editor/fields";
+import { coverage } from "@/lib/editor/hidden";
+import { type Citation, citations } from "@/lib/markdown";
 import { openCitations } from "./actions";
 import { byKey, refs } from "./store";
 import { describe, whoWhen } from "./text";
@@ -140,3 +151,88 @@ export const citationHover: Extension = [
   }),
   tipTheme,
 ];
+
+// A citation as it reads in the editor: who and when for each source (its
+// key when it isn't in the references), in parentheses, whatever the style:
+// the preview has it as the style writes it.
+class CiteWidget extends WidgetType {
+  constructor(
+    readonly text: string,
+    readonly ok: boolean,
+  ) {
+    super();
+  }
+  eq(o: CiteWidget) {
+    return o.text === this.text && o.ok === this.ok;
+  }
+  toDOM(view: EditorView) {
+    const el = document.createElement("span");
+    el.className = this.ok ? "pw-ref" : "pw-ref broken";
+    el.textContent = this.text;
+    el.onmousedown = (e) => e.preventDefault();
+    el.onclick = () => {
+      // Read where it is now: the widget may have moved since it was drawn.
+      const from = view.posAtDOM(el);
+      const c = citations(textOf(view.state.doc)).find((x) => x.from === from);
+      if (c) openCitations({ cite: c });
+    };
+    return el;
+  }
+}
+
+function citeText(c: Citation): { text: string; ok: boolean } {
+  const known = byKey.value;
+  const parts = c.keys.map((k, i) => {
+    const r = known.get(k);
+    const who = r ? whoWhen(r) : "@" + k;
+    return c.locators[i] ? `${who}, ${c.locators[i]}` : who;
+  });
+  // Until the references are read, none is missing.
+  return { text: `(${parts.join("; ")})`, ok: !refs.loaded || c.keys.every((k) => known.has(k)) };
+}
+
+function citeDecorations(state: EditorState): DecorationSet {
+  if (state.facet(showMarkdown)) return Decoration.none;
+  const out = coverage(state);
+  const b = new RangeSetBuilder<Decoration>();
+  for (const c of citations(textOf(state.doc))) {
+    // A plugin can't replace across lines: one broken over two stays as written.
+    if (out(c.from) || !citable(state, c.from) || state.doc.lineAt(c.from).to < c.to) continue;
+    const { text, ok } = citeText(c);
+    b.add(c.from, c.to, Decoration.replace({ widget: new CiteWidget(text, ok) }));
+  }
+  return b.finish();
+}
+
+// The references changed: citations read again.
+const referencesRead = StateEffect.define<null>();
+
+export const citationWidgets = ViewPlugin.fromClass(
+  class {
+    decorations: DecorationSet;
+    stop: () => void;
+    constructor(view: EditorView) {
+      this.decorations = citeDecorations(view.state);
+      this.stop = watch(
+        () => [refs.list, refs.loaded],
+        () => view.dispatch({ effects: referencesRead.of(null) }),
+      );
+    }
+    update(u: ViewUpdate) {
+      if (
+        u.docChanged ||
+        syntaxTree(u.state) !== syntaxTree(u.startState) ||
+        u.state.facet(showMarkdown) !== u.startState.facet(showMarkdown) ||
+        u.transactions.some((t) => t.effects.some((e) => e.is(referencesRead)))
+      )
+        this.decorations = citeDecorations(u.state);
+    }
+    destroy() {
+      this.stop();
+    }
+  },
+  {
+    decorations: (p) => p.decorations,
+    provide: (p) => EditorView.atomicRanges.of((v) => v.plugin(p)?.decorations ?? Decoration.none),
+  },
+);

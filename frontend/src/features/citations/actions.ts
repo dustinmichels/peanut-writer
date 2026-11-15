@@ -3,7 +3,7 @@
 // Zotero up to date.
 
 import { Service } from "@bindings/peanut-writer/internal/citations";
-import { citationMarkdown } from "@/lib/markdown";
+import { type Citation, citationMarkdown } from "@/lib/markdown";
 import { editor, errorText, state, toast } from "@/lib/store";
 import { type Intent, referencesChanged, refs } from "./store";
 
@@ -13,13 +13,13 @@ function view() {
   return v;
 }
 
-// insertCitation cites the sources of keys at the cursor; the locator
-// ("p. 4") goes after the last.
-export function insertCitation(keys: string[], locator: string) {
+// insertCitation cites the sources of keys, each with its locator ("p. 4"),
+// at the cursor, or in place of the citation `at`.
+export function insertCitation(keys: string[], locators: string[], at?: Citation) {
   const v = view();
-  const { from, to } = v.state.selection.main;
-  const before = v.state.sliceDoc(from - 1, from);
-  const text = (before && !/[\s(]/.test(before) ? " " : "") + citationMarkdown(keys, locator);
+  const { from, to } = at ?? v.state.selection.main;
+  const before = at ? "" : v.state.sliceDoc(from - 1, from);
+  const text = (before && !/[\s(]/.test(before) ? " " : "") + citationMarkdown(keys, locators);
   v.dispatch({
     changes: { from, to, insert: text },
     selection: { anchor: from + text.length },
@@ -28,8 +28,25 @@ export function insertCitation(keys: string[], locator: string) {
   v.focus();
 }
 
+// removeCitation deletes the citation `at`, with the space before it when
+// it ends a sentence or clause ("as shown [@a]." reads "as shown.").
+export function removeCitation(at: Citation) {
+  const v = view();
+  const doc = v.state.doc;
+  const spaced =
+    doc.sliceString(at.from - 1, at.from) === " " &&
+    !/[^\s.,;:!?)]/.test(doc.sliceString(at.to, at.to + 1));
+  const from = spaced ? at.from - 1 : at.from;
+  v.dispatch({
+    changes: { from, to: at.to },
+    selection: { anchor: from },
+    userEvent: "delete",
+  });
+  v.focus();
+}
+
 // openCitations opens the citation dialog, at its list or (intent) a
-// reference's form or the import.
+// reference's form, the import, or a citation to change.
 export function openCitations(intent: Intent | null = null) {
   refs.intent = intent;
   state.dialog = { kind: "citation" };

@@ -66,7 +66,7 @@ Work in the order below: each step has a check that proves it, and later steps a
 
 ### 2. Spawned programs don't flash consoles (`internal/render`, `internal/mdfmt`, `service.go`)
 
-- A `-H windowsgui` process starting a console program (`typst.exe`, `node`/`oxfmt`) opens a console window for each
+- A `-H windowsgui` process starting a console program (`typst.exe`, `oxfmt.exe`) opens a console window for each
   run: every preview refresh would flash one. Set `SysProcAttr{HideWindow: true, CreationFlags: CREATE_NO_WINDOW}` on
   Windows through one helper in a `_windows.go` file (no-op elsewhere) used by every `exec.Command*` in `render.go`
   and `mdfmt.go`.
@@ -74,12 +74,10 @@ Work in the order below: each step has a check that proves it, and later steps a
   `%LOCALAPPDATA%\Programs\typst`, winget's `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Typst.Typst_*\typst-*\typst.exe`,
   `%USERPROFILE%\.cargo\bin\typst.exe`, mise's `%LOCALAPPDATA%\mise\installs\typst\*`. The error message says
   `brew install typst`; give the Windows one (`winget install Typst.Typst`).
-- oxfmt (`mdfmt.Find`): npm installs `oxfmt.cmd` (and a shell script), not `oxfmt.exe`, under `%APPDATA%\npm`;
-  `LookPath("oxfmt.exe")` misses it and Go can't exec a `.cmd` directly. Look for `oxfmt.cmd`, run it through
-  `cmd.exe /c`, and add `%APPDATA%\npm` and `%ProgramFiles%\nodejs\node.exe` to the candidates. Auto format is opt-in, so
-  this can follow step 1, but the setting must say why it can't run rather than fail silently.
+- oxfmt (`mdfmt.Find`): bundle it beside the exe like Typst, from the `oxfmt-<arch>-pc-windows-msvc.zip` release
+  assets (native, no Node), at the version pinned in `mise.toml`.
 - Check: with the installed app, type for a minute with the preview open — no console window appears; turn on auto format
-  with Node and `npm i -g oxfmt` installed and save.
+  and save.
 
 ### 3. Documents, files and paths (`service.go`, `main.go`, `frontend/src/lib/actions/`)
 

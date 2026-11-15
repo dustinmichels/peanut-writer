@@ -24,69 +24,47 @@ import (
 
 const timeout = 20 * time.Second
 
-// Oxfmt runs the oxfmt formatter. It's a Node program, so it also needs
-// node, which apps opened from Finder won't find on their PATH.
+// Oxfmt runs the oxfmt formatter: the native binary, which the packaged app
+// keeps beside its executable.
 type Oxfmt struct {
-	Bin  string
-	Node string
+	Bin string
 }
 
-// Find looks for oxfmt and node on PATH, then where Homebrew, mise, Volta,
-// nvm and Bun install them.
+// Find looks for oxfmt beside the app's executable, then on PATH, then where
+// Homebrew and mise install it: apps opened from Finder don't get the shell's
+// PATH.
 func Find() (*Oxfmt, error) {
-	bin := find("oxfmt",
-		"/opt/homebrew/bin/oxfmt",
-		"/usr/local/bin/oxfmt",
-		"~/.local/share/mise/installs/npm-oxfmt/*/node_modules/.bin/oxfmt",
-		"~/.local/share/mise/installs/npm-oxfmt/*/bin/oxfmt",
-		"~/.volta/bin/oxfmt",
-		"~/.bun/bin/oxfmt",
-		"~/.npm-global/bin/oxfmt",
-	)
-	if bin == "" {
-		return nil, errors.New("oxfmt wasn't found: install it with `npm install -g oxfmt` (or `mise install`)")
-	}
-	node := find("node",
-		"/opt/homebrew/bin/node",
-		"/usr/local/bin/node",
-		"~/.local/share/mise/installs/node/*/bin/node",
-		"~/.volta/bin/node",
-		"~/.nvm/versions/node/*/bin/node",
-	)
-	if node == "" {
-		return nil, errors.New("oxfmt needs Node.js, which wasn't found: install it with `brew install node` (or `mise install`)")
-	}
-	return &Oxfmt{Bin: bin, Node: node}, nil
-}
-
-// find returns name from PATH, else the first candidate that exists; globs
-// try the newest version first, roughly.
-func find(name string, candidates ...string) string {
+	name := "oxfmt"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
+	if exe, err := os.Executable(); err == nil {
+		if p := filepath.Join(filepath.Dir(exe), name); isFile(p) {
+			return &Oxfmt{Bin: p}, nil
+		}
+	}
 	// Not a mise shim: it picks a version by the working folder, which the
-	// app's isn't.
+	// app's isn't. The real binary is found below.
 	if p, err := exec.LookPath(name); err == nil && !strings.Contains(filepath.ToSlash(p), "/mise/shims/") {
-		return p
+		return &Oxfmt{Bin: p}, nil
 	}
-	home, _ := os.UserHomeDir()
-	for _, c := range candidates {
-		if strings.HasPrefix(c, "~/") {
-			if home == "" {
-				continue
-			}
-			c = filepath.Join(home, c[2:])
-		}
-		matches, _ := filepath.Glob(c)
-		slices.Reverse(matches)
-		for _, p := range matches {
-			if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
-				return p
-			}
+	candidates := []string{"/opt/homebrew/bin/oxfmt", "/usr/local/bin/oxfmt"}
+	if home, err := os.UserHomeDir(); err == nil {
+		mise, _ := filepath.Glob(filepath.Join(home, ".local/share/mise/installs/aqua-oxc-project-oxc-oxfmt/*/oxfmt"))
+		slices.Reverse(mise) // newest version first, roughly
+		candidates = append(candidates, mise...)
+	}
+	for _, p := range candidates {
+		if isFile(p) {
+			return &Oxfmt{Bin: p}, nil
 		}
 	}
-	return ""
+	return nil, errors.New("oxfmt wasn't found: it comes with the app; for a development build, run `mise install`")
+}
+
+func isFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }
 
 // config is oxfmt's configuration: its defaults, except that code blocks
@@ -103,29 +81,28 @@ func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 	if !closed {
 		return "", errors.New("an equation's closing $$ is missing")
 	}
-	// Given explicitly, so no config file oxfmt might find around the
-	// temporary folder applies either.
-	cfg, err := os.CreateTemp("", "peanut-oxfmt-*.json")
+	// The native oxfmt formats files, not standard input: the document goes
+	// in a temporary folder, with the configuration given explicitly so no
+	// config file oxfmt might find around it applies.
+	dir, err := os.MkdirTemp("", "peanut-oxfmt-*")
 	if err != nil {
 		return "", err
 	}
-	defer os.Remove(cfg.Name())
-	_, err = cfg.WriteString(config)
-	if err = errors.Join(err, cfg.Close()); err != nil {
+	defer os.RemoveAll(dir)
+	cfg, file := filepath.Join(dir, "oxfmt.json"), filepath.Join(dir, "document.md")
+	if err := errors.Join(os.WriteFile(cfg, []byte(config), 0o600), os.WriteFile(file, []byte(md), 0o600)); err != nil {
 		return "", err
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, o.Bin, "--config", cfg.Name(), "--stdin-filepath", "document.md")
+	cmd := exec.CommandContext(ctx, o.Bin, "--config", cfg, "--write", "--threads", "1", file)
 	// A launcher that runs oxfmt as its child (a version manager's shim, say)
 	// leaves it holding the output when the timeout kills the launcher: the
 	// wait for that output is cut short.
 	cmd.WaitDelay = time.Second
-	cmd.Dir = os.TempDir()
-	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(o.Node)+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cmd.Stdin = strings.NewReader(md)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Dir = dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -135,7 +112,11 @@ func (o *Oxfmt) Format(ctx context.Context, src string) (string, error) {
 		}
 		return "", err
 	}
-	out, ok := putEquationAttrs(stdout.String(), attrs)
+	formatted, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	out, ok := putEquationAttrs(string(formatted), attrs)
 	if !ok {
 		return "", errors.New("formatting would lose equation labels")
 	}

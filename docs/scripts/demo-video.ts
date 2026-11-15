@@ -707,7 +707,8 @@ try {
     await perform(page, demo);
   } catch (e) {
     // What the app said may explain a step that never finished.
-    for (const t of await page.locator(".toast .text").allTextContents()) console.error(`  toast: ${t}`);
+    for (const t of await page.locator(".toast .text").allTextContents())
+      console.error(`  toast: ${t}`);
     throw e;
   } finally {
     seconds = await recorder.stop();

@@ -182,6 +182,14 @@ tasks:
         else
           echo "warning: typst not found; the app will need it installed (brew install typst)"
         fi
+      # Auto format runs oxfmt, found the same way.
+      - |
+        OXFMT="$(mise which oxfmt 2>/dev/null || command -v oxfmt || true)"
+        if [ -n "$OXFMT" ]; then
+          cp "$OXFMT" "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents/MacOS/oxfmt"
+        else
+          echo "warning: oxfmt not found; Auto format won't work (mise install)"
+        fi
       - cp build/darwin/Info.plist "{{.BIN_DIR}}/{{.APP_NAME}}.app/Contents"
       - task: '{{if eq OS "darwin"}}codesign:adhoc{{else}}codesign:skip{{end}}'
 

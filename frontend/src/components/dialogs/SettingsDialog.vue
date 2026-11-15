@@ -94,7 +94,7 @@ const fields: {
     key: "zotero",
     section: "Citations",
     label: "Zotero citations",
-    hint: "The Citation dialog (Citations & Footnotes → Citation) also searches your Zotero library and copies the sources you cite into the document's references. Needs Zotero and its free Better BibTeX add-on; the dialog shows how to set them up. Without it, enter references in the dialog yourself.",
+    hint: "Adds a Zotero group to Citations & Footnotes: cite from your Zotero library, with the sources you cite copied into the document's references, and update them from it later. Needs Zotero and its free Better BibTeX add-on; the dialog shows how to set them up. Without it, enter references in the Citation dialog yourself.",
   },
 ];
 
@@ -200,10 +200,7 @@ async function submit() {
   state.zotero = after.zotero;
   emit("close");
   if (after.zotero && !before.zotero)
-    toast(
-      "Zotero citations are on: find them under Citations & Footnotes → Citation → Zotero.",
-      "success",
-    );
+    toast("Zotero citations are on: find them under Citations & Footnotes → Zotero.", "success");
   if (after.autoFormat && (!before.autoFormat || after.headingCase !== before.headingCase))
     autoFormat();
 }

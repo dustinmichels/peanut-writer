@@ -16,6 +16,7 @@ document. The [command palette](./writing#the-command-palette) has a command per
 | -------------- | ----------------------------------------------------------------------------------------------- |
 | **Classic**    | Timeless and calm: Georgia, pine-green headings, italic subheads, 1-inch margins. Default.      |
 | **Wordy**      | A fresh Word document: Aptos, blue headings, 1-inch margins.                                    |
+| **Basic**      | Plain and compact: Times New Roman 11 pt, single spaced, bold body-size headings, all black.    |
 | **Academic**   | A LaTeX article: Computer Modern, numbered sections, justified text, centered title.            |
 | **Report**     | A business report: serif body, crisp sans headings, a teal accent, running headers.             |
 | **Technical**  | Docs and specs: PT Sans, numbered headings in slate blue, code panels, quotes as note callouts. |

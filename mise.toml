@@ -9,8 +9,9 @@ bun = "1.4.4"
 "go:github.com/wailsapp/wails/v3/cmd/wails3" = "3.1.0"
 typst = "0.15.1"
 
-# Formatting
-"npm:oxfmt" = "0.77.0"
+# Formatting. The native oxfmt (npm's needs Node), which packaging also puts
+# inside the app for Auto format.
+"aqua:oxc-project/oxc/oxfmt" = "0.78.0"
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,17 @@ if [[ "$(uname)" == Darwin ]]; then
 fi
 rm -rf bin frontend/dist .task .wails
 echo "removed bin/ frontend/dist/ .task/ .wails/"
+'''
+
+[tasks."previews:clear"]
+description = "Delete the Design gallery's cached template previews; the app redraws them the next time the gallery opens"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$(uname)" == Darwin ]]; then base="$HOME/Library/Caches"; else base="${XDG_CACHE_HOME:-$HOME/.cache}"; fi
+dir="$base/Peanut Writer/previews"
+rm -rf "$dir"
+echo "removed $dir"
 '''
 
 # ─── Quality ──────────────────────────────────────────────────────────────────

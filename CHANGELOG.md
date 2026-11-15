@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-11-15
+
+- New built-in template **Basic**: plain and compact, Times New Roman 11 pt single spaced, headings set off by bold
+  rather than size, all black.
+- **Citations & Footnotes → Style** opens a References dialog: pick the citation style (APA, Chicago author-date,
+  Harvard, IEEE, MLA, Nature, Vancouver, each with a sample) and put the reference list at the end or at the cursor.
+  The style picker left the Citation dialog.
+- Citations in the editor read like cross-references: `[@smith2020, p. 4]` shows as a "(Smith 2020, p. 4)" chip
+  (red when the key isn't in the references); click it to change its sources or page, or remove it.
+- The Design gallery's template previews are cached on disk (`~/Library/Caches/Peanut Writer/previews`) and load
+  together: drawn by Typst once (~2 s for all 14), then instant on every launch until the template, Typst or the app
+  changes. `mise run previews:clear` forces a redraw.
+
+## 2026-11-14
+
+- **Auto format works out of the box**: the app carries the native oxfmt (0.78.0, ~6 MB per architecture, no Node),
+  as it does Typst; `mise run release` warns when either has a newer version to bundle.
+
 ## 2026-11-13
 
 - **Citations**: `[@key]`, `[@key, p. 4]` and `[@a; @b]` cite sources kept in `Name.bib` beside the document, in the
@@ -9,7 +27,7 @@
 - **Citation manager**, without Zotero (Citations & Footnotes → Citation): add or edit references in a form, filled
   from a DOI or ISBN if you like; import BibTeX or RIS (duplicates spotted); **All Sources** lists every reference
   beside the editor with how often it's cited; typing `[@` offers keys, and hovering a citation shows its reference.
-  Optional **Zotero** tab (Settings → Zotero citations) copies the sources you cite into the same file. It's a
+  Optional **Zotero** group on the ribbon (Settings → Zotero citations) cites from your library and copies the sources you cite into the same file. It's a
   self-contained module (`internal/citations`, `frontend/src/features/citations`). New guide page: Citations.
 
 - The References tab is now two: **Figures & Tables** (pictures, tables, equations, cross-references, previews) and

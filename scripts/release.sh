@@ -34,6 +34,17 @@ git fetch --quiet --tags origin main
 gh auth status >/dev/null 2>&1 || die "gh is not logged in; run 'gh auth login'"
 scripts/update-cask.sh --check
 
+# The app carries the Typst and oxfmt pinned in mise.toml; newer ones reach
+# users only through a release that bumps them.
+step "Checking the bundled Typst and oxfmt"
+outdated=$(mise outdated --bump --no-header typst aqua:oxc-project/oxc/oxfmt 2>/dev/null || true)
+if [ -n "$outdated" ]; then
+  echo "$outdated"
+  echo "warning: releasing with the older versions; to bundle the newer ones: mise up --bump <tool>, mise run test, commit, rerun"
+else
+  echo "up to date"
+fi
+
 # The app is signed and notarized while packaging, before anything is tagged,
 # so a failure there publishes nothing. Check its prerequisites first.
 step "Checking signing and notarization"

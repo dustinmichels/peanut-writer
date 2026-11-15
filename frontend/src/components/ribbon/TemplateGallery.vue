@@ -19,21 +19,24 @@ async function load() {
     if (url) URL.revokeObjectURL(url);
     delete previews[k];
   }
-  for (const t of docTemplates.value) {
-    const k = key(t);
-    if (k in previews) continue;
-    previews[k] = "";
-    try {
-      const svg = await DocService.TemplatePreview(t.id);
-      // An <img> keeps each SVG's ids to itself.
-      const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-      // Unless it was dropped (or the gallery closed) meanwhile.
-      if (mounted && k in previews) previews[k] = url;
-      else URL.revokeObjectURL(url);
-    } catch {
-      // Shown as loading.
-    }
-  }
+  // All at once: cached ones come back at once, the rest render side by side.
+  const todo = docTemplates.value.filter((t) => !(key(t) in previews));
+  for (const t of todo) previews[key(t)] = "";
+  await Promise.all(
+    todo.map(async (t) => {
+      const k = key(t);
+      try {
+        const svg = await DocService.TemplatePreview(t.id);
+        // An <img> keeps each SVG's ids to itself.
+        const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+        // Unless it was dropped (or the gallery closed) meanwhile.
+        if (mounted && k in previews) previews[k] = url;
+        else URL.revokeObjectURL(url);
+      } catch {
+        // Shown as loading.
+      }
+    }),
+  );
 }
 onMounted(load);
 onUnmounted(() => {

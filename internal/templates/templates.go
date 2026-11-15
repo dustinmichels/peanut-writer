@@ -42,7 +42,7 @@ const Default = "classic"
 const CustomID = "custom"
 
 // Order of the built-in templates in the gallery.
-var builtinOrder = []string{"classic", "wordy", "academic", "report", "technical", "memo", "minimal", "manuscript", "book", "elegant", "editorial", "journal", "peanut"}
+var builtinOrder = []string{"classic", "wordy", "basic", "academic", "report", "technical", "memo", "minimal", "manuscript", "book", "elegant", "editorial", "journal", "peanut"}
 
 // reserved reports whether a user template folder can't be named id.
 func reserved(id string) bool { return id == CustomID || slices.Contains(builtinOrder, id) }
