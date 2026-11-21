@@ -1,5 +1,7 @@
 // A small transparent three.js stage holding Peanut: fixed camera, studio
-// lights, and a render loop capped at 30 fps so an idle companion stays cheap.
+// lights, and a render loop capped at 30 fps while he moves, 10 fps while he
+// only breathes and sways, and stopped while the window is hidden, so an idle
+// companion stays cheap.
 
 import * as THREE from "three";
 import type { HatKind } from "./hats";
@@ -8,6 +10,10 @@ import { createPeanutModel } from "./model";
 const BOUNCE_MS = 750;
 const BLINK_MS = 150;
 const FRAME_MS = 1000 / 30;
+const IDLE_FRAME_MS = 1000 / 10;
+// Every move, and the easing out of it (a jump, a poke, a hat, a turn,
+// sitting down), is over this long after the call that started it.
+const SETTLE_MS = 3000;
 // The bottom LEDGE_DROP_PX of the container hang below the ledge Peanut stands
 // or perches on, so his dangling legs (up to ~17px below it) have room; the
 // rest frames him as before.
@@ -63,26 +69,12 @@ export function createPeanutStage(
   renderer.setClearColor(0x000000, 0);
   renderer.setSize(width, height);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   container.appendChild(renderer.domElement);
 
   // The original's "studio" lighting preset.
   const key = new THREE.DirectionalLight(0xfff6ee, 2.2);
   key.position.set(3.5, 5.0, 3.5);
-  key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
-  Object.assign(key.shadow.camera, {
-    near: 1,
-    far: 14,
-    left: -2.5,
-    right: 2.5,
-    top: 5, // room for him hanging from the top of the stage
-    bottom: -1,
-  });
-  key.shadow.bias = -0.0003;
-  key.shadow.radius = 3.5;
   const fill = new THREE.DirectionalLight(0xe5edfa, 1.1);
   fill.position.set(-4.0, 3.0, 2.5);
   const rim = new THREE.DirectionalLight(0xffdfba, 2.6);
@@ -106,10 +98,17 @@ export function createPeanutStage(
   let last = start;
   let frame = 0;
   const mouth = new THREE.Vector3();
+  // He's drawn at the full frame rate while walking, jamming, inspecting or
+  // hanging, and for as long as any other move takes: a bounce or a blink,
+  // or SETTLE_MS.
+  const on = { walking: false, jamming: false, inspecting: false, hanging: false };
+  let settledAt = start + SETTLE_MS;
+  const stir = (ms = SETTLE_MS) => (settledAt = Math.max(settledAt, performance.now() + ms));
 
   function loop(now: number) {
     frame = requestAnimationFrame(loop);
-    if (now - last < FRAME_MS) return;
+    const lively = now < settledAt || on.walking || on.jamming || on.inspecting || on.hanging;
+    if (now - last < (lively ? FRAME_MS : IDLE_FRAME_MS)) return;
     const delta = Math.min(0.1, (now - last) / 1000);
     last = now;
 
@@ -128,23 +127,69 @@ export function createPeanutStage(
     peanut.mouth.getWorldPosition(mouth).project(camera);
     onMouth(((mouth.x + 1) / 2) * width, ((1 - mouth.y) / 2) * height);
   }
-  frame = requestAnimationFrame(loop);
+  // Hidden, he isn't drawn at all.
+  function onVisibility() {
+    cancelAnimationFrame(frame);
+    if (!document.hidden) frame = requestAnimationFrame(loop);
+  }
+  onVisibility();
+  document.addEventListener("visibilitychange", onVisibility);
 
   const pointer = new THREE.Vector2();
 
   return {
-    bounce: () => (bounceStart = performance.now()),
-    blink: () => (blinkStart = performance.now()),
-    setSitting: peanut.setSitting,
-    walk: peanut.walk,
-    setHat: peanut.setHat,
-    pullOutHat: peanut.pullOutHat,
-    setJamming: peanut.setJamming,
-    jump: peanut.jump,
-    setInspecting: peanut.setInspecting,
-    poke: peanut.poke,
-    setFacingAway: peanut.setFacingAway,
-    setHanging: peanut.setHanging,
+    bounce() {
+      stir(BOUNCE_MS);
+      bounceStart = performance.now();
+    },
+    blink() {
+      stir(BLINK_MS);
+      blinkStart = performance.now();
+    },
+    setSitting(sitting) {
+      stir();
+      peanut.setSitting(sitting);
+    },
+    walk(direction) {
+      stir();
+      on.walking = direction !== 0;
+      peanut.walk(direction);
+    },
+    setHat(kind) {
+      stir();
+      peanut.setHat(kind);
+    },
+    pullOutHat(kind) {
+      stir();
+      peanut.pullOutHat(kind);
+    },
+    setJamming(jamming) {
+      stir();
+      on.jamming = jamming;
+      peanut.setJamming(jamming);
+    },
+    jump(twirl) {
+      stir();
+      peanut.jump(twirl);
+    },
+    setInspecting(inspecting) {
+      stir();
+      on.inspecting = inspecting;
+      peanut.setInspecting(inspecting);
+    },
+    poke() {
+      stir();
+      peanut.poke();
+    },
+    setFacingAway(away) {
+      stir();
+      peanut.setFacingAway(away);
+    },
+    setHanging(hanging) {
+      stir();
+      on.hanging = hanging;
+      peanut.setHanging(hanging);
+    },
     hits(clientX, clientY) {
       const r = renderer.domElement.getBoundingClientRect();
       if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) {
@@ -162,6 +207,7 @@ export function createPeanutStage(
     },
     dispose() {
       cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibility);
       peanut.dispose();
       renderer.dispose();
       renderer.forceContextLoss();

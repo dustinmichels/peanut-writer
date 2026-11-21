@@ -271,10 +271,11 @@ export function RenameTemplate(id: string, name: string, description: string): $
 
 /**
  * Render renders the document for the preview. A newer call cancels an
- * older one still running.
+ * older one still running. Pages whose key is in known come without their
+ * SVG: the editor has them already.
  */
-export function Render(content: string): $CancellablePromise<$models.RenderResult> {
-    return $Call.ByID(740367447, content);
+export function Render(content: string, known: string[] | null): $CancellablePromise<$models.RenderResult> {
+    return $Call.ByID(740367447, content, known);
 }
 
 /**

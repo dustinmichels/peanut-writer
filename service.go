@@ -104,9 +104,9 @@ type DocInfo struct {
 	Canceled bool   `json:"canceled"` // the user canceled a dialog; nothing changed
 }
 
-// RenderResult is a preview: one SVG per page, and the document's headings.
+// RenderResult is a preview: its pages, and the document's headings.
 type RenderResult struct {
-	Pages    []string      `json:"pages"`
+	Pages    []render.Page `json:"pages"`
 	Outline  []doc.Heading `json:"outline"`
 	Warnings []string      `json:"warnings"`
 	Error    string        `json:"error"`
@@ -975,8 +975,9 @@ func (s *DocService) Equations(texs []string) []string {
 // --- Rendering and export ----------------------------------------------------
 
 // Render renders the document for the preview. A newer call cancels an
-// older one still running.
-func (s *DocService) Render(content string) RenderResult {
+// older one still running. Pages whose key is in known come without their
+// SVG: the editor has them already.
+func (s *DocService) Render(content string, known []string) RenderResult {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.mu.Lock()
 	if s.cancel != nil {
@@ -998,6 +999,11 @@ func (s *DocService) Render(content string) RenderResult {
 	pages, warnings, err := s.typst.Preview(ctx, d, tpl)
 	if p := templates.Problem(d.Meta.Template); p != "" {
 		warnings = append(warnings, p)
+	}
+	for i := range pages {
+		if slices.Contains(known, pages[i].Key) {
+			pages[i].SVG = ""
+		}
 	}
 	res := RenderResult{Pages: pages, Outline: d.Outline(), Warnings: append(d.Warnings, warnings...), Template: tpl.ID}
 	if err != nil {
@@ -1404,10 +1410,10 @@ func (s *DocService) TemplatePreview(id string) (string, error) {
 			os.Remove(p)
 		}
 		if os.MkdirAll(filepath.Dir(path), 0o755) == nil {
-			os.WriteFile(path, []byte(pages[0]), 0o644)
+			os.WriteFile(path, []byte(pages[0].SVG), 0o644)
 		}
 	}
-	return pages[0], nil
+	return pages[0].SVG, nil
 }
 
 // previewPath is where the preview of template id, with source src, style

@@ -6,6 +6,9 @@
 import * as doc$0 from "./internal/doc/models.js";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as render$0 from "./internal/render/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as templates$0 from "./internal/templates/models.js";
 
 /**
@@ -43,10 +46,10 @@ export interface RecentFile {
 }
 
 /**
- * RenderResult is a preview: one SVG per page, and the document's headings.
+ * RenderResult is a preview: its pages, and the document's headings.
  */
 export interface RenderResult {
-    "pages": string[] | null;
+    "pages": render$0.Page[] | null;
     "outline": doc$0.Heading[] | null;
     "warnings": string[] | null;
     "error": string;

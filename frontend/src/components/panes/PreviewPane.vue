@@ -4,14 +4,12 @@ import { AlertTriangle, PanelRightClose } from "lucide-vue-next";
 import { togglePreview } from "@/lib/actions";
 import { state } from "@/lib/store";
 
-// A page as shown: its SVG, drawn as an image, and the marks on it (see
-// pageMarks).
+// A page as shown: its SVG, drawn as an image.
 interface Page {
-  svg: string;
+  key: string;
   url: string;
   width: number; // points
   height: number;
-  marks: [line: number, x: number, y: number][];
 }
 
 const emit = defineEmits<{
@@ -35,16 +33,25 @@ let marks = new Map<number, Mark>();
 
 // Pages are shown as images: each page's SVG keeps its ids to itself, and
 // swapping a whole set at once doesn't flicker. A page whose SVG hasn't
-// changed (typing mostly changes one) keeps its image and marks.
+// changed (typing mostly changes one) keeps its image.
 watch(
   () => state.pages,
-  (svgs) => {
+  (next) => {
     const prev = pages.value;
-    const old = new Map(prev.map((p) => [p.svg, p]));
-    pages.value = svgs.map((svg) => old.get(svg) ?? drawPage(svg));
+    const old = new Map(prev.map((p) => [p.key, p]));
+    pages.value = next.map(
+      (p) =>
+        old.get(p.key) ?? {
+          key: p.key,
+          url: URL.createObjectURL(new Blob([p.svg], { type: "image/svg+xml" })),
+          width: p.width,
+          height: p.height,
+        },
+    );
     marks = new Map();
-    pages.value.forEach((p, page) => {
-      for (const [line, x, y] of p.marks) if (!marks.has(line)) marks.set(line, { page, x, y });
+    next.forEach((p, page) => {
+      for (const { line, x, y } of p.marks ?? [])
+        if (!marks.has(line)) marks.set(line, { page, x, y });
     });
     // Let the new images load before dropping the old ones.
     const kept = new Set(pages.value.map((p) => p.url));
@@ -52,17 +59,6 @@ watch(
     if (gone.length) setTimeout(() => gone.forEach((p) => URL.revokeObjectURL(p.url)), 1000);
   },
 );
-
-function drawPage(svg: string): Page {
-  const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(svg.slice(0, 300));
-  return {
-    svg,
-    url: URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })),
-    width: m ? parseFloat(m[1]) : 612,
-    height: m ? parseFloat(m[2]) : 792,
-    marks: pageMarks(svg),
-  };
-}
 
 const PX = 96 / 72;
 const fit = computed(() => {
@@ -84,40 +80,6 @@ onBeforeUnmount(() => {
   ro?.disconnect();
   pages.value.forEach((p) => URL.revokeObjectURL(p.url));
 });
-
-// applyTransform maps (x, y) through an SVG transform attribute.
-function applyTransform(t: string, x: number, y: number): [number, number] {
-  const fns = [...t.matchAll(/(\w+)\(([^)]*)\)/g)];
-  for (let i = fns.length - 1; i >= 0; i--) {
-    const [, name, args] = fns[i];
-    const v = args
-      .split(/[\s,]+/)
-      .filter(Boolean)
-      .map(Number);
-    if (name === "translate") [x, y] = [x + v[0], y + (v[1] ?? 0)];
-    else if (name === "scale") [x, y] = [x * v[0], y * (v[1] ?? v[0])];
-    else if (name === "matrix") [x, y] = [v[0] * x + v[2] * y + v[4], v[1] * x + v[3] * y + v[5]];
-  }
-  return [x, y];
-}
-
-// pageMarks locates the marked blocks on a page, in its order: the preview
-// marks each with an invisible `peanut:<line>` link (see peanut.typ).
-function pageMarks(src: string): Page["marks"] {
-  const found: Page["marks"] = [];
-  if (!src.includes('href="peanut:')) return found;
-  const svg = new DOMParser().parseFromString(src, "image/svg+xml");
-  for (const a of svg.querySelectorAll('a[href^="peanut:"]')) {
-    const line = Number(a.getAttribute("href")!.slice("peanut:".length));
-    let x = 0;
-    let y = 0;
-    for (let el: Element | null = a; el; el = el.parentElement) {
-      [x, y] = applyTransform(el.getAttribute("transform") ?? "", x, y);
-    }
-    found.push([line, x, y]);
-  }
-  return found;
-}
 
 // headingTops maps each heading's source line to the scrollTop that shows
 // the heading at the top of the preview.

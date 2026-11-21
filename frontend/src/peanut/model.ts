@@ -302,7 +302,6 @@ function createBeadEye(x: number, y: number, z: number, rotationY: number): THRE
   });
 
   const beadMesh = new THREE.Mesh(beadGeom, beadMat);
-  beadMesh.castShadow = true;
   eyeGroup.add(beadMesh);
 
   // Tiny dark felt backing ring behind the eye (gives realistic plush toy socket nesting)
@@ -329,9 +328,7 @@ function createSmileMesh(threadMaterial: THREE.Material): THREE.Mesh {
   ];
   const curve = new THREE.CatmullRomCurve3(smilePoints);
   const geometry = new THREE.TubeGeometry(curve, 36, 0.016, 10, false);
-  const smile = new THREE.Mesh(geometry, threadMaterial);
-  smile.castShadow = false;
-  return smile;
+  return new THREE.Mesh(geometry, threadMaterial);
 }
 
 // Helper to create the oval plush sole with straight parallel lengthwise corduroy UVs
@@ -545,11 +542,7 @@ function createArm(side: 1 | -1, material: THREE.Material): Arm {
   const mitten = new THREE.Mesh(new THREE.SphereGeometry(MITTEN_RADIUS, 24, 16), material);
   mitten.scale.set(1, 0.92, 1.08);
   mitten.position.y = MITTEN_Y;
-  for (const m of [sleeve, mitten]) {
-    m.castShadow = true;
-    m.receiveShadow = true;
-    shoulder.add(m);
-  }
+  shoulder.add(sleeve, mitten);
   return {
     side,
     shoulder,
@@ -583,8 +576,6 @@ function createCorduroyLeg(
   const legGeom = new THREE.CylinderGeometry(legRadius * 0.94, legRadius * 1.02, legHeight, 32);
   const legMesh = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(legGeom, corduroyMaterial);
   legMesh.position.set(0, legHeight / 2 + legBottomY, 0);
-  legMesh.castShadow = true;
-  legMesh.receiveShadow = true;
   legGroup.add(legMesh);
 
   // Plush Foot Bootie pivots around the ankle joint center so the shoe stays seamlessly attached to the leg
@@ -612,22 +603,16 @@ function createCorduroyLeg(
     upperGeom,
     corduroyMaterial,
   );
-  upperMesh.castShadow = true;
-  upperMesh.receiveShadow = true;
   footContent.add(upperMesh);
 
   // 2. Oval sole panel with planar UVs for parallel corduroy ribs
   const soleGeom = createBootieSoleGeometry(0.138, 0.205, 0.05);
   const soleMesh = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(soleGeom, corduroyMaterial);
-  soleMesh.castShadow = true;
-  soleMesh.receiveShadow = true;
   footContent.add(soleMesh);
 
   // 3. Stitched welt piping along sole perimeter
   const weltGeom = createSoleWeltGeometry(0.138, 0.205, 0.05, 0.012);
   const weltMesh = new THREE.Mesh<THREE.BufferGeometry, THREE.Material>(weltGeom, corduroyMaterial);
-  weltMesh.castShadow = true;
-  weltMesh.receiveShadow = true;
   footContent.add(weltMesh);
 
   legGroup.add(footGroup);
@@ -674,8 +659,6 @@ export function createPeanutModel(ceiling: number): PeanutModelHandle {
   // 2. Peanut Body Mesh
   const bodyGeometry = createPeanutBodyGeometry(96, 120);
   const bodyMesh = new THREE.Mesh(bodyGeometry, fleeceMaterial);
-  bodyMesh.castShadow = true;
-  bodyMesh.receiveShadow = true;
   bodyContainer.add(bodyMesh);
 
   // 3. Face Details
