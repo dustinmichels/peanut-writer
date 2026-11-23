@@ -19,7 +19,8 @@ export const exportPdf = () => exported("PDF", () => DocService.ExportPDF(state.
 export const exportDocx = () => exported("Word", () => DocService.ExportDOCX(state.content));
 export const exportHtml = () => exported("Web Page", () => DocService.ExportHTML(state.content));
 
-// syncFiles saves the document, then writes its PDF and Word copies beside it.
+// syncFiles saves the document, then writes its PDF and Word copies into the
+// peanOUT folder beside it.
 export async function syncFiles() {
   if (await formatAndSave()) await syncCopies();
 }
@@ -44,7 +45,7 @@ export function packageOf(path: string): string {
 }
 
 // showInFolder opens the folder holding the document (its package, if it's in
-// one, beside its synced PDF and Word copies) in Finder with it selected.
+// one, beside its peanOUT folder of synced copies) in Finder with it selected.
 export function showInFolder() {
   if (state.path)
     run("Show in Finder", () => DocService.Reveal(packageOf(state.path) || state.path));

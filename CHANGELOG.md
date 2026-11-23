@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-22
+
+- **Sync files** writes `Name.pdf` and `Name.docx` into a `peanOUT` folder beside the document (made if missing)
+  instead of loose beside it.
+
 ## 2026-11-15
 
 - New built-in template **Basic**: plain and compact, Times New Roman 11 pt single spaced, headings set off by bold

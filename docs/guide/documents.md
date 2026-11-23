@@ -64,7 +64,7 @@ The **Export** button saves a copy wherever you choose:
 
 ## Sync files
 
-**Sync files** (⇧⌘Y, File → Sync Files) saves the document and writes `Name.pdf` and `Name.docx` beside it, replacing
-the previous copies without asking. With **Sync files on quit** (on by default) they're also refreshed when you quit or
-open another document, and with **Sync files on save** each time you save, whenever the document changed since they
-were written. Both are in [Settings](./settings).
+**Sync files** (⇧⌘Y, File → Sync Files) saves the document and writes `Name.pdf` and `Name.docx` into a `peanOUT`
+folder beside it (created if needed), replacing the previous copies without asking. With **Sync files on quit** (on by
+default) they're also refreshed when you quit or open another document, and with **Sync files on save** each time you
+save, whenever the document changed since they were written. Both are in [Settings](./settings).

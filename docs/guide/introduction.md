@@ -16,7 +16,8 @@ move, and the table of contents writes itself.
 - **Read on the right.** The preview is the typeset page, exactly what your PDF will be.
 - **Pick a look on the Design tab**, and change your mind any time. Your text stays as it is.
 - **Caption pictures and tables** and they're numbered. Refer to them and the reference keeps up.
-- **Export** to PDF, Word or a web page, or **Sync files** to keep a PDF and Word copy beside your document.
+- **Export** to PDF, Word or a web page, or **Sync files** to keep a PDF and Word copy in a `peanOUT` folder beside
+  your document.
 
 ## Your first document
 

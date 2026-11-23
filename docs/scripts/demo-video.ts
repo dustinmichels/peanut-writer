@@ -665,7 +665,7 @@ async function perform(page: Page, d: Demo) {
 
   await d.caption(
     "Export to PDF, Word or a web page",
-    "One click. Or Sync files keeps fresh copies beside your document.",
+    "One click. Or Sync files keeps fresh copies in a peanOUT folder.",
   );
   await d.click(page.locator("button.btn.primary", { hasText: "Export" }));
   const menu = page.locator(".menu button");

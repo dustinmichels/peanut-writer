@@ -396,9 +396,10 @@ export function Startup(): $CancellablePromise<$models.StartupInfo> {
 }
 
 /**
- * SyncFiles writes a PDF and a Word copy of the saved document beside it (its
- * package, if it's in one), under the same name, replacing earlier copies;
- * returns their paths. Neither is written unless both render.
+ * SyncFiles writes a PDF and a Word copy of the saved document into a peanOUT
+ * folder beside it (its package, if it's in one), under the same name,
+ * replacing earlier copies; returns their paths. Neither is written unless
+ * both render.
  */
 export function SyncFiles(content: string): $CancellablePromise<string[] | null> {
     return $Call.ByID(1439229203, content);

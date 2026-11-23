@@ -85,7 +85,7 @@ import { canSave, canSync, state } from "@/lib/store";
         label="Sync Files"
         :title="
           canSync
-            ? 'Save, then write PDF and Word copies beside the document (⇧⌘Y)'
+            ? 'Save, then write PDF and Word copies to the peanOUT folder (⇧⌘Y)'
             : 'The PDF and Word copies are up to date'
         "
         :disabled="!canSync"

@@ -1067,9 +1067,10 @@ func (s *DocService) ExportHTML(content string) (string, error) {
 	return p, atomicfile.Write(p, html.Write(d, tpl.Docx, opt), 0o644)
 }
 
-// SyncFiles writes a PDF and a Word copy of the saved document beside it (its
-// package, if it's in one), under the same name, replacing earlier copies;
-// returns their paths. Neither is written unless both render.
+// SyncFiles writes a PDF and a Word copy of the saved document into a peanOUT
+// folder beside it (its package, if it's in one), under the same name,
+// replacing earlier copies; returns their paths. Neither is written unless
+// both render.
 func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if s.typstErr != nil {
 		return nil, s.typstErr
@@ -1093,7 +1094,11 @@ func (s *DocService) SyncFiles(content string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Word: %w", err)
 	}
-	base := filepath.Join(filepath.Dir(shownPath(cur)), docName(cur))
+	out := filepath.Join(filepath.Dir(shownPath(cur)), "peanOUT")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return nil, err
+	}
+	base := filepath.Join(out, docName(cur))
 	paths := []string{base + ".pdf", base + ".docx"}
 	for i, b := range [][]byte{pdf, word} {
 		if err := atomicfile.Write(paths[i], b, 0o644); err != nil {

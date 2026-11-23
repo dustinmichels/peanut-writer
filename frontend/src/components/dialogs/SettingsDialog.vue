@@ -26,7 +26,7 @@ const sections: { name: Section; hint?: string }[] = [
   { name: "Auto format" },
   {
     name: "Sync files",
-    hint: "Writes the PDF and Word copies beside the document, as Sync Files does, if it changed since they were last written.",
+    hint: "Writes the PDF and Word copies into the peanOUT folder beside the document, as Sync Files does, if it changed since they were last written.",
   },
   { name: "Peanut" },
   { name: "Citations" },
