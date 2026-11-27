@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-27
+
+- **Agent skill** `skills/peanut-document/SKILL.md` teaches AI agents to write Peanut documents: package layout, front
+  matter, figures and picture grids from `images/`, cross-references, and `[@key]` citations backed by real
+  BibLaTeX entries in `Name.bib`.
+
 ## 2026-11-22
 
 - **Sync files** writes `Name.pdf` and `Name.docx` into a `peanOUT` folder beside the document (made if missing)
